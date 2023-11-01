@@ -1,0 +1,35 @@
+From af4bfa1f1f84194000bc50f43ddc906c0cd4b104 Mon Sep 17 00:00:00 2001
+From: David Teigland <teigland@redhat.com>
+Date: Mon, 13 Dec 2021 08:59:31 -0600
+Subject: [PATCH 22/54] lvcreate: include recent options
+
+The permitted option list in lvcreate has not kept
+up with command-lines.in.
+---
+ tools/lvcreate.c | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/tools/lvcreate.c b/tools/lvcreate.c
+index 0121c09a8..79af42685 100644
+--- a/tools/lvcreate.c
++++ b/tools/lvcreate.c
+@@ -824,12 +824,16 @@ static int _lvcreate_params(struct cmd_context *cmd,
+ 	autobackup_ARG,\
+ 	available_ARG,\
+ 	contiguous_ARG,\
++	devices_ARG,\
++	devicesfile_ARG,\
+ 	ignoreactivationskip_ARG,\
+ 	ignoremonitoring_ARG,\
++	journal_ARG,\
+ 	metadataprofile_ARG,\
+ 	monitor_ARG,\
+ 	mirrors_ARG,\
+ 	name_ARG,\
++	nohints_ARG,\
+ 	noudevsync_ARG,\
+ 	permission_ARG,\
+ 	persistent_ARG,\
+-- 
+2.34.3
+

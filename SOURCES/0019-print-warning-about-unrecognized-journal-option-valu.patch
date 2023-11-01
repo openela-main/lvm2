@@ -1,0 +1,24 @@
+From 604fd528fb4f00a9f77e084a1b22eff2aeef0259 Mon Sep 17 00:00:00 2001
+From: David Teigland <teigland@redhat.com>
+Date: Thu, 2 Dec 2021 12:40:52 -0600
+Subject: [PATCH 19/54] print warning about unrecognized journal option value
+
+---
+ lib/log/log.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/lib/log/log.c b/lib/log/log.c
+index 7b4d537b3..5771a1d01 100644
+--- a/lib/log/log.c
++++ b/lib/log/log.c
+@@ -892,6 +892,7 @@ uint32_t log_journal_str_to_val(const char *str)
+ 		return LOG_JOURNAL_OUTPUT;
+ 	if (!strcasecmp(str, "debug"))
+ 		return LOG_JOURNAL_DEBUG;
++	log_warn("Ignoring unrecognized journal value.");
+ 	return 0;
+ }
+ 
+-- 
+2.34.3
+

@@ -1,0 +1,39 @@
+From 074fce5c73c55e7a1547d5efff65a9f96e6db3b1 Mon Sep 17 00:00:00 2001
+From: David Teigland <teigland@redhat.com>
+Date: Mon, 25 Oct 2021 12:11:17 -0500
+Subject: [PATCH 04/54] vgimportdevices: skip lvmlockd locking
+
+Help bootstrapping existing shared vgs into the devices file.
+Reading the vg in vgimportdevices would require locking to be
+started, but vgchange lockstart won't see the vg if it's not
+in the devices file.  The lvmlockd locks are not protecting
+vg modifications so skipping them here won't be a problem.
+---
+ tools/vgimportdevices.c | 11 +++++++++++
+ 1 file changed, 11 insertions(+)
+
+diff --git a/tools/vgimportdevices.c b/tools/vgimportdevices.c
+index 3f315f98f..2580613c4 100644
+--- a/tools/vgimportdevices.c
++++ b/tools/vgimportdevices.c
+@@ -172,6 +172,17 @@ int vgimportdevices(struct cmd_context *cmd, int argc, char **argv)
+ 	cmd->filter_regex_with_devices_file = 1;
+ 	cmd->create_edit_devices_file = 1;
+ 
++	/*
++	 * This helps a user bootstrap existing shared VGs into the devices
++	 * file. Reading the vg to import devices requires locking, but
++	 * lockstart won't find the vg before it's in the devices file.
++	 * So, allow importing devices without an lvmlockd lock (in a
++	 * a shared vg the vg metadata won't be updated with device ids,
++	 * so the lvmlockd lock isn't protecting vg modification.)
++	 */
++	cmd->lockd_gl_disable = 1;
++	cmd->lockd_vg_disable = 1;
++
+ 	/*
+ 	 * For each VG:
+ 	 * device_id_add() each PV in the VG
+-- 
+2.34.3
+

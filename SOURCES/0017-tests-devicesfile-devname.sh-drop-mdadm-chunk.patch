@@ -1,0 +1,25 @@
+From 10a4478e9b778dd8d4ff9737a503474b00ce9510 Mon Sep 17 00:00:00 2001
+From: David Teigland <teigland@redhat.com>
+Date: Wed, 1 Dec 2021 08:56:05 -0600
+Subject: [PATCH 17/54] tests devicesfile-devname.sh drop mdadm chunk
+
+---
+ test/shell/devicesfile-devname.sh | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/test/shell/devicesfile-devname.sh b/test/shell/devicesfile-devname.sh
+index a99fe3e9a..338637275 100644
+--- a/test/shell/devicesfile-devname.sh
++++ b/test/shell/devicesfile-devname.sh
+@@ -590,7 +590,7 @@ OPVID2=`pvs "$dev2" --noheading -o uuid | awk '{print $1}'`
+ PVID1=`pvs "$dev1" --noheading -o uuid | tr -d - | awk '{print $1}'`
+ PVID2=`pvs "$dev2" --noheading -o uuid | tr -d - | awk '{print $1}'`
+ 
+-mdadm --create --metadata=1.0 "$mddev" --level 1 --chunk=64 --raid-devices=2 "$dev3" "$dev4"
++mdadm --create --metadata=1.0 "$mddev" --level 1 --raid-devices=2 "$dev3" "$dev4"
+ wait_md_create "$mddev"
+ 
+ sed -e "s|DEVNAME=$dev1|DEVNAME=$dev3|" "$ORIG" > tmp1.devices
+-- 
+2.34.3
+

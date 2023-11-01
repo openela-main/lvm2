@@ -1,0 +1,31 @@
+From 4aa92f3e18cb49470ee9b5d928abe6b4c86f3074 Mon Sep 17 00:00:00 2001
+From: David Teigland <teigland@redhat.com>
+Date: Wed, 6 Apr 2022 12:20:26 -0500
+Subject: [PATCH 42/54] vgimportdevices: fix incorrect deviceidtype usage
+
+When a VG has PVs with different device id types,
+it would try to use the idtype of the previous PV
+in the loop.  This would produce an unncessary warning,
+or could lead to using the devname idtype when a better
+idtype is available.
+---
+ tools/vgimportdevices.c | 3 +--
+ 1 file changed, 1 insertion(+), 2 deletions(-)
+
+diff --git a/tools/vgimportdevices.c b/tools/vgimportdevices.c
+index 2580613c4..ea205d941 100644
+--- a/tools/vgimportdevices.c
++++ b/tools/vgimportdevices.c
+@@ -57,8 +57,7 @@ static int _vgimportdevices_single(struct cmd_context *cmd,
+ 	dm_list_iterate_items(pvl, &vg->pvs) {
+ 		pv = pvl->pv;
+ 
+-		if (!idtypestr && pv->device_id_type)
+-			idtypestr = pv->device_id_type;
++		idtypestr = pv->device_id_type;
+ 
+ 		memcpy(pvid, &pvl->pv->id.uuid, ID_LEN);
+ 		device_id_add(cmd, pv->dev, pvid, idtypestr, NULL);
+-- 
+2.34.3
+
