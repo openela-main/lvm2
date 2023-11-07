@@ -1,0 +1,43 @@
+From 80b73e2901d470fd3d1f45664626980167091f02 Mon Sep 17 00:00:00 2001
+From: David Teigland <teigland@redhat.com>
+Date: Tue, 25 Apr 2023 14:46:36 -0500
+Subject: [PATCH 4/8] lvmcache: fix valgrind error when dropping md duplicate
+
+When lvmcache info is dropped because it's an md component,
+then the lvmcache vginfo can also be dropped, but the list
+iterator was still using the list head in vginfo, so break
+from the loop earlier to avoid it.
+
+(cherry picked from commit 6d262eaf640dead7861c1a7716e216b9bcea75e5)
+---
+ lib/cache/lvmcache.c | 7 +++++++
+ 1 file changed, 7 insertions(+)
+
+diff --git a/lib/cache/lvmcache.c b/lib/cache/lvmcache.c
+index b8a9eac25..127d29229 100644
+--- a/lib/cache/lvmcache.c
++++ b/lib/cache/lvmcache.c
+@@ -1503,6 +1503,9 @@ void lvmcache_extra_md_component_checks(struct cmd_context *cmd)
+ 	 */
+ 
+ 	dm_list_iterate_items_safe(vginfo, vginfo2, &_vginfos) {
++		char vgid[ID_LEN + 1] __attribute__((aligned(8))) = { 0 };
++		memcpy(vgid, vginfo->vgid, ID_LEN);
++
+ 		dm_list_iterate_items_safe(info, info2, &vginfo->infos) {
+ 			dev = info->dev;
+ 			device_hint = _get_pvsummary_device_hint(dev->pvid);
+@@ -1557,6 +1560,10 @@ void lvmcache_extra_md_component_checks(struct cmd_context *cmd)
+ 				/* lvmcache_del will also delete vginfo if info was last one */
+ 				lvmcache_del(info);
+ 				cmd->filter->wipe(cmd, cmd->filter, dev, NULL);
++
++				/* If vginfo was deleted don't continue using vginfo->infos */
++				if (!_search_vginfos_list(NULL, vgid))
++					break;
+ 			}
+ 		}
+ 	}
+-- 
+2.40.1
+

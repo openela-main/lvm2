@@ -1,0 +1,37 @@
+From 41d16e42f88997fda991f86d598bffc19fcd937f Mon Sep 17 00:00:00 2001
+From: David Teigland <teigland@redhat.com>
+Date: Wed, 17 May 2023 11:10:45 -0500
+Subject: [PATCH 8/8] tests: integrity: snapshots now work on raid+integrity
+
+(cherry picked from commit 3a757047560d75a28d7e4c7d9a5253a72d786544)
+---
+ test/shell/integrity.sh | 8 --------
+ 1 file changed, 8 deletions(-)
+
+diff --git a/test/shell/integrity.sh b/test/shell/integrity.sh
+index a7dd5b565..d1683a08e 100644
+--- a/test/shell/integrity.sh
++++ b/test/shell/integrity.sh
+@@ -626,7 +626,6 @@ not lvconvert --splitmirrors 1 -n tmp -y $vg/$lv1
+ not lvconvert --splitmirrors 1 --trackchanges -y $vg/$lv1
+ not lvchange --syncaction repair $vg/$lv1
+ not lvreduce -L4M $vg/$lv1
+-not lvcreate -s -n snap -L4M $vg/$lv1
+ not pvmove -n $vg/$lv1 "$dev1"
+ not pvmove "$dev1"
+ _verify_data_on_mnt
+@@ -810,11 +809,4 @@ not lvconvert --raidintegrity y $vg/${lv2}_cpool_cdata
+ not lvconvert --raidintegrity y $vg/${lv2}_cpool_cmeta
+ lvremove -y $vg/$lv1
+ 
+-# cannot add integrity to raid that has a snapshot
+-
+-lvcreate --type raid1 -m1 -n $lv1 -l 8 $vg
+-lvcreate -s -n $lv2 -l 8 $vg/$lv1
+-not lvconvert --raidintegrity y $vg/$lv1
+-lvremove -y $vg/$lv1
+-
+ vgremove -ff $vg
+-- 
+2.40.1
+

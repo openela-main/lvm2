@@ -1,0 +1,117 @@
+From 4e28d22cc152fd9c753e5584a5ae99e7a5d1ac96 Mon Sep 17 00:00:00 2001
+From: David Teigland <teigland@redhat.com>
+Date: Wed, 17 May 2023 14:15:25 -0500
+Subject: [PATCH 14/14] tests: integrity-caching: ensure raid redundancy
+
+The recent fix 05c2b10c5d0a9 ensures that raid LV images are not
+using the same devices.  This was happening in the lvextend commands
+used by this test, so fix the test to use more devices to ensue
+redundancy.
+
+(cherry picked from commit 24e4b6df1182d0d41763176c175e98e5fa6153ab)
+---
+ lib/metadata/lv_manip.c         |  5 ++++-
+ test/shell/integrity-caching.sh | 27 ++++++++++++++++++---------
+ 2 files changed, 22 insertions(+), 10 deletions(-)
+
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index e4799e082..70c969de5 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -4472,8 +4472,11 @@ static int _lv_raid_redundant(struct logical_volume *lv,
+ 		for (s = 0; s < seg->area_count; s++) {
+ 			struct logical_volume *slv = meta ? seg_metalv(seg, s) : seg_lv(seg, s);
+ 
+-			if (slv && lv_is_on_pv(slv, pvl->pv) && nlvs++)
++			if (slv && lv_is_on_pv(slv, pvl->pv) && nlvs++) {
++				log_error("LV %s using PV %s is not redundant.",
++					  display_lvname(slv), dev_name(pvl->pv->dev));
+ 				return 0;
++			}
+ 		}
+ 	}
+ 
+diff --git a/test/shell/integrity-caching.sh b/test/shell/integrity-caching.sh
+index 5539ac575..06fc04928 100644
+--- a/test/shell/integrity-caching.sh
++++ b/test/shell/integrity-caching.sh
+@@ -23,7 +23,7 @@ aux kernel_at_least  5 10 || export LVM_TEST_PREFER_BRD=0
+ mnt="mnt"
+ mkdir -p $mnt
+ 
+-aux prepare_devs 6 80
++aux prepare_devs 9 80
+ 
+ # Use awk instead of anoyingly long log out from printf
+ #printf "%0.sA" {1..16384} >> fileA
+@@ -319,7 +319,7 @@ vgremove -ff $vg
+ # Test lvextend while inactive
+ 
+ _prepare_vg
+-lvcreate --type raid1 -m1 --raidintegrity y -n $lv1 -l 8 $vg
++lvcreate --type raid1 -m1 --raidintegrity y -n $lv1 -l 8 $vg "$dev1" "$dev2"
+ _wait_recalc $vg/${lv1}_rimage_0
+ _wait_recalc $vg/${lv1}_rimage_1
+ _wait_recalc $vg/$lv1
+@@ -329,7 +329,11 @@ lvs -a -o name,size,segtype,devices,sync_percent $vg
+ _add_new_data_to_mnt
+ umount $mnt
+ lvchange -an $vg/$lv1
+-lvextend -l 16 $vg/$lv1
++# use two new devs for raid extend to ensure redundancy
++vgextend $vg "$dev7" "$dev8"
++lvs -a -o name,segtype,devices $vg
++lvextend -l 16 $vg/$lv1 "$dev7" "$dev8"
++lvs -a -o name,segtype,devices $vg
+ lvchange -ay $vg/$lv1
+ mount "$DM_DEV_DIR/$vg/$lv1" $mnt
+ xfs_growfs $mnt
+@@ -346,16 +350,19 @@ vgremove -ff $vg
+ # Test lvextend while active
+ 
+ _prepare_vg
+-lvcreate --type raid1 -m1 --raidintegrity y -n $lv1 -l 8 $vg
++lvcreate --type raid1 -m1 --raidintegrity y -n $lv1 -l 8 $vg "$dev1" "$dev2"
+ _wait_recalc $vg/${lv1}_rimage_0
+ _wait_recalc $vg/${lv1}_rimage_1
+ _wait_recalc $vg/$lv1
+ lvcreate --type $create_type -n fast -l 4 -an $vg "$dev6"
+ lvconvert -y --type $convert_type $convert_option fast $vg/$lv1
++# use two new devs for raid extend to ensure redundancy
++vgextend $vg "$dev7" "$dev8"
+ lvs -a -o name,size,segtype,devices,sync_percent $vg
+ _add_new_data_to_mnt
+-lvextend -l 16 $vg/$lv1
+-xfs_growfs $mnt
++lvextend -l 16 $vg/$lv1 "$dev7" "$dev8"
++lvs -a -o name,size,segtype,devices,sync_percent $vg
++resize2fs "$DM_DEV_DIR/$vg/$lv1"
+ _wait_recalc $vg/${lv1}_${suffix}_rimage_0
+ _wait_recalc $vg/${lv1}_${suffix}_rimage_1
+ _add_more_data_to_mnt
+@@ -367,17 +374,19 @@ lvremove $vg/$lv1
+ vgremove -ff $vg
+ 
+ _prepare_vg
+-lvcreate --type raid5 --raidintegrity y -n $lv1 -l 8 $vg
++lvcreate --type raid5 --raidintegrity y -n $lv1 -I4 -l 8 $vg "$dev1" "$dev2" "$dev3"
+ _wait_recalc $vg/${lv1}_rimage_0
+ _wait_recalc $vg/${lv1}_rimage_1
+ _wait_recalc $vg/${lv1}_rimage_2
+ _wait_recalc $vg/$lv1
+ lvcreate --type $create_type -n fast -l 4 -an $vg "$dev6"
+ lvconvert -y --type $convert_type $convert_option fast $vg/$lv1
++vgextend $vg "$dev7" "$dev8" "$dev9"
+ lvs -a -o name,size,segtype,devices,sync_percent $vg
+ _add_new_data_to_mnt
+-lvextend -l 16 $vg/$lv1
+-xfs_growfs $mnt
++lvextend -l 16 $vg/$lv1 "$dev7" "$dev8" "$dev9"
++lvs -a -o name,size,segtype,devices,sync_percent $vg
++resize2fs "$DM_DEV_DIR/$vg/$lv1"
+ _wait_recalc $vg/${lv1}_${suffix}_rimage_0
+ _wait_recalc $vg/${lv1}_${suffix}_rimage_1
+ _add_more_data_to_mnt
+-- 
+2.41.0
+

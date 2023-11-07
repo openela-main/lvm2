@@ -1,0 +1,26 @@
+From 1835574e39e9417b3800469fe80ce47d2210b9a7 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Sun, 23 Apr 2023 12:49:37 +0200
+Subject: [PATCH 3/8] lvmdbus: preserve PATH envvar
+
+(cherry picked from commit afc02ae6e7234e1190cedf5c74ca3d6367efd7d1)
+---
+ daemons/lvmdbusd/lvm_shell_proxy.py.in | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/daemons/lvmdbusd/lvm_shell_proxy.py.in b/daemons/lvmdbusd/lvm_shell_proxy.py.in
+index b8c8fa565..02a776e1d 100755
+--- a/daemons/lvmdbusd/lvm_shell_proxy.py.in
++++ b/daemons/lvmdbusd/lvm_shell_proxy.py.in
+@@ -154,6 +154,8 @@ class LVMShellProxy(object):
+ 
+ 		# If any env variables contain LVM we will propagate them too
+ 		for k, v in os.environ.items():
++			if "PATH" in k:
++				local_env[k] = v
+ 			if "LVM" in k:
+ 				local_env[k] = v
+ 
+-- 
+2.40.1
+
