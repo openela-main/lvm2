@@ -1,0 +1,50 @@
+From a147a14813d576a11ed2f9ff08090fad874e418a Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Tue, 31 May 2022 22:48:38 +0200
+Subject: [PATCH 070/115] vdo: fix conversion of vdo_slab_size_mb
+
+When converting VDO volume, the parameter vdo_slabSize was
+incorrectly copied as vdo_blockMapCacheSize, however this parameter
+is then no longer used for any table line creation so the wrong
+value was only stored in metadata.
+
+Also use just single get_kb_size_with_unit_ and remove it's duplicate
+functionality with get_mb_size_with_unit_.
+
+Use $VERB for vdo remove call.
+
+(cherry picked from commit 1b070f366ba57a6eb24df03241284732db5047e9)
+---
+ WHATS_NEW                 | 3 ++-
+ scripts/lvm_import_vdo.sh | 2 +-
+ 2 files changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/WHATS_NEW b/WHATS_NEW
+index bffd24648..705fbde74 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,6 +1,7 @@
+ Version 2.03.17 - 
+ ===============================
+-  Fix lvconvert --test --type vdo-pool execution.
++ Fix lvconvert --test --type vdo-pool execution.
++ Fix vdo_slab_size_mb value for converted VDO volume.
+ 
+ Version 2.03.16 - 
+ ====================================
+diff --git a/scripts/lvm_import_vdo.sh b/scripts/lvm_import_vdo.sh
+index cc09187e9..c10b3b050 100755
+--- a/scripts/lvm_import_vdo.sh
++++ b/scripts/lvm_import_vdo.sh
+@@ -408,7 +408,7 @@ EOF
+ 	# Note: that this is spelled OPPOSITE the other $IS_LV checks.
+ 	if [ "$IS_LV" = "1" ]; then
+ 		verbose "Removing now-unused VDO entry from VDO config."
+-		dry "$VDO" remove $VDOCONF --force --verbose --name "$VDONAME"
++		dry "$VDO" remove $VDOCONF $VERB --force --name "$VDONAME"
+ 	fi
+ 
+ 	rm -fr "$TEMPDIR"
+-- 
+2.41.0
+

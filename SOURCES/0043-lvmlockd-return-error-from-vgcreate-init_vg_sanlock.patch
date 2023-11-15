@@ -1,0 +1,32 @@
+From 6de2a6a378a7673168fad34aebe8ddcb564a5911 Mon Sep 17 00:00:00 2001
+From: David Teigland <teigland@redhat.com>
+Date: Fri, 8 Apr 2022 11:28:53 -0500
+Subject: [PATCH 43/54] lvmlockd: return error from vgcreate init_vg_sanlock
+
+in vgcreate for shared sanlock vg, if sanlock_write_resource
+returns an unexpected error, then make init_vg_sanlock fail
+which will cause the vgcreate to fail.
+---
+ daemons/lvmlockd/lvmlockd-sanlock.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/daemons/lvmlockd/lvmlockd-sanlock.c b/daemons/lvmlockd/lvmlockd-sanlock.c
+index e595eeffd..d87d1093b 100644
+--- a/daemons/lvmlockd/lvmlockd-sanlock.c
++++ b/daemons/lvmlockd/lvmlockd-sanlock.c
+@@ -684,10 +684,10 @@ int lm_init_vg_sanlock(char *ls_name, char *vg_name, uint32_t flags, char *vg_ar
+ 			break;
+ 		}
+ 
+-		if (rv) {
++		if (rv < 0) {
+ 			log_error("clear lv resource area %llu error %d",
+ 				  (unsigned long long)offset, rv);
+-			break;
++			return rv;
+ 		}
+ 		offset += align_size;
+ 	}
+-- 
+2.34.3
+

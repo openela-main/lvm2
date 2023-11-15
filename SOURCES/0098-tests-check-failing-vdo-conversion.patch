@@ -1,0 +1,40 @@
+From 31e71842d4be795a8f675d0cd50f8a7b8d737cd9 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Fri, 17 Feb 2023 00:06:56 +0100
+Subject: [PATCH 098/115] tests: check failing vdo conversion
+
+When we detect not usable vdo on a machine, check lvconvert fails.
+
+(cherry picked from commit 06c5c29443fdd48730a282a5db16e46c793db27b)
+---
+ test/shell/lvconvert-vdo.sh | 10 ++++++++--
+ 1 file changed, 8 insertions(+), 2 deletions(-)
+
+diff --git a/test/shell/lvconvert-vdo.sh b/test/shell/lvconvert-vdo.sh
+index c42d8f25a..7c0bce56b 100644
+--- a/test/shell/lvconvert-vdo.sh
++++ b/test/shell/lvconvert-vdo.sh
+@@ -18,12 +18,18 @@ SKIP_WITH_LVMPOLLD=1
+ #
+ # Main
+ #
+-aux have_vdo 6 2 0 || skip
+-
+ aux prepare_vg 2 6400
+ 
+ # Conversion to vdo-pool
+ lvcreate -L5G -n $lv1 $vg
++
++if not aux have_vdo 6 2 0 ; then
++# For unsupported VDO let's check lvconvert fails
++	not lvconvert --yes --type vdo-pool $vg/$lv1 |& tee out
++	vgremove -ff $vg
++	exit
++fi
++
+ # Check there is big prompting warning
+ not lvconvert --type vdo-pool $vg/$lv1 |& tee out
+ grep "WARNING" out
+-- 
+2.41.0
+

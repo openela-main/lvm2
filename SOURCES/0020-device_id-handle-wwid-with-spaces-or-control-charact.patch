@@ -1,0 +1,50 @@
+From 357a807e81bbd1430b045eb2601a64b17d588400 Mon Sep 17 00:00:00 2001
+From: David Teigland <teigland@redhat.com>
+Date: Thu, 2 Dec 2021 13:30:36 -0600
+Subject: [PATCH 20/54] device_id: handle wwid with spaces or control
+ characters
+
+non-standard wwid can be reported from sysfs with spaces/etc.
+replace with "_"
+---
+ lib/device/device_id.c | 10 ++++++----
+ 1 file changed, 6 insertions(+), 4 deletions(-)
+
+diff --git a/lib/device/device_id.c b/lib/device/device_id.c
+index 4c2b5a3dd..0621bc858 100644
+--- a/lib/device/device_id.c
++++ b/lib/device/device_id.c
+@@ -304,6 +304,7 @@ const char *device_id_system_read(struct cmd_context *cmd, struct device *dev, u
+ {
+ 	char sysbuf[PATH_MAX] = { 0 };
+ 	const char *idname = NULL;
++	int i;
+ 
+ 	if (idtype == DEV_ID_TYPE_SYS_WWID) {
+ 		read_sys_block(cmd, dev, "device/wwid", sysbuf, sizeof(sysbuf));
+@@ -311,10 +312,6 @@ const char *device_id_system_read(struct cmd_context *cmd, struct device *dev, u
+ 		if (!sysbuf[0])
+ 			read_sys_block(cmd, dev, "wwid", sysbuf, sizeof(sysbuf));
+ 
+-		/* scsi_debug wwid begins "t10.Linux   scsi_debug ..." */
+-		if (strstr(sysbuf, "scsi_debug"))
+-			sysbuf[0] = '\0';
+-
+ 		/* qemu wwid begins "t10.ATA     QEMU HARDDISK ..." */
+ 		if (strstr(sysbuf, "QEMU HARDDISK"))
+ 			sysbuf[0] = '\0';
+@@ -355,6 +352,11 @@ const char *device_id_system_read(struct cmd_context *cmd, struct device *dev, u
+ 		return idname;
+ 	}
+ 
++	for (i = 0; i < strlen(sysbuf); i++) {
++		if (isblank(sysbuf[i]) || isspace(sysbuf[i]) || iscntrl(sysbuf[i]))
++			sysbuf[i] = '_';
++	}
++
+ 	if (!sysbuf[0])
+ 		goto_bad;
+ 
+-- 
+2.34.3
+

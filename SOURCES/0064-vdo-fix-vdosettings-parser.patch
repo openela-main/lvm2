@@ -1,0 +1,52 @@
+From b56e8fc94d4d2b6d384148e3f74c54f4e1d816e6 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Mon, 15 Aug 2022 13:14:03 +0200
+Subject: [PATCH 4/4] vdo: fix --vdosettings parser
+
+Parser was incorrectly parsing vdo_use_features - move the skip
+of 'use_' prefix into internal loop which handles skipping of '_'.
+
+(cherry picked from commit bba96e8680ef7fa567d6361c269c0bfc05ce3d2c)
+---
+ tools/toollib.c | 14 +++++++++-----
+ 1 file changed, 9 insertions(+), 5 deletions(-)
+
+diff --git a/tools/toollib.c b/tools/toollib.c
+index 210b3dca5..d9a1a92ec 100644
+--- a/tools/toollib.c
++++ b/tools/toollib.c
+@@ -1198,13 +1198,11 @@ out:
+  */
+ static int _compare_vdo_option(const char *b1, const char *b2)
+ {
++	int use_skipped = 0;
++
+ 	if (strncasecmp(b1, "vdo", 3) == 0) // skip vdo prefix
+ 		b1 += 3;
+ 
+-	if ((tolower(*b1) != tolower(*b2)) &&
+-	    (strncmp(b2, "use_", 4) == 0))
+-		b2 += 4;  // try again with skipped prefix 'use_'
+-
+ 	while (*b1 && *b2) {
+ 		if (tolower(*b1) == tolower(*b2)) {
+ 			++b1;
+@@ -1216,8 +1214,14 @@ static int _compare_vdo_option(const char *b1, const char *b2)
+ 			++b1;           // skip to next char
+ 		else if (*b2 == '_')
+ 			++b2;           // skip to next char
+-		else
++		else {
++			if (!use_skipped++ && (strncmp(b2, "use_", 4) == 0)) {
++				b2 += 4;  // try again with skipped prefix 'use_'
++				continue;
++			}
++
+ 			break;          // mismatch
++		}
+ 	}
+ 
+ 	return (*b1 || *b2) ? 0 : 1;
+-- 
+2.38.1
+

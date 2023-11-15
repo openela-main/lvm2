@@ -1,0 +1,25 @@
+From 7ac0b3c119b1cbb8e0b4969ece0b279637ace8c3 Mon Sep 17 00:00:00 2001
+From: David Teigland <teigland@redhat.com>
+Date: Fri, 19 Nov 2021 12:02:35 -0600
+Subject: [PATCH 14/54] fix spelling of pruning
+
+---
+ lib/format_text/archive.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/lib/format_text/archive.c b/lib/format_text/archive.c
+index 09a472b4c..2e8792a93 100644
+--- a/lib/format_text/archive.c
++++ b/lib/format_text/archive.c
+@@ -219,7 +219,7 @@ static void _remove_expired(const char *dir, const char *vgname,
+ 
+ 	sum /= 1024 * 1024;
+ 	if (sum > 128 || archives_size > 8192)
+-		log_print_unless_silent("Consider prunning %s VG archive with more then %u MiB in %u files (check archiving is needed in lvm.conf).",
++		log_print_unless_silent("Consider pruning %s VG archive with more then %u MiB in %u files (check archiving is needed in lvm.conf).",
+ 					vgname, (unsigned)sum, archives_size);
+ }
+ 
+-- 
+2.34.3
+

@@ -1,0 +1,31 @@
+From e82e23447f830bd6c38bbefa600212e84cdb0f27 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Mon, 11 Jul 2022 01:07:24 +0200
+Subject: [PATCH 074/115] vdo: fix conversion of vdo_slab_size_mb 2nd
+
+Patch 1b070f366ba57a6eb24df03241284732db5047e9 should have
+been already fixing this issue but since it the incorrect
+patch rebasing the change to vdo_slabSize got lost.
+So again now with explicit one-line patch.
+
+(cherry picked from commit d2667bc25bccaf0f70cc2ded0fd3f25a79cb4f6c)
+---
+ scripts/lvm_import_vdo.sh | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/scripts/lvm_import_vdo.sh b/scripts/lvm_import_vdo.sh
+index c10b3b050..c4c1d152e 100755
+--- a/scripts/lvm_import_vdo.sh
++++ b/scripts/lvm_import_vdo.sh
+@@ -324,7 +324,7 @@ allocation {
+ 	vdo_check_point_frequency = $vdo_indexCfreq
+ 	vdo_use_sparse_index = $(get_enabled_value_ "$vdo_indexSparse")
+ 	vdo_index_memory_size_mb = $(awk "BEGIN {print $vdo_indexMemory * 1024}")
+-	vdo_slab_size_mb = $(( $(get_kb_size_with_unit_ "$vdo_blockMapCacheSize") / 1024 ))
++	vdo_slab_size_mb = $(( $(get_kb_size_with_unit_ "$vdo_slabSize") / 1024 ))
+ 	vdo_ack_threads = $vdo_ackThreads
+ 	vdo_bio_threads = $vdo_bioThreads
+ 	vdo_bio_rotation = $vdo_bioRotationInterval
+-- 
+2.41.0
+

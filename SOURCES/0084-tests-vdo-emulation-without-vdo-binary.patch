@@ -1,0 +1,52 @@
+From fc1c105c75b81b4cecf24e7924605abcceb91d67 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Tue, 6 Sep 2022 16:44:24 +0200
+Subject: [PATCH 084/115] tests: vdo emulation without vdo binary
+
+Avoid inserting 'vdo' binary into path - and use
+alias and VDO_BINARY shell vars for emulation.
+
+(cherry picked from commit 15ad2b8e5585b89bc3f09a53567f17eb70f45714)
+---
+ test/lib/lvm_vdo_wrapper.sh |  2 +-
+ test/shell/vdo-convert.sh   | 11 ++++++++++-
+ 2 files changed, 11 insertions(+), 2 deletions(-)
+
+diff --git a/test/lib/lvm_vdo_wrapper.sh b/test/lib/lvm_vdo_wrapper.sh
+index d622d6456..90d0b2ce8 100755
+--- a/test/lib/lvm_vdo_wrapper.sh
++++ b/test/lib/lvm_vdo_wrapper.sh
+@@ -344,7 +344,7 @@ vdo_dry_ vdo_remove_ -f "$vdo_confFile" -n "$vdo_name" || true
+ #
+ # MAIN
+ #
+-case "$1" in
++case "${1-}" in
+   "create") shift; vdo_create_ "$@" ;;
+   "remove") shift; vdo_remove_ "$@" ;;
+   "stop") shift; vdo_stop_ "$@" ;;
+diff --git a/test/shell/vdo-convert.sh b/test/shell/vdo-convert.sh
+index f1d04d596..5bf53d081 100644
+--- a/test/shell/vdo-convert.sh
++++ b/test/shell/vdo-convert.sh
+@@ -29,7 +29,16 @@ aux prepare_dmeventd
+ #
+ # Main
+ #
+-which vdo || skip
++if not which vdo ; then
++	which lvm_vdo_wrapper || skip "Missing 'lvm_vdo_wrapper'."
++	which oldvdoformat || skip "Emulation of vdo manager 'oldvdoformat' missing."
++	which oldvdoprepareforlvm || skip "Emulation of vdo manager 'oldvdoprepareforlvm' missing."
++	# enable expansion of aliasis within script itself
++	shopt -s expand_aliases
++	alias vdo='lvm_vdo_wrapper'
++	export VDO_BINARY=lvm_vdo_wrapper
++	echo "Using 'lvm_vdo_wrapper' emulation of 'vdo' manager."
++fi
+ which mkfs.ext4 || skip
+ export MKE2FS_CONFIG="$TESTDIR/lib/mke2fs.conf"
+ 
+-- 
+2.41.0
+

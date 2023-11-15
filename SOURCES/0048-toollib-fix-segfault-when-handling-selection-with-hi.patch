@@ -1,0 +1,45 @@
+From 45a2ccfa3bdf4c5b3f8b9e0cc5330fca345b0d26 Mon Sep 17 00:00:00 2001
+From: Peter Rajnoha <prajnoha@redhat.com>
+Date: Thu, 5 May 2022 11:02:32 +0200
+Subject: [PATCH 48/54] toollib: fix segfault when handling selection with
+ historical LVs
+
+When processing historical LVs inside process_each_lv_in_vg for
+selection, we need to use dummy "_historical_lv" for select_match_lv.
+
+This is because a historical LV is not an actual LV, but only a tiny
+representation with subset of original properties that we recorded
+(name, uuid...).
+
+To use the same processing functions we use for full-fledged non-historical
+LVs, we need to use the prefilled "_historical_lv" structure which has all
+the other missing properties hard-coded.
+---
+ tools/toollib.c | 7 ++++---
+ 1 file changed, 4 insertions(+), 3 deletions(-)
+
+diff --git a/tools/toollib.c b/tools/toollib.c
+index 697baee82..01ba03658 100644
+--- a/tools/toollib.c
++++ b/tools/toollib.c
+@@ -3392,13 +3392,14 @@ int process_each_lv_in_vg(struct cmd_context *cmd, struct volume_group *vg,
+ 				process_lv = 1;
+ 			}
+ 
+-			process_lv = process_lv && select_match_lv(cmd, handle, vg, lvl->lv) && _select_matches(handle);
++			_historical_lv.this_glv = glvl->glv;
++			_historical_lv.name = glvl->glv->historical->name;
++
++			process_lv = process_lv && select_match_lv(cmd, handle, vg, &_historical_lv) && _select_matches(handle);
+ 
+ 			if (!process_lv)
+ 				continue;
+ 
+-			_historical_lv.this_glv = glvl->glv;
+-			_historical_lv.name = glvl->glv->historical->name;
+ 			log_very_verbose("Processing historical LV %s in VG %s.", glvl->glv->historical->name, vg->name);
+ 
+ 			ret = process_single_lv(cmd, &_historical_lv, handle);
+-- 
+2.34.3
+

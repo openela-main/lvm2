@@ -1,0 +1,26 @@
+From 04770589b49effdb064c9b3790e8dd2fee2c3547 Mon Sep 17 00:00:00 2001
+From: David Teigland <teigland@redhat.com>
+Date: Wed, 1 Dec 2021 10:08:08 -0600
+Subject: [PATCH 18/54] devices file: don't write in test mode
+
+---
+ lib/device/device_id.c | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/lib/device/device_id.c b/lib/device/device_id.c
+index ce7ded154..4c2b5a3dd 100644
+--- a/lib/device/device_id.c
++++ b/lib/device/device_id.c
+@@ -673,6 +673,9 @@ int device_ids_write(struct cmd_context *cmd)
+ 		cmd->enable_devices_file = 1;
+ 	}
+ 
++	if (test_mode())
++		return 1;
++
+ 	if (_devices_file_version[0]) {
+ 		if (sscanf(_devices_file_version, "%u.%u.%u", &df_major, &df_minor, &df_counter) != 3) {
+ 			/* don't update a file we can't parse */
+-- 
+2.34.3
+

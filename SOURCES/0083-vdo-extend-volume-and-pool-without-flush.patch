@@ -1,0 +1,66 @@
+From c3d533a0ea20aa26868c55959365a52f3eaf34d1 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Fri, 19 Aug 2022 14:48:01 +0200
+Subject: [PATCH 083/115] vdo: extend volume and pool without flush
+
+When the volume size is extended, there is no need to flush
+IO operations (nothing can be targeting new space yet).
+VDO target is supported as target that can safely work with
+this condition.
+
+Such support is also needed, when extending VDOPOOL size
+while the pool is reaching its capacity - since this allows
+to continue working without reaching 'out-of-space' condition
+due to flushing of all in flight IO.
+
+(cherry picked from commit e26c21cb8d5841141dcfdfc77f46da1108a81255)
+---
+ WHATS_NEW                  | 1 +
+ lib/activate/activate.c    | 6 +++++-
+ lib/activate/dev_manager.c | 2 ++
+ 3 files changed, 8 insertions(+), 1 deletion(-)
+
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 705fbde74..48b1d7d86 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.03.17 - 
+ ===============================
++ Extend VDO and VDOPOOL without flushing and locking fs.
+  Fix lvconvert --test --type vdo-pool execution.
+  Fix vdo_slab_size_mb value for converted VDO volume.
+ 
+diff --git a/lib/activate/activate.c b/lib/activate/activate.c
+index 727bd2386..76740bb2b 100644
+--- a/lib/activate/activate.c
++++ b/lib/activate/activate.c
+@@ -2124,7 +2124,11 @@ static int _lv_suspend(struct cmd_context *cmd, const char *lvid_s,
+ 	 * TODO: Relax this limiting condition further */
+ 	if (!flush_required &&
+ 	    (lv_is_pvmove(lv) || pvmove_lv ||
+-	     (!lv_is_mirror(lv) && !lv_is_thin_pool(lv) && !lv_is_thin_volume(lv)))) {
++	     (!lv_is_mirror(lv) &&
++	      !lv_is_thin_volume(lv) &&
++	      !lv_is_thin_pool(lv) &&
++	      !lv_is_vdo(lv) &&
++	      !lv_is_vdo_pool(lv)))) {
+ 		log_debug("Requiring flush for LV %s.", display_lvname(lv));
+ 		flush_required = 1;
+ 	}
+diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
+index 284254d68..9058510e4 100644
+--- a/lib/activate/dev_manager.c
++++ b/lib/activate/dev_manager.c
+@@ -3826,6 +3826,8 @@ static int _tree_action(struct dev_manager *dm, const struct logical_volume *lv,
+ 		 * non 'thin pool/volume' and  size increase */
+ 		else if (!lv_is_thin_volume(lv) &&
+ 			 !lv_is_thin_pool(lv) &&
++			 !lv_is_vdo(lv) &&
++			 !lv_is_vdo_pool(lv) &&
+ 			 dm_tree_node_size_changed(root))
+ 			dm->flush_required = 1;
+ 
+-- 
+2.41.0
+
