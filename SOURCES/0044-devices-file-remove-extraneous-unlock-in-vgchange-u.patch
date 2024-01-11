@@ -1,0 +1,45 @@
+From d96432835532fbcd8c72694c6ed68fca3ce98d5c Mon Sep 17 00:00:00 2001
+From: David Teigland <teigland@redhat.com>
+Date: Wed, 13 Apr 2022 12:16:57 -0500
+Subject: [PATCH 44/54] devices file: remove extraneous unlock in vgchange -u
+
+vgchange -u exit path was unlocking the devices file in cases
+when it wasn't needed, which produced an warning.
+---
+ lib/device/device_id.c | 7 +++----
+ 1 file changed, 3 insertions(+), 4 deletions(-)
+
+diff --git a/lib/device/device_id.c b/lib/device/device_id.c
+index 6133e700a..20901ab90 100644
+--- a/lib/device/device_id.c
++++ b/lib/device/device_id.c
+@@ -1272,15 +1272,15 @@ void device_id_update_vg_uuid(struct cmd_context *cmd, struct volume_group *vg,
+ 	int update = 0;
+ 
+ 	if (!cmd->enable_devices_file)
+-		goto out;
++		return;
+ 
+ 	/* Without this setting there is no stacking LVs on PVs. */
+ 	if (!cmd->scan_lvs)
+-		goto out;
++		return;
+ 
+ 	/* Check if any devices file entries are stacked on LVs. */
+ 	if (!_device_ids_use_lvmlv(cmd))
+-		goto out;
++		return;
+ 
+ 	memcpy(old_vgid, old_vg_id, ID_LEN);
+ 	memcpy(new_vgid, &vg->id, ID_LEN);
+@@ -1310,7 +1310,6 @@ void device_id_update_vg_uuid(struct cmd_context *cmd, struct volume_group *vg,
+ 	if (update &&
+ 	    !device_ids_write(cmd))
+ 		stack;
+- out:
+ 	unlock_devices_file(cmd);
+ }
+ 
+-- 
+2.34.3
+

@@ -1,0 +1,106 @@
+From df2b1555aff71452cde156badec70117065c9e2c Mon Sep 17 00:00:00 2001
+From: David Teigland <teigland@redhat.com>
+Date: Thu, 3 Feb 2022 16:56:03 -0600
+Subject: [PATCH 31/54] lvmdevices: make deldev work for missing device
+
+---
+ lib/device/device_id.c |  6 +++---
+ lib/device/device_id.h |  1 +
+ tools/lvmdevices.c     | 33 ++++++++++++++++-----------------
+ 3 files changed, 20 insertions(+), 20 deletions(-)
+
+diff --git a/lib/device/device_id.c b/lib/device/device_id.c
+index ccc5f43a1..aeaa1ffc6 100644
+--- a/lib/device/device_id.c
++++ b/lib/device/device_id.c
+@@ -894,7 +894,7 @@ struct dev_use *get_du_for_pvid(struct cmd_context *cmd, const char *pvid)
+ 	return NULL;
+ }
+ 
+-static struct dev_use *_get_du_for_devname(struct cmd_context *cmd, const char *devname)
++struct dev_use *get_du_for_devname(struct cmd_context *cmd, const char *devname)
+ {
+ 	struct dev_use *du;
+ 
+@@ -1093,7 +1093,7 @@ id_done:
+ 	du_pvid = get_du_for_pvid(cmd, pvid);
+ 
+ 	/* Is there already an entry using this device's name? */
+-	du_devname = _get_du_for_devname(cmd, dev_name(dev));
++	du_devname = get_du_for_devname(cmd, dev_name(dev));
+ 
+ 	/* Is there already an entry using the device_id for this device? */
+ 	du_devid = _get_du_for_device_id(cmd, id->idtype, id->idname);
+@@ -1514,7 +1514,7 @@ int device_ids_match_dev(struct cmd_context *cmd, struct device *dev)
+ 	struct dev_use *du;
+ 
+ 	/* First check the du entry with matching devname since it's likely correct. */
+-	if ((du = _get_du_for_devname(cmd, dev_name(dev)))) {
++	if ((du = get_du_for_devname(cmd, dev_name(dev)))) {
+ 		if (_match_du_to_dev(cmd, du, dev))
+ 			return 1;
+ 	}
+diff --git a/lib/device/device_id.h b/lib/device/device_id.h
+index 4cf1374c8..2cd2fd7c6 100644
+--- a/lib/device/device_id.h
++++ b/lib/device/device_id.h
+@@ -40,6 +40,7 @@ void device_id_update_vg_uuid(struct cmd_context *cmd, struct volume_group *vg,
+ 
+ struct dev_use *get_du_for_dev(struct cmd_context *cmd, struct device *dev);
+ struct dev_use *get_du_for_pvid(struct cmd_context *cmd, const char *pvid);
++struct dev_use *get_du_for_devname(struct cmd_context *cmd, const char *devname);
+ 
+ char *devices_file_version(void);
+ int devices_file_exists(struct cmd_context *cmd);
+diff --git a/tools/lvmdevices.c b/tools/lvmdevices.c
+index c50c09f90..662b35f9a 100644
+--- a/tools/lvmdevices.c
++++ b/tools/lvmdevices.c
+@@ -383,28 +383,27 @@ int lvmdevices(struct cmd_context *cmd, int argc, char **argv)
+ 		 * No filter because we always want to allow removing a device
+ 		 * by name from the devices file.
+ 		 */
+-		if (!(dev = dev_cache_get(cmd, devname, NULL))) {
+-			log_error("No device found for %s.", devname);
+-			goto bad;
+-		}
+-
+-		/*
+-		 * dev_cache_scan uses sysfs to check if an LV is using each dev
+-		 * and sets this flag is so.
+-		 */
+-		if (dev_is_used_by_active_lv(cmd, dev, NULL, NULL, NULL, NULL)) {
+-			if (!arg_count(cmd, yes_ARG) &&
+-			    yes_no_prompt("Device %s is used by an active LV, continue to remove? ", devname) == 'n') {
+-				log_error("Device not removed.");
+-				goto bad;
++		if ((dev = dev_cache_get(cmd, devname, NULL))) {
++			/*
++			 * dev_cache_scan uses sysfs to check if an LV is using each dev
++			 * and sets this flag is so.
++			 */
++			if (dev_is_used_by_active_lv(cmd, dev, NULL, NULL, NULL, NULL)) {
++				if (!arg_count(cmd, yes_ARG) &&
++			    	    yes_no_prompt("Device %s is used by an active LV, continue to remove? ", devname) == 'n') {
++					log_error("Device not removed.");
++					goto bad;
++				}
+ 			}
++			if ((du = get_du_for_dev(cmd, dev)))
++				goto dev_del;
+ 		}
+ 
+-		if (!(du = get_du_for_dev(cmd, dev))) {
+-			log_error("Device not found in devices file.");
++		if (!(du = get_du_for_devname(cmd, devname))) {
++			log_error("No devices file entry for %s.", devname);
+ 			goto bad;
+ 		}
+-
++ dev_del:
+ 		dm_list_del(&du->list);
+ 		free_du(du);
+ 		device_ids_write(cmd);
+-- 
+2.34.3
+

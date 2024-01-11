@@ -1,0 +1,108 @@
+From 090dc0c320f0abee8ab79f4eaea6561c195b5009 Mon Sep 17 00:00:00 2001
+From: David Teigland <teigland@redhat.com>
+Date: Thu, 31 Mar 2022 11:38:08 -0500
+Subject: [PATCH 41/54] change messages about filtered devices
+
+Change messages that refer to devices being "excluded by filters"
+to say just "excluded".  This will avoid mistaking the word
+"filters" with the lvm.conf filter setting.
+---
+ lib/device/device_id.c | 6 +++---
+ tools/lvmdevices.c     | 4 ++--
+ tools/pvscan.c         | 4 ++--
+ tools/vgimportclone.c  | 4 ++--
+ 4 files changed, 9 insertions(+), 9 deletions(-)
+
+diff --git a/lib/device/device_id.c b/lib/device/device_id.c
+index 82db6e4a5..6133e700a 100644
+--- a/lib/device/device_id.c
++++ b/lib/device/device_id.c
+@@ -1744,7 +1744,7 @@ void device_ids_validate(struct cmd_context *cmd, struct dm_list *scanned_devs,
+ 		 * probably wants to do something about it.
+ 		 */
+ 		if (!cmd->filter->passes_filter(cmd, cmd->filter, dev, "persistent")) {
+-			log_warn("Devices file %s is excluded by filter: %s.",
++			log_warn("Devices file %s is excluded: %s.",
+ 				 dev_name(dev), dev_filtered_reason(dev));
+ 			continue;
+ 		}
+@@ -1830,7 +1830,7 @@ void device_ids_validate(struct cmd_context *cmd, struct dm_list *scanned_devs,
+ 			continue;
+ 
+ 		if (!cmd->filter->passes_filter(cmd, cmd->filter, dev, "persistent")) {
+-			log_warn("Devices file %s is excluded by filter: %s.",
++			log_warn("Devices file %s is excluded: %s.",
+ 				 dev_name(dev), dev_filtered_reason(dev));
+ 			/* FIXME: what if this dev is wrongly matched and should be checked below? */
+ 			continue;
+@@ -2266,7 +2266,7 @@ void device_ids_find_renamed_devs(struct cmd_context *cmd, struct dm_list *dev_l
+ 
+ 		if (!cmd->filter->passes_filter(cmd, cmd->filter, dev, NULL)) {
+ 			/* I don't think this would happen */
+-			log_warn("WARNING: new device %s for PVID %s does not pass filter %s.",
++			log_warn("WARNING: new device %s for PVID %s is excluded: %s.",
+ 				 dev_name(dev), dil->pvid, dev_filtered_reason(dev));
+ 			if (du) /* Should not happen 'du' is NULL */
+ 				du->dev = NULL;
+diff --git a/tools/lvmdevices.c b/tools/lvmdevices.c
+index 662b35f9a..8521b89ea 100644
+--- a/tools/lvmdevices.c
++++ b/tools/lvmdevices.c
+@@ -112,7 +112,7 @@ static void _search_devs_for_pvids(struct cmd_context *cmd, struct dm_list *sear
+ 		dev = devl->dev;
+ 		cmd->filter->wipe(cmd, cmd->filter, dev, NULL);
+ 		if (!cmd->filter->passes_filter(cmd, cmd->filter, dev, NULL)) {
+-			log_warn("WARNING: PVID %s found on %s which is excluded by filter: %s",
++			log_warn("WARNING: PVID %s found on %s which is excluded: %s",
+ 			 	  dev->pvid, dev_name(dev), dev_filtered_reason(dev));
+ 			dm_list_del(&devl->list);
+ 		}
+@@ -310,7 +310,7 @@ int lvmdevices(struct cmd_context *cmd, int argc, char **argv)
+ 		cmd->filter_deviceid_skip = 1;
+ 
+ 		if (!cmd->filter->passes_filter(cmd, cmd->filter, dev, NULL)) {
+-			log_warn("WARNING: adding device %s that is excluded by filter: %s.",
++			log_warn("WARNING: adding device %s that is excluded: %s.",
+ 				 dev_name(dev), dev_filtered_reason(dev));
+ 		}
+ 
+diff --git a/tools/pvscan.c b/tools/pvscan.c
+index 160a2c9a0..50d46051a 100644
+--- a/tools/pvscan.c
++++ b/tools/pvscan.c
+@@ -1756,7 +1756,7 @@ static int _pvscan_cache_args(struct cmd_context *cmd, int argc, char **argv,
+ 
+ 	dm_list_iterate_items_safe(devl, devl2, &pvscan_devs) {
+ 		if (!cmd->filter->passes_filter(cmd, cmd->filter, devl->dev, NULL)) {
+-			log_print_pvscan(cmd, "%s excluded by filters: %s.",
++			log_print_pvscan(cmd, "%s excluded: %s.",
+ 					 dev_name(devl->dev), dev_filtered_reason(devl->dev));
+ 			dm_list_del(&devl->list);
+ 		}
+@@ -1813,7 +1813,7 @@ static int _pvscan_cache_args(struct cmd_context *cmd, int argc, char **argv,
+ 
+ 		/* Applies all filters, including those that need data from dev. */
+ 		if (!cmd->filter->passes_filter(cmd, cmd->filter, devl->dev, NULL)) {
+-			log_print_pvscan(cmd, "%s excluded by filters: %s.",
++			log_print_pvscan(cmd, "%s excluded: %s.",
+ 					 dev_name(devl->dev), dev_filtered_reason(devl->dev));
+ 			dm_list_del(&devl->list);
+ 		}
+diff --git a/tools/vgimportclone.c b/tools/vgimportclone.c
+index 23bb6271f..cab501619 100644
+--- a/tools/vgimportclone.c
++++ b/tools/vgimportclone.c
+@@ -311,8 +311,8 @@ int vgimportclone(struct cmd_context *cmd, int argc, char **argv)
+ 	 */
+ 	dm_list_iterate_items(devl, &vp.new_devs) {
+ 		if (!cmd->filter->passes_filter(cmd, cmd->filter, devl->dev, "persistent")) {
+-			/* FIXME: print which filter */
+-			log_error("Device %s was excluded by filters.", dev_name(devl->dev));
++			log_error("Device %s is excluded: %s.",
++				  dev_name(devl->dev), dev_filtered_reason(devl->dev));
+ 			goto out;
+ 		}
+ 	}
+-- 
+2.34.3
+

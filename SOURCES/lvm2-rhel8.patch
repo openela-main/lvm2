@@ -1,0 +1,18 @@
+ VERSION    | 2 +-
+ VERSION_DM | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/VERSION b/VERSION
+index 0a36180..57ed15e 100644
+--- a/VERSION
++++ b/VERSION
+@@ -1 +1 @@
+-2.03.14(2) (2021-10-20)
++2.03.14(2)-RHEL8 (2021-10-20)
+diff --git a/VERSION_DM b/VERSION_DM
+index 52cb622..bf97bda 100644
+--- a/VERSION_DM
++++ b/VERSION_DM
+@@ -1 +1 @@
+-1.02.181 (2021-10-20)
++1.02.181-RHEL8 (2021-10-20)

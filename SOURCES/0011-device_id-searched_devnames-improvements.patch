@@ -1,0 +1,102 @@
+From 39adf3e513ac7b1cbbbf0189f973573ade3c8939 Mon Sep 17 00:00:00 2001
+From: David Teigland <teigland@redhat.com>
+Date: Tue, 16 Nov 2021 11:26:41 -0600
+Subject: [PATCH 11/54] device_id: searched_devnames improvements
+
+Remove the searched_devnames file in a couple more places:
+. When hints need refreshing it's possible that a missing
+  devices file entry could be found by searching devices
+  again.
+. When a devices file entry devname is first found to be
+  incorrect, a new search for missing entries may be
+  useful.
+---
+ lib/device/device_id.c | 28 ++++++++++++++++++++++++++--
+ lib/label/hints.c      | 10 ++++++++++
+ 2 files changed, 36 insertions(+), 2 deletions(-)
+
+diff --git a/lib/device/device_id.c b/lib/device/device_id.c
+index 48f1682a3..ce7ded154 100644
+--- a/lib/device/device_id.c
++++ b/lib/device/device_id.c
+@@ -74,6 +74,8 @@ void unlink_searched_devnames(struct cmd_context *cmd)
+ 
+ 	if (unlink(_searched_file))
+ 		log_debug("unlink %s errno %d", _searched_file, errno);
++	else
++		log_debug("unlink %s", _searched_file);
+ }
+ 
+ static int _searched_devnames_exists(struct cmd_context *cmd)
+@@ -780,7 +782,7 @@ static void _device_ids_update_try(struct cmd_context *cmd)
+ 
+ 	/* Defer updates to non-pvscan-cache commands. */
+ 	if (cmd->pvscan_cache_single) {
+-		log_print("pvscan[%d] skip updating devices file.", getpid());
++		log_print("Devices file update skipped."); 
+ 		return;
+ 	}
+ 
+@@ -1441,8 +1443,22 @@ static int _match_du_to_dev(struct cmd_context *cmd, struct dev_use *du, struct
+ 	const char *idname;
+ 	int part;
+ 
+-	if (!du->idname || !du->idtype)
++	/*
++	 * The idname will be removed from an entry with devname type when the
++	 * devname is read and found to hold a different PVID than the PVID in
++	 * the entry.  At that point we only have the PVID and no known
++	 * location for it.
++	 */
++	if (!du->idname || !du->idtype) {
++		/*
++		log_debug("Mismatch device_id %s %s %s to %s",
++			  du->idtype ? idtype_to_str(du->idtype) : "idtype_missing",
++			  du->idname ? du->idname : "idname_missing",
++			  du->devname ? du->devname : "devname_missing",
++			  dev_name(dev));
++		*/
+ 		return 0;
++	}
+ 
+ 	/*
+ 	 * Some idtypes can only match devices with a specific major number,
+@@ -1957,6 +1973,14 @@ void device_ids_validate(struct cmd_context *cmd, struct dm_list *scanned_devs,
+ 			*device_ids_invalid = 1;
+ 	}
+ 
++	/*
++	 * When a new devname/pvid mismatch is discovered, a new search for the
++	 * pvid should be permitted (searched_devnames may exist to suppress
++	 * searching for other pvids.)
++	 */
++	if (update_file)
++		unlink_searched_devnames(cmd);
++
+ 	/* FIXME: for wrong devname cases, wait to write new until device_ids_find_renamed_devs? */
+ 
+ 	/*
+diff --git a/lib/label/hints.c b/lib/label/hints.c
+index e444a0c82..3ce9634f2 100644
+--- a/lib/label/hints.c
++++ b/lib/label/hints.c
+@@ -1390,6 +1390,16 @@ int get_hints(struct cmd_context *cmd, struct dm_list *hints_out, int *newhints,
+ 		log_debug("get_hints: needs refresh");
+ 		free_hints(&hints_list);
+ 
++		/*
++		 * This is not related to hints, and is probably unnecessary,
++		 * but it could possibly help.  When hints become invalid it's
++		 * usually becaues devs on the system have changed, and that
++		 * also means that a missing devices file entry might be found
++		 * by searching devices again.  (the searched_devnames
++		 * mechanism should eventually be replaced)
++		 */
++		unlink_searched_devnames(cmd);
++
+ 		if (!_lock_hints(cmd, LOCK_EX, NONBLOCK))
+ 			return 0;
+ 
+-- 
+2.34.3
+

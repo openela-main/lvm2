@@ -1,0 +1,73 @@
+From fad2b3dc8c44ba1222508ee78b5f161994efe638 Mon Sep 17 00:00:00 2001
+From: David Teigland <teigland@redhat.com>
+Date: Tue, 9 Nov 2021 11:54:48 -0600
+Subject: [PATCH 08/54] filter-sysfs: support old kernels without sys/dev/block
+
+rhel5 for example doesn't have /sys/dev/block
+---
+ lib/filters/filter-sysfs.c | 28 ++++++++++++++++++++++++++++
+ 1 file changed, 28 insertions(+)
+
+diff --git a/lib/filters/filter-sysfs.c b/lib/filters/filter-sysfs.c
+index 672211057..d8de7940b 100644
+--- a/lib/filters/filter-sysfs.c
++++ b/lib/filters/filter-sysfs.c
+@@ -15,6 +15,8 @@
+ #include "lib/misc/lib.h"
+ #include "lib/filters/filter.h"
+ 
++static int _sys_dev_block_found;
++
+ #ifdef __linux__
+ 
+ static int _accept_p(struct cmd_context *cmd, struct dev_filter *f, struct device *dev, const char *use_filter_name)
+@@ -23,6 +25,9 @@ static int _accept_p(struct cmd_context *cmd, struct dev_filter *f, struct devic
+ 	const char *sysfs_dir;
+ 	struct stat info;
+ 
++	if (!_sys_dev_block_found)
++		return 1;
++
+ 	dev->filtered_flags &= ~DEV_FILTERED_SYSFS;
+ 
+ 	/*
+@@ -57,6 +62,26 @@ static void _destroy(struct dev_filter *f)
+ 	free(f);
+ }
+ 
++static void _check_sys_dev_block(void)
++{
++	char path[PATH_MAX];
++	const char *sysfs_dir;
++	struct stat info;
++
++	sysfs_dir = dm_sysfs_dir();
++	if (sysfs_dir && *sysfs_dir) {
++		if (dm_snprintf(path, sizeof(path), "%sdev/block", sysfs_dir) < 0)
++			return;
++
++		if (lstat(path, &info)) {
++			log_debug("filter-sysfs disabled: /sys/dev/block not found");
++			_sys_dev_block_found = 0;
++		} else {
++			_sys_dev_block_found = 1;
++		}
++	}
++}
++
+ struct dev_filter *sysfs_filter_create(void)
+ {
+ 	const char *sysfs_dir = dm_sysfs_dir();
+@@ -67,6 +92,9 @@ struct dev_filter *sysfs_filter_create(void)
+ 		return NULL;
+ 	}
+ 
++	/* support old kernels that don't have this */
++	_check_sys_dev_block();
++
+ 	if (!(f = zalloc(sizeof(*f))))
+ 		goto_bad;
+ 
+-- 
+2.34.3
+

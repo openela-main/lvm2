@@ -1,0 +1,32 @@
+From 0aa45120e92fe8b0f379d00f3a031e3c53feca43 Mon Sep 17 00:00:00 2001
+From: Tony Asleson <tasleson@redhat.com>
+Date: Wed, 24 Aug 2022 15:37:56 -0500
+Subject: [PATCH 3/6] lvmdbusd: Set LVM_COMMAND_PROFILE=lvmdbusd
+
+We need this to prevent lvm from interleaving the JSON output with errors
+written to stderr.
+
+(cherry picked from commit a5e6947d74f7b88f7f0df4328a923ad82a970634)
+---
+ daemons/lvmdbusd/main.py | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/daemons/lvmdbusd/main.py b/daemons/lvmdbusd/main.py
+index b0a82d492..eaea13ef8 100644
+--- a/daemons/lvmdbusd/main.py
++++ b/daemons/lvmdbusd/main.py
+@@ -112,8 +112,10 @@ def main():
+ 
+ 	use_session = os.getenv('LVMDBUSD_USE_SESSION', False)
+ 
+-	# Ensure that we get consistent output for parsing stdout/stderr
++	# Ensure that we get consistent output for parsing stdout/stderr and that we
++	# are using the lvmdbusd profile.
+ 	os.environ["LC_ALL"] = "C"
++	os.environ["LVM_COMMAND_PROFILE"] = "lvmdbusd"
+ 
+ 	cfg.args = parser.parse_args()
+ 	cfg.create_request_entry = RequestEntry
+-- 
+2.38.1
+

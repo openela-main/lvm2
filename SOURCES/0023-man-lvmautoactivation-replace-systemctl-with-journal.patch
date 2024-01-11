@@ -1,0 +1,26 @@
+From 61833dd5b6117e8ace84289cff656d1dfb0ed123 Mon Sep 17 00:00:00 2001
+From: David Teigland <teigland@redhat.com>
+Date: Tue, 14 Dec 2021 12:02:08 -0600
+Subject: [PATCH 23/54] man lvmautoactivation: replace systemctl with
+ journalctl
+
+---
+ man/lvmautoactivation.7_main | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/man/lvmautoactivation.7_main b/man/lvmautoactivation.7_main
+index bf885991d..54dab718b 100644
+--- a/man/lvmautoactivation.7_main
++++ b/man/lvmautoactivation.7_main
+@@ -107,7 +107,7 @@ vgchange -aay --autoactivation event <vgname>
+ .
+ .IP \[bu] 2
+ the activation command output can be seen from
+-systemctl status lvm-activate-<vgname>
++journalctl -u lvm-activate-<vgname>
+ .P
+ .
+ .SS pvscan options
+-- 
+2.34.3
+
