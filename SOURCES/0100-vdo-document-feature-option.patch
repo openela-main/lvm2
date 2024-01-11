@@ -1,0 +1,48 @@
+From 5e6aa69ec03848942153c7b65b270a0503363e58 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Thu, 27 Apr 2023 23:17:40 +0200
+Subject: [PATCH 100/115] vdo: document feature option
+
+(cherry picked from commit 534269d0fb834fb9a3b115bf859319fc1acb2275)
+---
+ conf/example.conf.in         | 4 ++--
+ lib/config/config_settings.h | 4 ++--
+ 2 files changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/conf/example.conf.in b/conf/example.conf.in
+index 897622b9d..c74800676 100644
+--- a/conf/example.conf.in
++++ b/conf/example.conf.in
+@@ -1318,10 +1318,10 @@ global {
+ 	# Configuration option global/vdo_disabled_features.
+ 	# Features to not use in the vdo driver.
+ 	# This can be helpful for testing, or to avoid using a feature that is
+-	# causing problems. Features include: online_rename
++	# causing problems. Features include: online_rename, version4
+ 	#
+ 	# Example
+-	# vdo_disabled_features = [ "online_rename" ]
++	# vdo_disabled_features = [ "online_rename", "version4" ]
+ 	#
+ 	# This configuration option does not have a default value defined.
+ 
+diff --git a/lib/config/config_settings.h b/lib/config/config_settings.h
+index 2c91e8bb6..a4beda654 100644
+--- a/lib/config/config_settings.h
++++ b/lib/config/config_settings.h
+@@ -1265,10 +1265,10 @@ cfg_array(global_vdo_format_options_CFG, "vdo_format_options", global_CFG_SECTIO
+ cfg_array(global_vdo_disabled_features_CFG, "vdo_disabled_features", global_CFG_SECTION, CFG_ALLOW_EMPTY | CFG_DEFAULT_UNDEFINED, CFG_TYPE_STRING, NULL, vsn(2, 3, 11), NULL, 0, NULL,
+ 	"Features to not use in the vdo driver.\n"
+ 	"This can be helpful for testing, or to avoid using a feature that is\n"
+-	"causing problems. Features include: online_rename\n"
++	"causing problems. Features include: online_rename, version4\n"
+ 	"#\n"
+ 	"Example\n"
+-	"vdo_disabled_features = [ \"online_rename\" ]\n"
++	"vdo_disabled_features = [ \"online_rename\", \"version4\" ]\n"
+ 	"#\n")
+ 
+ cfg(global_fsadm_executable_CFG, "fsadm_executable", global_CFG_SECTION, CFG_DEFAULT_COMMENTED, CFG_TYPE_STRING, DEFAULT_FSADM_PATH, vsn(2, 2, 170), "@FSADM_PATH@", 0, NULL,
+-- 
+2.41.0
+

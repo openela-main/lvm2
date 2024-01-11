@@ -1,0 +1,28 @@
+From 05b4d98a51f09e8fdb555cdf1678de8645d5e9c4 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Tue, 20 Dec 2022 13:52:31 +0100
+Subject: [PATCH 091/115] vdo: fix reader error path
+
+Nothing to be closed on this error path.
+
+(cherry picked from commit b6b1c19365d20d926d8aa39bf591731a7f9bb75a)
+---
+ device_mapper/vdo/vdo_reader.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/device_mapper/vdo/vdo_reader.c b/device_mapper/vdo/vdo_reader.c
+index 4f91f8011..3596afbd3 100644
+--- a/device_mapper/vdo/vdo_reader.c
++++ b/device_mapper/vdo/vdo_reader.c
+@@ -189,7 +189,7 @@ bool dm_vdo_parse_logical_size(const char *vdo_path, uint64_t *logical_blocks)
+ 	*logical_blocks = 0;
+ 	if ((fh = open(vdo_path, O_RDONLY)) == -1) {
+ 		log_sys_debug("Failed to open VDO backend %s.", vdo_path);
+-		goto err;
++		return false;
+ 	}
+ 
+ 	if (ioctl(fh, BLKGETSIZE64, &size) == -1) {
+-- 
+2.41.0
+

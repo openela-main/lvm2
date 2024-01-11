@@ -1,0 +1,35 @@
+From c41468a8acff9fd71bf774c821ad7c92623889da Mon Sep 17 00:00:00 2001
+From: Andrew Walsh <awalsh@redhat.com>
+Date: Mon, 15 Nov 2021 10:49:06 -0500
+Subject: [PATCH 069/115] vdo: ensure VDO config is removed
+
+Make sure to remove the VDO config after conversion
+of LVM-backed VDO.
+
+Addresses point 3 in rhbz#1987024#c5
+
+(cherry picked from commit 522561e64b5fe73cb9d01c2ee2d4b7624b0ddff4)
+---
+ scripts/lvm_import_vdo.sh | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/scripts/lvm_import_vdo.sh b/scripts/lvm_import_vdo.sh
+index beb55dbdb..cc09187e9 100755
+--- a/scripts/lvm_import_vdo.sh
++++ b/scripts/lvm_import_vdo.sh
+@@ -405,6 +405,12 @@ EOF
+ 	verbose "Converting to VDO pool."
+ 	dry "$LVM" lvconvert $YES $VERB $FORCE --config "$PARAMS" -Zn -V "${vdo_logicalSize}k" -n "$LVNAME" --type vdo-pool "$VGNAME/${LVNAME}_vpool"
+ 
++	# Note: that this is spelled OPPOSITE the other $IS_LV checks.
++	if [ "$IS_LV" = "1" ]; then
++		verbose "Removing now-unused VDO entry from VDO config."
++		dry "$VDO" remove $VDOCONF --force --verbose --name "$VDONAME"
++	fi
++
+ 	rm -fr "$TEMPDIR"
+ }
+ 
+-- 
+2.41.0
+

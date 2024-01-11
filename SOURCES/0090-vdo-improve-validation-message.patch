@@ -1,0 +1,32 @@
+From 57eb6c1b9c3122a33da38c561e5177183577a958 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Tue, 8 Nov 2022 12:40:21 +0100
+Subject: [PATCH 090/115] vdo: improve validation message
+
+Rephrase.
+
+(cherry picked from commit 403779333be419352d6062da592ea78e6096e12b)
+---
+ device_mapper/vdo/vdo_target.c | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/device_mapper/vdo/vdo_target.c b/device_mapper/vdo/vdo_target.c
+index ab3fff26a..a8a753e39 100644
+--- a/device_mapper/vdo/vdo_target.c
++++ b/device_mapper/vdo/vdo_target.c
+@@ -156,9 +156,9 @@ bool dm_vdo_validate_target_params(const struct dm_vdo_target_params *vtp,
+ 	}
+ 
+ 	if (vdo_size > DM_VDO_LOGICAL_SIZE_MAXIMUM) {
+-		log_error("VDO logical size is by " FMTu64 "KiB bigger then limit " FMTu64 "TiB.",
+-			  (vdo_size - DM_VDO_LOGICAL_SIZE_MAXIMUM) / 2,
+-			  DM_VDO_LOGICAL_SIZE_MAXIMUM / (UINT64_C(1024) * 1024 * 1024 * 1024 >> SECTOR_SHIFT));
++		log_error("VDO logical size is larger than limit " FMTu64 " TiB by " FMTu64 " KiB.",
++			  DM_VDO_LOGICAL_SIZE_MAXIMUM / (UINT64_C(1024) * 1024 * 1024 * 1024 >> SECTOR_SHIFT),
++			  (vdo_size - DM_VDO_LOGICAL_SIZE_MAXIMUM) / 2);
+ 		valid = false;
+ 	}
+ 
+-- 
+2.41.0
+

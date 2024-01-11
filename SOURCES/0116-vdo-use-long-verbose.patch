@@ -1,0 +1,28 @@
+From adaa7034883c7f237fa35a80e93563ea56ea9362 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Mon, 17 Jul 2023 16:22:29 +0200
+Subject: [PATCH 1/2] vdo: use long --verbose
+
+vdo tools needs long option.
+
+(cherry picked from commit 1c2782354c9ad49f1e2c9af58d7f5085f0632cb5)
+---
+ scripts/lvm_import_vdo.sh | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/scripts/lvm_import_vdo.sh b/scripts/lvm_import_vdo.sh
+index b5e1a9e16..f0e93075a 100755
+--- a/scripts/lvm_import_vdo.sh
++++ b/scripts/lvm_import_vdo.sh
+@@ -619,7 +619,7 @@ do
+ 	  "-f"|"--force"  ) FORCE="-f" ;;
+ 	  "-h"|"--help"   ) tool_usage ;;
+ 	  "-n"|"--name"   ) shift; NAME=$1 ;;
+-	  "-v"|"--verbose") VERB="-v" ;;
++	  "-v"|"--verbose") VERB="--verbose" ;;
+ 	  "-y"|"--yes"    ) YES="-y" ;;
+ 	  "--abort-after-vdo-convert" ) ABORT_AFTER_VDO_CONVERT=1; USE_VDO_DM_SNAPSHOT=0 ;; # For testing only
+ 	  "--dry-run"     ) DRY="1" ; VERB="-v" ;;
+-- 
+2.41.0
+

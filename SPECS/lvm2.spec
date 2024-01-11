@@ -55,7 +55,7 @@
 %global commit 4dc5d4ac7e7a9457ccc46ff04796b347e58bf4da
 %global shortcommit %(c=%{commit}; echo ${c:0:7})
 %endif
-#%%global rel_suffix .test
+#%%global rel_suffix .bz2233901_1
 
 # Do not reset Release to 1 unless both lvm2 and device-mapper
 # versions are increased together.
@@ -68,7 +68,7 @@ Version: 2.03.14
 %if 0%{?from_snapshot}
 Release: 0.1.20210426git%{shortcommit}%{?dist}%{?rel_suffix}
 %else
-Release: 9%{?dist}%{?rel_suffix}
+Release: 13%{?dist}%{?rel_suffix}
 %endif
 License: GPLv2
 URL: http://sourceware.org/lvm2
@@ -155,6 +155,57 @@ Patch66: 0065-make-generate.patch
 Patch67: 0066-vdo-use-single-validator.patch
 Patch68: 0067-vdo-use-defines-also-for-configuration-defines.patch
 Patch69: 0068-vdo-report-supported-range-in-error-path.patch
+# BZ 2173312:
+Patch70: 0069-vdo-ensure-VDO-config-is-removed.patch
+Patch71: 0070-vdo-fix-conversion-of-vdo_slab_size_mb.patch
+Patch72: 0071-tests-add-lvm_vdo_wrapper.patch
+Patch73: 0072-tests-update-for-wrapper.patch
+Patch74: 0073-lvmdbusd-Change-unit-test-vdo-minimum-size.patch
+Patch75: 0074-vdo-fix-conversion-of-vdo_slab_size_mb-2nd.patch
+Patch76: 0075-vdo-update-info-about-memory.patch
+Patch77: 0076-vdo-check-vdo-memory-constrains.patch
+Patch78: 0077-vdo-add-reformating-to-extent-size-aligned-virtual-s.patch
+Patch79: 0078-vdo-support-v4-kernel-target-line.patch
+Patch80: 0079-vdo-enhance-lvcreate-validation.patch
+Patch81: 0080-vdo-suffle-code-for-better-error-path-handling.patch
+Patch82: 0081-vdo-use-only-verbose-log-level-for-reformating.patch
+Patch83: 0082-vdo-reset-errno-before-strtoull.patch
+Patch84: 0083-vdo-extend-volume-and-pool-without-flush.patch
+Patch85: 0084-tests-vdo-emulation-without-vdo-binary.patch
+Patch86: 0085-device_mapper-add-parser-for-vdo-metadata.patch
+Patch87: 0086-dev_manager-accept-misalined-vdo-pools.patch
+Patch88: 0087-device_mapper-vdo-V4-avoid-messaging.patch
+Patch89: 0088-vdo-replace-errors-with-debug.patch
+Patch90: 0089-vdo-enhance-detection-of-virtual-size.patch
+Patch91: 0090-vdo-improve-validation-message.patch
+Patch92: 0091-vdo-fix-reader-error-path.patch
+Patch93: 0092-vdo-check-memory-only-in-non-critical-section.patch
+Patch94: 0093-vdo-read-live-vdo-size-configuration.patch
+Patch95: 0094-lvcreate-fix-error-path-return-values.patch
+Patch96: 0095-vdo-fix-and-enhance-vdo-constain-checking.patch
+Patch97: 0096-vdo-resize-requires-active-vdopool-volume.patch
+Patch98: 0097-tests-vdo-resizing.patch
+Patch99: 0098-tests-check-failing-vdo-conversion.patch
+Patch100: 0099-vdo-use-fixed-size-vdopool-wrapper.patch
+Patch101: 0100-vdo-document-feature-option.patch
+Patch102: 0101-vdo-fix-and-enhance-vdo-metadata-reader.patch
+Patch103: 0102-tests-cleanup-some-shellcheck-warns.patch
+Patch104: 0103-vdo-enhance-lvm_vdo_import.patch
+Patch105: 0104-vdo-man-updates-for-lvm_import_vdo.patch
+Patch106: 0105-tests-vdo-manager-wrapper-tool-updates.patch
+Patch107: 0106-tests-update-test-to-handle-different-status.patch
+Patch108: 0107-tests-updates.patch
+Patch109: 0108-WHATS_NEW-update.patch
+Patch110: 0109-lvm_import_vdo-correct-the-converted-virtual-size.patch
+Patch111: 0110-tests-update-test-for-automatic-virtual-size-correct.patch
+Patch112: 0111-vdo-check_point_frequence-is-unused-option.patch
+Patch113: 0112-vdo-indent-for-lvdisplay.patch
+Patch114: 0113-vdo-lvm_import_vdo-correct-parsing-output.patch
+Patch115: 0114-lvm_import_vdo-spelling-fixes.patch
+Patch116: 0115-vdo-support-version-4.patch
+Patch117: 0116-vdo-use-long-verbose.patch
+# BZ 2233901:
+Patch118: 0117-vdo-Sync-lvm_import_vdo.sh-with-main-as-of-970e4d295.patch
 
 BuildRequires: gcc
 %if %{enable_testsuite}
@@ -210,79 +261,10 @@ or more physical volumes and creating one or more logical volumes
 
 %prep
 %if 0%{?from_snapshot}
-%setup -q -n lvm2-%{commit}
+%autosetup -n lvm2-%{commit}
 %else
-%setup -q -n LVM2.%{version}
-%patch0 -p1 -b .backup0
+%autosetup -p1 -n LVM2.%{version}
 %endif
-%patch1 -p1 -b .backup1
-%patch2 -p1 -b .backup2
-%patch3 -p1 -b .backup3
-%patch4 -p1 -b .backup4
-%patch5 -p1 -b .backup5
-%patch6 -p1 -b .backup6
-%patch7 -p1 -b .backup7
-%patch8 -p1 -b .backup8
-%patch9 -p1 -b .backup9
-%patch10 -p1 -b .backup10
-%patch11 -p1 -b .backup11
-%patch12 -p1 -b .backup12
-%patch13 -p1 -b .backup13
-%patch14 -p1 -b .backup14
-%patch15 -p1 -b .backup15
-%patch16 -p1 -b .backup16
-#%%patch17 -p1 -b .backup17
-%patch18 -p1 -b .backup18
-%patch19 -p1 -b .backup19
-%patch20 -p1 -b .backup20
-%patch21 -p1 -b .backup21
-%patch22 -p1 -b .backup22
-%patch23 -p1 -b .backup23
-%patch24 -p1 -b .backup24
-%patch25 -p1 -b .backup25
-%patch26 -p1 -b .backup26
-%patch27 -p1 -b .backup27
-%patch28 -p1 -b .backup28
-%patch29 -p1 -b .backup29
-%patch30 -p1 -b .backup30
-%patch31 -p1 -b .backup31
-%patch32 -p1 -b .backup32
-%patch33 -p1 -b .backup33
-%patch34 -p1 -b .backup34
-%patch35 -p1 -b .backup35
-%patch36 -p1 -b .backup36
-%patch37 -p1 -b .backup37
-%patch38 -p1 -b .backup38
-%patch39 -p1 -b .backup39
-%patch40 -p1 -b .backup40
-%patch41 -p1 -b .backup41
-%patch42 -p1 -b .backup42
-%patch43 -p1 -b .backup43
-%patch44 -p1 -b .backup44
-%patch45 -p1 -b .backup45
-%patch46 -p1 -b .backup46
-%patch47 -p1 -b .backup47
-%patch48 -p1 -b .backup48
-%patch49 -p1 -b .backup49
-%patch50 -p1 -b .backup50
-%patch51 -p1 -b .backup51
-%patch52 -p1 -b .backup52
-%patch53 -p1 -b .backup53
-%patch54 -p1 -b .backup54
-%patch55 -p1 -b .backup55
-%patch57 -p1 -b .backup57
-%patch58 -p1 -b .backup58
-%patch59 -p1 -b .backup59
-%patch60 -p1 -b .backup60
-%patch61 -p1 -b .backup61
-%patch62 -p1 -b .backup62
-%patch63 -p1 -b .backup63
-%patch64 -p1 -b .backup64
-%patch65 -p1 -b .backup65
-%patch66 -p1 -b .backup66
-%patch67 -p1 -b .backup67
-%patch68 -p1 -b .backup68
-%patch69 -p1 -b .backup69
 
 %build
 %global _default_pid_dir /run
@@ -901,6 +883,18 @@ An extensive functional testsuite for LVM2.
 %endif
 
 %changelog
+* Mon Sep 18 2023 Marian Csontos <mcsontos@redhat.com> - 2.03.14-13
+- Fix error paths in lvm_import_vdo.sh.
+
+* Thu Sep 07 2023 Marian Csontos <mcsontos@redhat.com> - 2.03.14-12
+- Fix handling of devices with symlinks in lvm_import_vdo.sh.
+
+* Thu Jul 27 2023 Marian Csontos <mcsontos@redhat.com> - 2.03.14-11
+- Fix verbose option in lvm_import_vdo.sh.
+
+* Thu Jul 13 2023 Marian Csontos <mcsontos@redhat.com> - 2.03.14-10
+- Improve VDO support.
+
 * Thu Dec 08 2022 Marian Csontos <mcsontos@redhat.com> - 2.03.14-9
 - Fix handling of invalid values passed to vdo_block_map_era_length.
 

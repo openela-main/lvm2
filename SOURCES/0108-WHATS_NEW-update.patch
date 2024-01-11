@@ -1,0 +1,28 @@
+From d698509aa858b9da78e9c3719ba80dfcb15fd4cb Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Fri, 9 Jun 2023 17:52:00 +0200
+Subject: [PATCH 108/115] WHATS_NEW: update
+
+(cherry picked from commit 7ac5dbfd09e771f087a9467aca8a0d5905084459)
+---
+ WHATS_NEW | 6 +++++-
+ 1 file changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 7f8a16e24..a2bec7e11 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,9 @@
++version 2.03.22 - 
++=================================
++  Enhance lvm_import_vdo and use snapshot when converting VDO volume.
++  Fix parsing of VDO metadata.
++
+ version 2.03.19 - 
+-====================================
+   Fix and improve runtime memory size detection for VDO volumes.
+ 
+ Version 2.03.17 - 
+-- 
+2.41.0
+

@@ -1,0 +1,58 @@
+From f5c194afc5d904e3a936dc167ac14b204c049969 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Sat, 9 Jul 2022 21:33:57 +0200
+Subject: [PATCH 080/115] vdo: suffle code for better error path handling
+
+For failing dm_ no need to report 2nd. error,
+but we missed to report error with 'updated==NULL'.
+
+(cherry picked from commit 493acb9195cef185b38ae4e4ffb84b984e5cc08c)
+---
+ tools/toollib.c | 28 ++++++++++++++--------------
+ 1 file changed, 14 insertions(+), 14 deletions(-)
+
+diff --git a/tools/toollib.c b/tools/toollib.c
+index d9a1a92ec..71bf26d39 100644
+--- a/tools/toollib.c
++++ b/tools/toollib.c
+@@ -1343,23 +1343,23 @@ int get_vdo_settings(struct cmd_context *cmd,
+ 			u |= VDO_CHANGE_ONLINE;
+ 	}
+ 
+-	if (updated) {
+-		// validation of updated VDO option
+-		if (!dm_vdo_validate_target_params(vtp, 0 /* vdo_size */)) {
+-err:
+-			if (is_lvchange)
+-				log_error("Cannot change VDO setting \"vdo_%s\" in existing VDO pool.",
+-					  option);
+-			else
+-				log_error("Invalid argument for VDO setting \"vdo_%s\".",
+-					  option);
+-			goto out;
+-		}
++	// validation of updated VDO option
++	if (!dm_vdo_validate_target_params(vtp, 0 /* vdo_size */))
++		goto_out;
+ 
++	if (updated)
+ 		*updated = u;
+-	}
+ 
+-	r = 1;
++	r = 1; // success
++	goto out;
++err:
++	if (is_lvchange)
++		log_error("Cannot change VDO setting \"vdo_%s\" in existing VDO pool.",
++			  option);
++	else
++		log_error("Invalid argument for VDO setting \"vdo_%s\".",
++			  option);
++
+ out:
+ 	if (result)
+ 		dm_config_destroy(result);
+-- 
+2.41.0
+

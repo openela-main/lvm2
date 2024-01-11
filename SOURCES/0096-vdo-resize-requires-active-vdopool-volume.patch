@@ -1,0 +1,37 @@
+From 72749491665de8f090292af86a62fc4405e7e8fe Mon Sep 17 00:00:00 2001
+From: Marian Csontos <mcsontos@redhat.com>
+Date: Thu, 22 Jun 2023 16:55:47 +0200
+Subject: [PATCH 096/115] vdo: resize requires active vdopool volume
+
+ATM kernel VDO target does not handle resize of inactive VDO LVs
+so prevent users corrupting such LVs and require active such LVs.
+
+(manually backported from commit c20f01a0cbb24e8276734a00f26a510cf6daaf21)
+---
+ lib/metadata/lv_manip.c | 10 ++++++++++
+ 1 file changed, 10 insertions(+)
+
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index 9523e3e66..0a51e0315 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -5190,6 +5190,16 @@ static int _lvresize_check(struct logical_volume *lv,
+ 	struct volume_group *vg = lv->vg;
+ 	struct lv_segment *seg = first_seg(lv);
+ 
++	if (lv_is_vdo(lv) && !lv_is_active(lv)) {
++		log_error("Cannot resize inactive VDO logical volume %s.", display_lvname(lv));
++		return 0;
++	}
++
++	if (lv_is_vdo_pool(lv) && !lv_is_active(lv_lock_holder(lv))) {
++		log_error("Cannot resize inactive VDO POOL volume %s.", display_lvname(lv));
++		return 0;
++	}
++
+ 	if (lv_is_external_origin(lv)) {
+ 		/*
+ 		 * Since external-origin can be activated read-only,
+-- 
+2.41.0
+

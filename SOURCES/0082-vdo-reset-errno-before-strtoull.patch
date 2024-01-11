@@ -1,0 +1,27 @@
+From a4f39c5bbff286cc1323f799d269e35bf8e615b6 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Thu, 18 Aug 2022 13:55:29 +0200
+Subject: [PATCH 082/115] vdo: reset errno before strtoull
+
+Missed errno reset in commit ebad057579aeff0980a1b8af7eaacd56e62ed0c9.
+
+(cherry picked from commit 309df239e3ee474f3a5337f8fa3c0a1f7b0a89e5)
+---
+ lib/metadata/vdo_manip.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/lib/metadata/vdo_manip.c b/lib/metadata/vdo_manip.c
+index 637fd1e5d..0db401537 100644
+--- a/lib/metadata/vdo_manip.c
++++ b/lib/metadata/vdo_manip.c
+@@ -618,6 +618,7 @@ static int _get_memory_info(uint64_t *total_mb, uint64_t *available_mb)
+ 		if (!found)
+ 			continue; // not interesting
+ 
++		errno = 0;
+ 		*(found->value) = (uint64_t) strtoull(e, &tail, 10);
+ 
+ 		if ((e == tail) || errno)
+-- 
+2.41.0
+

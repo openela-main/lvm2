@@ -1,0 +1,45 @@
+From 52e019c6133fbd68676bc6fecb40da9cb7e1986e Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Tue, 8 Nov 2022 12:39:25 +0100
+Subject: [PATCH 094/115] lvcreate: fix error path return values
+
+Return failing error code for return path, as 'return 0' in this
+case was returning success.
+
+(cherry picked from commit b9f35e07db41f3dd6bea2c91a8bc1bff93a4d406)
+---
+ tools/lvcreate.c | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/tools/lvcreate.c b/tools/lvcreate.c
+index 3eee5de90..d3fa5281f 100644
+--- a/tools/lvcreate.c
++++ b/tools/lvcreate.c
+@@ -1749,21 +1749,21 @@ static int _lvcreate_single(struct cmd_context *cmd, const char *vg_name,
+ 		goto_out;
+ 
+ 	if (seg_is_vdo(lp) && !_check_vdo_parameters(vg, lp, lcp))
+-		return_0;
++		goto_out;
+ 
+ 	if (!_check_pool_parameters(cmd, vg, lp, lcp))
+ 		goto_out;
+ 
+ 	/* All types are checked */
+ 	if (!_check_zero_parameters(cmd, lp))
+-		return_0;
++		goto_out;
+ 
+ 	if (!_update_extents_params(vg, lp, lcp))
+ 		goto_out;
+ 
+ 	if (seg_is_vdo(lp) && !check_vdo_constrains(cmd, (uint64_t)lp->extents * vg->extent_size,
+ 						    lcp->virtual_size, &lp->vdo_params))
+-		return_0;
++		goto_out;
+ 
+ 	if (seg_is_thin(lp) && !_validate_internal_thin_processing(lp))
+ 		goto_out;
+-- 
+2.41.0
+

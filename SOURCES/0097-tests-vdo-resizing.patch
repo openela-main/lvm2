@@ -1,0 +1,37 @@
+From 686d6ecdccf0a72f149c42c6cfe2d630bfe03ded Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Mon, 16 Jan 2023 01:11:37 +0100
+Subject: [PATCH 097/115] tests: vdo resizing
+
+(cherry picked from commit aa09232dc4fb825f4e643bbe87a95e2318dd5a93)
+---
+ test/shell/lvresize-vdo.sh | 15 +++++++++++++++
+ 1 file changed, 15 insertions(+)
+
+diff --git a/test/shell/lvresize-vdo.sh b/test/shell/lvresize-vdo.sh
+index 6fe0e9c26..cbe8ce967 100644
+--- a/test/shell/lvresize-vdo.sh
++++ b/test/shell/lvresize-vdo.sh
+@@ -32,4 +32,19 @@ check lv_field $vg/${lv2}_vdata size "6.00g"
+ lvresize -L6G $vg/$lv1
+ check lv_field $vg/$lv1 size "6.00g"
+ 
++# Check too large size
++not lvresize -L4P $vg/$lv1 2>err
++grep "Volume too large" err
++
++# Can't resize inactive VDO
++lvchange -an $vg
++not lvresize -L10G $vg/$lv1  2>err
++grep "Cannot resize inactive" err
++
++not lvresize -L10G $vg/$lv2 2>err
++grep "Cannot resize inactive" err
++
++not lvresize -L10G $vg/${lv2}_vdata 2>err
++grep "Cannot resize inactive" err
++
+ vgremove -ff $vg
+-- 
+2.41.0
+
