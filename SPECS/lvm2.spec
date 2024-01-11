@@ -1,7 +1,6 @@
-%global device_mapper_version 1.02.187
+%global device_mapper_version 1.02.195
 
 %global enable_cache 1
-%global enable_cluster 1
 %global enable_lvmdbusd 1
 %global enable_lvmlockd 1
 %global enable_lvmpolld 1
@@ -29,19 +28,12 @@
 
 %if 0%{?rhel} && 0%{?rhel} <= 8
   %ifnarch i686 x86_64 ppc64le s390x
-    %global enable_cluster 0
     %global enable_lockd_dlm 0
   %endif
 
   %ifnarch x86_64 ppc64 aarch64
     %global enable_lockd_sanlock 0
   %endif
-%endif
-
-%if %{enable_cluster}
-  %global configure_cluster --with-cluster=internal
-%else
-    %global configure_cluster --with-cluster=internal
 %endif
 
 %global from_snapshot 0
@@ -58,12 +50,11 @@ Name: lvm2
 %if 0%{?rhel}
 Epoch: %{rhel}
 %endif
-Version: 2.03.17
+Version: 2.03.21
 %if 0%{?from_snapshot}
-#Release: 0.1.20211115git%{shortcommit}%{?dist}%{?rel_suffix}
-Release: 4%{?dist}%{?rel_suffix}
+Release: 0.1.20211115git%{shortcommit}%{?dist}%{?rel_suffix}
 %else
-Release: 7%{?dist}%{?rel_suffix}
+Release: 3%{?dist}%{?rel_suffix}
 %endif
 License: GPLv2
 URL: http://sourceware.org/lvm2
@@ -72,26 +63,30 @@ Source0: lvm2-%{shortcommit}.tgz
 %else
 Source0: ftp://sourceware.org/pub/lvm2/releases/LVM2.%{version}.tgz
 %endif
-# BZ 2150348:
-Patch1: 0001-device_id-fix-segfault-verifying-serial-for-non-pv.patch
-# BZ 2151601:
-Patch2: 0002-lvextend-fix-overprovisioning-check-for-thin-lvs.patch
-# BZ 2157591:
-Patch3: 0003-lvresize-fix-cryptsetup-resize-in-helper.patch
-# BZ 2158619:
-Patch4: 0004-vgimportclone-fix-importing-PV-without-metadata.patch
-# BZ 2164044:
-Patch5: 0005-lvmdbusd-Move-get_error_msg-to-utils.patch
-Patch6: 0006-lvmdbusd-Add-command_log_selection-to-command-line.patch
-# BZ 2162144:
-Patch7: 0007-tests-lvresize-fs-crypt-using-helper-only-for-crypt-.patch
-Patch8: 0008-lvresize-only-resize-crypt-when-fs-resize-is-enabled.patch
-# BZ 2164226:
-Patch9: 0009-lvresize-fail-early-if-mounted-LV-was-renamed.patch
-# BZ 2158628:
-Patch10: 0010-udev-import-previous-results-of-blkid-when-in-suspen.patch
-# BZ 2164226:
-Patch11: 0011-filesystem-use-PATH_MAX-for-linux-paths.patch
+# BZ 2179430:
+Patch1: 0001-fix-dev_name-use-in-add_areas_line.patch
+Patch2: 0002-raidintegrity-allow-snapshots.patch
+Patch3: 0003-lvmdbus-preserve-PATH-envvar.patch
+Patch4: 0004-lvmcache-fix-valgrind-error-when-dropping-md-duplica.patch
+# BZ 2188718
+Patch5: 0005-pvck-improve-error-for-write-to-existing-file.patch
+# BZ 2191683:
+Patch6: 0006-lvreduce-make-_lvseg_get_stripes-handle-integrity-la.patch
+# BZ 2188480:
+#Patch7: 0007-toollib-provide-proper-hint-for-referencing-VG-uuid-.patch
+# BZ 2179430:
+Patch8: 0008-tests-integrity-snapshots-now-work-on-raid-integrity.patch
+# BZ 2212295:
+Patch9: 0009-lvresize-fix-multiple-mounts.patch
+# BZ 2208039:
+Patch10: 0010-device_id-ignore-trailing-underscores-in-t10-wwid-fr.patch
+# - 2212968:
+Patch11: 0011-device_id-fix-handling-of-non-PV-with-duplicate-seri.patch
+# - 2213653:
+Patch12: 0012-device_id-ignore-leading-and-trailing-spaces-for-sys.patch
+# BZ 2204467:
+Patch13: 0013-Fix-multisegment-RAID1-allocator-uses-one-disk-for-b.patch
+Patch14: 0014-tests-integrity-caching-ensure-raid-redundancy.patch
 
 BuildRequires: make
 BuildRequires: gcc
@@ -103,10 +98,7 @@ BuildRequires: libblkid-devel >= %{util_linux_version}
 BuildRequires: ncurses-devel
 BuildRequires: libedit-devel
 BuildRequires: libaio-devel
-%if %{enable_cluster}
-BuildRequires: corosynclib-devel >= %{corosync_version}
-%endif
-%if %{enable_cluster} || %{enable_lockd_dlm}
+%if %{enable_lockd_dlm}
 BuildRequires: dlm-devel >= %{dlm_version}
 %endif
 BuildRequires: module-init-tools
@@ -127,7 +119,7 @@ BuildRequires: sanlock-devel >= %{sanlock_version}
 %endif
 Requires: %{name}-libs = %{?epoch}:%{version}-%{release}
 %if 0%{?fedora}
-Requires: system-release >= %{system_release_version}
+Requires(post): (system-release >= %{system_release_version} if system-release)
 %endif
 Requires: bash >= %{bash_version}
 Requires(post): systemd-units >= %{systemd_version}, systemd-sysv
@@ -150,19 +142,8 @@ or more physical volumes and creating one or more logical volumes
 %if 0%{?from_snapshot}
 %setup -q -n lvm2-%{commit}
 %else
-%setup -q -n LVM2.%{version}
+%autosetup -p1 -n LVM2.%{version}
 %endif
-%patch1 -p1 -b .backup1
-%patch2 -p1 -b .backup2
-%patch3 -p1 -b .backup3
-%patch4 -p1 -b .backup4
-%patch5 -p1 -b .backup5
-%patch6 -p1 -b .backup6
-%patch7 -p1 -b .backup7
-%patch8 -p1 -b .backup8
-%patch9 -p1 -b .backup9
-%patch10 -p1 -b .backup10
-%patch11 -p1 -b .backup11
 
 %build
 %global _default_pid_dir /run
@@ -189,7 +170,6 @@ or more physical volumes and creating one or more logical volumes
   --enable-cmdlib \
   --enable-dmeventd \
   --enable-blkid_wiping \
-  %{?configure_cluster} \
   --with-udevdir=%{_udevdir} --enable-udev_sync \
 %if %{enable_thin}
   --with-thin=internal \
@@ -582,7 +562,7 @@ Version: %{device_mapper_version}
 License: GPLv2
 URL: http://sources.redhat.com/dm
 Requires: device-mapper-libs = %{?epoch}:%{device_mapper_version}-%{release}
-Requires: util-linux >= %{util_linux_version}
+Requires: util-linux-core >= %{util_linux_version}
 Requires: systemd >= %{systemd_version}
 # We need dracut to install required udev rules if udev_sync
 # feature is turned on so we don't lose required notifications.
@@ -734,6 +714,28 @@ An extensive functional testsuite for LVM2.
 %endif
 
 %changelog
+* Thu Jul 13 2023 Marian Csontos <mcsontos@redhat.com> - 2.03.21-3
+- Fix lvresize fail in case of multiple mountpoints.
+- Fix allocator for RAID LVs allocating multiple legs on single device.
+- Fix device id handling of WWIDs with trailing spaces.
+
+* Wed May 24 2023 Marian Csontos <mcsontos@redhat.com> - 2.03.21-2
+- Allow snapshots over raid+integrity LV.
+
+* Fri Apr 21 2023 Marian Csontos <mcsontos@redhat.com> - 2.03.21-1
+- Update to upstream version 2.03.21.
+- Allow (write)cache over raid+integrity LV.
+
+* Wed Apr 05 2023 Marian Csontos <mcsontos@redhat.com> - 2.03.20-2
+- Fix ModuleNotFoundError: No module named 'utils' in lvmdbusd.
+
+* Tue Mar 21 2023 Marian Csontos <mcsontos@redhat.com> - 2.03.20-1
+- Update to upstream version 2.03.20.
+
+* Tue Mar 07 2023 Marian Csontos <mcsontos@redhat.com> - 2.03.19-1
+- Update to upstream version 2.03.19.
+- See WHATS_NEW and WHATS_NEW_DM for more information.
+
 * Thu Feb 16 2023 Marian Csontos <mcsontos@redhat.com> - 2.03.17-7
 - Fix segfault in previous build.
 

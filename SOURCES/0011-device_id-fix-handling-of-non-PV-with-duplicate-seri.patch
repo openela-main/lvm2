@@ -1,0 +1,82 @@
+From 499fd37ff0c2bae1c492c3883f063a332e12ac3d Mon Sep 17 00:00:00 2001
+From: David Teigland <teigland@redhat.com>
+Date: Thu, 8 Jun 2023 12:24:05 -0500
+Subject: [PATCH 11/14] device_id: fix handling of non-PV with duplicate serial
+ number
+
+Fix in the code that matches devices to system.devices entries when
+the devices have the same serial number.  A non-PV device in
+system.devices has no pvid value, and the code was segfaulting
+when checking the null pvid value.
+
+(cherry picked from commit 74feebdab723c1ea46d4316f8a581750c1d8cda3)
+---
+ lib/device/device_id.c           |  2 ++
+ test/shell/devicesfile-serial.sh | 38 ++++++++++++++++++++++++++++++++
+ 2 files changed, 40 insertions(+)
+
+diff --git a/lib/device/device_id.c b/lib/device/device_id.c
+index 7db6c9b86..e3d622ecc 100644
+--- a/lib/device/device_id.c
++++ b/lib/device/device_id.c
+@@ -2625,6 +2625,8 @@ void device_ids_check_serial(struct cmd_context *cmd, struct dm_list *scan_devs,
+ 	 * Match du to a dev based on PVID.
+ 	 */
+ 	dm_list_iterate_items(dul, &dus_check) {
++		if (!dul->du->pvid)
++			continue;
+ 		log_debug("Matching suspect serial device id %s PVID %s prev %s",
+ 			  dul->du->idname, dul->du->pvid, dul->du->devname);
+ 		found = 0;
+diff --git a/test/shell/devicesfile-serial.sh b/test/shell/devicesfile-serial.sh
+index a88c1906a..a4cbd5cb2 100644
+--- a/test/shell/devicesfile-serial.sh
++++ b/test/shell/devicesfile-serial.sh
+@@ -851,6 +851,44 @@ grep $PVID4 out4
+ vgcreate $vg2 $dev2 $dev3
+ vgs | grep $vg2
+ 
++# 3 devs with duplicate serial, 2 pvs with stale devnames, 1 non-pv device
++
++aux wipefs_a $dev1
++aux wipefs_a $dev2
++aux wipefs_a $dev3
++
++echo $SERIAL1 > $SYS_DIR/dev/block/$MAJOR1:$MINOR1/device/serial
++echo $SERIAL1 > $SYS_DIR/dev/block/$MAJOR2:$MINOR2/device/serial
++echo $SERIAL1 > $SYS_DIR/dev/block/$MAJOR3:$MINOR3/device/serial
++
++rm $DF
++touch $DF
++vgcreate $vg1 $dev1 $dev2
++lvmdevices --adddev $dev3
++cat $DF
++cp $DF $ORIG
++
++PVID1=`pvs "$dev1" --noheading -o uuid | tr -d - | awk '{print $1}'`
++PVID2=`pvs "$dev2" --noheading -o uuid | tr -d - | awk '{print $1}'`
++OPVID1=`pvs "$dev1" --noheading -o uuid | awk '{print $1}'`
++OPVID2=`pvs "$dev2" --noheading -o uuid | awk '{print $1}'`
++
++pvs -o+uuid,deviceid
++
++sed -e "s|DEVNAME=$dev1|DEVNAME=tmp|" $ORIG > tmp1
++sed -e "s|DEVNAME=$dev2|DEVNAME=$dev1|" tmp1 > tmp2
++sed -e "s|DEVNAME=tmp|DEVNAME=$dev2|" tmp2 > $DF
++cat $DF
++
++# pvs should report the correct info and fix the DF
++pvs -o+uuid,deviceid |tee out
++grep $dev1 out |tee out1
++grep $dev2 out |tee out2
++grep $OPVID1 out1
++grep $OPVID2 out2
++grep $SERIAL1 out1
++grep $SERIAL1 out2
++
+ remove_base
+ rmmod brd
+ 
+-- 
+2.41.0
+
