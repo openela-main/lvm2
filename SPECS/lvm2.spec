@@ -1,4 +1,4 @@
-%global device_mapper_version 1.02.195
+%global device_mapper_version 1.02.197
 
 %global enable_cache 1
 %global enable_lvmdbusd 1
@@ -50,43 +50,26 @@ Name: lvm2
 %if 0%{?rhel}
 Epoch: %{rhel}
 %endif
-Version: 2.03.21
+Version: 2.03.23
 %if 0%{?from_snapshot}
 Release: 0.1.20211115git%{shortcommit}%{?dist}%{?rel_suffix}
 %else
-Release: 3%{?dist}%{?rel_suffix}
+Release: 2%{?dist}%{?rel_suffix}
 %endif
 License: GPLv2
-URL: http://sourceware.org/lvm2
+URL: https://sourceware.org/lvm2
 %if 0%{?from_snapshot}
 Source0: lvm2-%{shortcommit}.tgz
 %else
-Source0: ftp://sourceware.org/pub/lvm2/releases/LVM2.%{version}.tgz
+Source0: https://sourceware.org/pub/lvm2/releases/LVM2.%{version}.tgz
 %endif
-# BZ 2179430:
-Patch1: 0001-fix-dev_name-use-in-add_areas_line.patch
-Patch2: 0002-raidintegrity-allow-snapshots.patch
-Patch3: 0003-lvmdbus-preserve-PATH-envvar.patch
-Patch4: 0004-lvmcache-fix-valgrind-error-when-dropping-md-duplica.patch
-# BZ 2188718
-Patch5: 0005-pvck-improve-error-for-write-to-existing-file.patch
-# BZ 2191683:
-Patch6: 0006-lvreduce-make-_lvseg_get_stripes-handle-integrity-la.patch
-# BZ 2188480:
-#Patch7: 0007-toollib-provide-proper-hint-for-referencing-VG-uuid-.patch
-# BZ 2179430:
-Patch8: 0008-tests-integrity-snapshots-now-work-on-raid-integrity.patch
-# BZ 2212295:
-Patch9: 0009-lvresize-fix-multiple-mounts.patch
-# BZ 2208039:
-Patch10: 0010-device_id-ignore-trailing-underscores-in-t10-wwid-fr.patch
-# - 2212968:
-Patch11: 0011-device_id-fix-handling-of-non-PV-with-duplicate-seri.patch
-# - 2213653:
-Patch12: 0012-device_id-ignore-leading-and-trailing-spaces-for-sys.patch
-# BZ 2204467:
-Patch13: 0013-Fix-multisegment-RAID1-allocator-uses-one-disk-for-b.patch
-Patch14: 0014-tests-integrity-caching-ensure-raid-redundancy.patch
+Patch1: 0001-spec-Install-and-package-etc-lvm-devices.patch
+# RHEL-14216:
+Patch2: 0002-man-add-inte-g-rity-to-man-lvs.patch
+# RHEL-20192:
+Patch3: 0003-archiving-Fix-doubled-filename-in-vgcfgrestore.patch
+# RHEL-8270:
+Patch4: 0004-raid-add-messages-to-lvs-command-output-in-case-Raid.patch
 
 BuildRequires: make
 BuildRequires: gcc
@@ -405,6 +388,7 @@ systemctl start lvm2-lvmpolld.socket >/dev/null 2>&1 || :
 %dir %{_sysconfdir}/lvm/backup
 %dir %{_sysconfdir}/lvm/cache
 %dir %{_sysconfdir}/lvm/archive
+%dir %{_sysconfdir}/lvm/devices
 %dir %{_default_locking_dir}
 %dir %{_default_run_dir}
 %{_tmpfilesdir}/%{name}.conf
@@ -714,6 +698,14 @@ An extensive functional testsuite for LVM2.
 %endif
 
 %changelog
+* Fri Feb 02 2024 Marian Csontos <mcsontos@redhat.com> - 2.03.23-2
+- Add warning message when mirror images have (r)efresh bit set.
+- Document lv_attr volume type bit (g) for raid+integrity in lvs(8).
+
+* Wed Nov 22 2023 Marian Csontos <mcsontos@redhat.com> - 2.03.23-1
+- Update to upstream version 2.03.23.
+- See WHATS_NEW and WHATS_NEW_DM for more information.
+
 * Thu Jul 13 2023 Marian Csontos <mcsontos@redhat.com> - 2.03.21-3
 - Fix lvresize fail in case of multiple mountpoints.
 - Fix allocator for RAID LVs allocating multiple legs on single device.
