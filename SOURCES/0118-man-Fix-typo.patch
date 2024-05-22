@@ -1,0 +1,25 @@
+From cf7e7e0041b1f92ad3e9e8f1d7fb24c4ba5949e9 Mon Sep 17 00:00:00 2001
+From: Marian Csontos <mcsontos@redhat.com>
+Date: Wed, 31 Jan 2024 18:48:24 +0100
+Subject: [PATCH 01/12] man: Fix typo
+
+---
+ man/lvmcache.7_main | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/man/lvmcache.7_main b/man/lvmcache.7_main
+index 519e352cb..824f24e91 100644
+--- a/man/lvmcache.7_main
++++ b/man/lvmcache.7_main
+@@ -252,7 +252,7 @@ when selecting the writecache cachevol size and the writecache block size.
+ .P
+ .IP \[bu] 2
+ writecache block size 4096: each 100 GiB of writecache cachevol uses
+-slighly over 2 GiB of system memory.
++slightly over 2 GiB of system memory.
+ .IP \[bu] 2
+ writecache block size 512: each 100 GiB of writecache cachevol uses
+ a little over 16 GiB of system memory.
+-- 
+2.43.0
+

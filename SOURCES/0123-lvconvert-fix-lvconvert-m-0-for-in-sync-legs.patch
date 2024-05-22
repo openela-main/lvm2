@@ -1,0 +1,52 @@
+From 54576eb1e4217353072933d5c2b3274c08c67e82 Mon Sep 17 00:00:00 2001
+From: Heinz Mauelshagen <heinzm@redhat.com>
+Date: Thu, 19 Oct 2023 16:50:01 +0200
+Subject: [PATCH 06/12] lvconvert: fix "lvconvert -m 0" for in-sync legs
+
+With commit d7e922480e04ecfb7c4d8b2d42533699ddef5c34
+lvconvert -m   may fail if we try to remove 1st. leg that
+is out-of-sync while other leg is in-sync.
+
+Hot fix allows to proceed with such down conversion.
+
+Signed-off-by: Heinz Mauelshagen <heinzm@redhat.com>
+(cherry picked from commit e41da923a3bec2df603b54f0f466e9574b6544db)
+---
+ lib/metadata/raid_manip.c | 19 ++++++++++++++++++-
+ 1 file changed, 18 insertions(+), 1 deletion(-)
+
+diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
+index 5112989ab..7ce2c177d 100644
+--- a/lib/metadata/raid_manip.c
++++ b/lib/metadata/raid_manip.c
+@@ -3113,9 +3113,26 @@ static int _raid_remove_images(struct logical_volume *lv, int yes,
+ 	struct dm_list removed_lvs;
+ 
+ 	if (new_count == 1) {
++		uint32_t s;
+ 		struct lv_segment *seg = first_seg(lv);
+ 
+-		if (seg_is_raid1(seg) && !lv_raid_image_in_sync(seg_lv(seg, 0))) {
++		if (!seg_is_raid1(seg)) {
++			log_error("%s called on non-raid1 LV.", display_lvname(lv));
++			return 0;
++		}
++
++		for (s = 0; s < seg->area_count; s++) {
++			if (seg_type(seg, s) == AREA_UNASSIGNED)
++				continue;
++
++			if (lv_raid_image_in_sync(seg_lv(seg, s))) {
++				_swap_areas(seg->areas + 0, seg->areas + s);
++				break;
++			}
++
++		}
++
++		if (s >= seg->area_count) {
+ 			log_error("%s is out-of-sync!  Please try refreshing first.", display_lvname(lv));
+ 			return 0;
+ 		}
+-- 
+2.43.0
+

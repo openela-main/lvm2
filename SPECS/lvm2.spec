@@ -68,7 +68,7 @@ Version: 2.03.14
 %if 0%{?from_snapshot}
 Release: 0.1.20210426git%{shortcommit}%{?dist}%{?rel_suffix}
 %else
-Release: 13%{?dist}%{?rel_suffix}
+Release: 14%{?dist}%{?rel_suffix}
 %endif
 License: GPLv2
 URL: http://sourceware.org/lvm2
@@ -206,6 +206,27 @@ Patch116: 0115-vdo-support-version-4.patch
 Patch117: 0116-vdo-use-long-verbose.patch
 # BZ 2233901:
 Patch118: 0117-vdo-Sync-lvm_import_vdo.sh-with-main-as-of-970e4d295.patch
+# RHEL-8289:
+Patch119: 0118-man-Fix-typo.patch
+Patch120: 0119-doc-fix-typos-in-documentation.patch
+# RHEL-20192:
+Patch121: 0120-archiving-Fix-doubled-filename-in-vgcfgrestore.patch
+# RHEL-14216:
+Patch122: 0121-man-add-inte-g-rity-to-man-lvs.patch
+# RHEL-8298:
+Patch123: 0122-Fix-lvconvert-m-0-will-always-take-rimage_0-even-if-.patch
+Patch124: 0123-lvconvert-fix-lvconvert-m-0-for-in-sync-legs.patch
+# RHEL-8334:
+Patch125: 0124-Fix-multisegment-RAID1-allocator-uses-one-disk-for-b.patch
+# RHEL-8270:
+Patch126: 0125-raid-add-messages-to-lvs-command-output-in-case-Raid.patch
+## RHEL-8295:
+#Patch127: 0126-vgsplit-don-t-reread-vg_to.patch
+#Patch128: 0127-lvmcache-remove-lvmcache_update_vg_from_write.patch
+#Patch129: 0128-handle-duplicate-vgids.patch
+#Patch130: 0129-remove-unused-variable.patch
+#
+Patch131: 0130-spec-Install-and-package-etc-lvm-devices.patch
 
 BuildRequires: gcc
 %if %{enable_testsuite}
@@ -522,6 +543,7 @@ systemctl start lvm2-lvmpolld.socket >/dev/null 2>&1 || :
 %dir %{_sysconfdir}/lvm/backup
 %dir %{_sysconfdir}/lvm/cache
 %dir %{_sysconfdir}/lvm/archive
+%dir %{_sysconfdir}/lvm/devices
 %dir %{_default_locking_dir}
 %dir %{_default_run_dir}
 %{_tmpfilesdir}/%{name}.conf
@@ -883,7 +905,13 @@ An extensive functional testsuite for LVM2.
 %endif
 
 %changelog
-* Mon Sep 18 2023 Marian Csontos <mcsontos@redhat.com> - 2.03.14-13
+* Fri Feb 02 2024 Marian Csontos <mcsontos@redhat.com> - 2.03.14-14
+- Fix multisegment RAID1 allocator using one disk for both legs.
+- Fix lvconvert -m 0 taking rimage_0 even if it is out of sync.
+- Add warning message when mirror images have (r)efresh bit set.
+- Document lv_attr volume type bit (g) for raid+integrity in lvs(8).
+
+* Mon Sep 18 2023 Marian Csontos <mcsontos@redhat.com> - 2.03.14-13.el8_9
 - Fix error paths in lvm_import_vdo.sh.
 
 * Thu Sep 07 2023 Marian Csontos <mcsontos@redhat.com> - 2.03.14-12

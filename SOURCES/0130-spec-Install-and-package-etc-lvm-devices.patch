@@ -1,0 +1,25 @@
+From e85d3a5487893cd2b8464d0b9a69f0050f686d7e Mon Sep 17 00:00:00 2001
+From: Marian Csontos <mcsontos@redhat.com>
+Date: Wed, 29 Nov 2023 15:09:36 +0100
+Subject: [PATCH] spec: Install and package /etc/lvm/devices
+
+(cherry picked from commit ee31ba5023e6e1430c0d808f54015ccd3eb3931a)
+---
+ Makefile.in       | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/Makefile.in b/Makefile.in
+index f7a46269a..afbb0d1bd 100644
+--- a/Makefile.in
++++ b/Makefile.in
+@@ -127,6 +127,7 @@ all_man:
+ 
+ install_system_dirs:
+ 	$(INSTALL_DIR) $(DESTDIR)$(DEFAULT_SYS_DIR)
++	$(INSTALL_ROOT_DIR) $(DESTDIR)$(DEFAULT_SYS_DIR)/devices
+ 	$(INSTALL_ROOT_DIR) $(DESTDIR)$(DEFAULT_ARCHIVE_DIR)
+ 	$(INSTALL_ROOT_DIR) $(DESTDIR)$(DEFAULT_BACKUP_DIR)
+ 	$(INSTALL_ROOT_DIR) $(DESTDIR)$(DEFAULT_CACHE_DIR)
+-- 
+2.43.0
+
