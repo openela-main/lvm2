@@ -1,0 +1,38 @@
+From 7d1b418ad8efa0c059197238ea3fcbf3f659d909 Mon Sep 17 00:00:00 2001
+From: Marian Csontos <mcsontos@redhat.com>
+Date: Thu, 16 May 2024 15:34:28 +0200
+Subject: [PATCH 7/7] WHATS_NEW: update
+
+---
+ WHATS_NEW    | 1 +
+ WHATS_NEW_DM | 4 ++++
+ 2 files changed, 5 insertions(+)
+
+diff --git a/WHATS_NEW b/WHATS_NEW
+index c7de3914a..1d56f8675 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.03.25 - 
+ ==================
++  Revert Don't import DM_UDEV_DISABLE_OTHER_RULES_FLAG in LVM rules, DM rules cover it.
+ 
+ Version 2.03.24 - 16th May 2024
+ ===============================
+diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
+index a2277c53b..da8df6914 100644
+--- a/WHATS_NEW_DM
++++ b/WHATS_NEW_DM
+@@ -1,5 +1,9 @@
+ Version 1.02.199 - 
+ ===================
++  Revert Increase DM_UDEV_RULES_VSN to 3 to indicate changed udev rules.
++  Revert Rename DM_NOSCAN to .DM_NOSCAN so it's not stored in udev db.
++  Revert Rename DM_SUSPENDED to .DM_SUSPENDED so it's not stored in udev db.
++  Revert Do not import DM_UDEV_DISABLE_OTHER_RULES_FLAG from db in 10-dm-disk.rules.
+ 
+ Version 1.02.198 - 16th May 2024
+ ================================
+-- 
+2.44.0
+

@@ -1,0 +1,60 @@
+From fe58f4b87a2cd85f132775a2e475c128b89e7eb4 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Fri, 24 May 2024 19:49:08 +0200
+Subject: [PATCH 09/13] lvm: fix shell completion
+
+Previous commit 82617852a4d3c89b09124eddedcc2c1859b9d50e
+introduce bug in complession - as the rl_completion_matches()
+needs to always advance to next element where the index
+is held in static variable.
+
+Add comment about this usage.
+
+(cherry picked from commit 73298635b9db2c2a11bc4cc291b15d0f21907598)
+(cherry picked from commit c33b0e11878a52aeaa42b4ebfd0692e5da7f5e07)
+---
+ tools/lvm.c | 13 ++++++++-----
+ 1 file changed, 8 insertions(+), 5 deletions(-)
+
+diff --git a/tools/lvm.c b/tools/lvm.c
+index 116b707b2..3a7e6dc6c 100644
+--- a/tools/lvm.c
++++ b/tools/lvm.c
+@@ -52,7 +52,8 @@ static char *_list_cmds(const char *text, int state)
+ 
+ 	for (;i < _cmdline->num_command_names;++i)
+ 		if (!strncmp(text, _cmdline->command_names[i].name, len))
+-			return strdup(_cmdline->command_names[i].name);
++			/* increase position for next iteration */
++			return strdup(_cmdline->command_names[i++].name);
+ 
+ 	return NULL;
+ }
+@@ -102,9 +103,10 @@ static char *_list_args(const char *text, int state)
+ 
+ 	/* Short form arguments */
+ 	if (len < 3) {
+-		for (;match_no < cna->num_args; ++match_no) {
++		while (match_no < cna->num_args) {
+ 			char s[3];
+-			char c = (_cmdline->opt_names + cna->valid_args[match_no])->short_opt;
++			/* increase position for next iteration */
++			char c = _cmdline->opt_names[cna->valid_args[match_no++]].short_opt;
+ 			if (c) {
+ 				sprintf(s, "-%c", c);
+ 				if (!strncmp(text, s, len))
+@@ -117,8 +119,9 @@ static char *_list_args(const char *text, int state)
+ 	if (match_no < cna->num_args)
+ 		match_no = cna->num_args;
+ 
+-	for (;match_no - cna->num_args < cna->num_args; ++match_no) {
+-		const char *l = (_cmdline->opt_names + cna->valid_args[match_no - cna->num_args])->long_opt;
++	while ((match_no - cna->num_args) < cna->num_args) {
++		/* increase position for next iteration */
++		const char *l = _cmdline->opt_names[cna->valid_args[match_no++ - cna->num_args]].long_opt;
+ 		if (*(l + 2) && !strncmp(text, l, len))
+ 			return strdup(l);
+ 	}
+-- 
+2.45.2
+

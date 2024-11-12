@@ -1,4 +1,4 @@
-%global device_mapper_version 1.02.197
+%global device_mapper_version 1.02.198
 
 %global enable_cache 1
 %global enable_lvmdbusd 1
@@ -50,7 +50,7 @@ Name: lvm2
 %if 0%{?rhel}
 Epoch: %{rhel}
 %endif
-Version: 2.03.23
+Version: 2.03.24
 %if 0%{?from_snapshot}
 Release: 0.1.20211115git%{shortcommit}%{?dist}%{?rel_suffix}
 %else
@@ -63,13 +63,20 @@ Source0: lvm2-%{shortcommit}.tgz
 %else
 Source0: https://sourceware.org/pub/lvm2/releases/LVM2.%{version}.tgz
 %endif
-Patch1: 0001-spec-Install-and-package-etc-lvm-devices.patch
-# RHEL-14216:
-Patch2: 0002-man-add-inte-g-rity-to-man-lvs.patch
-# RHEL-20192:
-Patch3: 0003-archiving-Fix-doubled-filename-in-vgcfgrestore.patch
-# RHEL-8270:
-Patch4: 0004-raid-add-messages-to-lvs-command-output-in-case-Raid.patch
+Patch1: 0001-RHEL9.patch
+Patch2: 0002-Revert-10-dm.rules-bump-DM_UDEV_RULES_VSN-to-3.patch
+Patch3: 0003-Revert-dm-udev-rules-don-t-export-and-save-DM_NOSCAN.patch
+Patch4: 0004-Revert-dm-udev-rules-don-t-export-and-save-DM_SUSPEN.patch
+Patch5: 0005-Revert-11-dm-lvm.rules-don-t-restore-DM_UDEV_DISABLE.patch
+Patch6: 0006-Revert-10-dm-rules-don-t-restore-DM_UDEV_DISABLE_OTH.patch
+Patch7: 0007-WHATS_NEW-update.patch
+Patch8: 0008-Allow-system.devices-to-be-automatically-created-on-.patch
+Patch9: 0009-lvm-fix-shell-completion.patch
+Patch10: 0010-vgimportdevices-skip-global-lockd-locking.patch
+Patch11: 0011-scripts-Install-services-for-devices-file-init.patch
+Patch12: 0012-lvmlockd-avoid-lockd_vg-for-local-VGs.patch
+Patch13: 0013-lvmlockd-allow-forced-vgchange-locktype-from-none.patch
+Patch14: 0014-lv_manip-avoid-unreleased-memory-pool-s-message-on-R.patch
 
 BuildRequires: make
 BuildRequires: gcc
@@ -399,6 +406,8 @@ systemctl start lvm2-lvmpolld.socket >/dev/null 2>&1 || :
 %{_unitdir}/lvm2-lvmpolld.socket
 %{_unitdir}/lvm2-lvmpolld.service
 %endif
+%{_unitdir}/lvm-devices-import.service
+%{_unitdir}/lvm-devices-import.path
 
 ##############################################################################
 # Library and Development subpackages
@@ -698,6 +707,13 @@ An extensive functional testsuite for LVM2.
 %endif
 
 %changelog
+* Wed Aug 07 2024 Marian Csontos <mcsontos@redhat.com> - 2.03.24-2
+- Fix unreleased memory pools on RAID's lvextend.
+
+* Wed Jul 10 2024 Marian Csontos <mcsontos@redhat.com> - 2.03.24-1
+- Update to upstream version 2.03.24.
+- See WHATS_NEW and WHATS_NEW_DM for more information.
+
 * Fri Feb 02 2024 Marian Csontos <mcsontos@redhat.com> - 2.03.23-2
 - Add warning message when mirror images have (r)efresh bit set.
 - Document lv_attr volume type bit (g) for raid+integrity in lvs(8).

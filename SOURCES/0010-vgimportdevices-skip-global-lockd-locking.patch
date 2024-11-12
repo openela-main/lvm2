@@ -1,0 +1,31 @@
+From 4b33a5a3999fa443dfe5e124e8bd984a936ac77c Mon Sep 17 00:00:00 2001
+From: David Teigland <teigland@redhat.com>
+Date: Thu, 30 May 2024 14:51:22 -0500
+Subject: [PATCH 10/13] vgimportdevices: skip global lockd locking
+
+Fix commit b65a2c3f3a767 "vgimportdevices: skip lvmlockd locking"
+which intended to disable lvmlockd locking, but the lockd_gl_disable
+flag was mistakenly set after lock_global() so it wasn't effective.
+This caused vgimportdevices to fail unless locking was started.
+
+(cherry picked from commit a8b8e1f074598d080bfb34e1fd04fe36ec122f93)
+---
+ tools/vgimportdevices.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/tools/vgimportdevices.c b/tools/vgimportdevices.c
+index 70d12e500..2217fdad6 100644
+--- a/tools/vgimportdevices.c
++++ b/tools/vgimportdevices.c
+@@ -236,7 +236,7 @@ int vgimportdevices(struct cmd_context *cmd, int argc, char **argv)
+ 		}
+ 	}
+ 
+-	if (!lock_global(cmd, "ex"))
++	if (!lockf_global(cmd, "ex"))
+ 		return ECMD_FAILED;
+ 
+ 	/*
+-- 
+2.45.2
+

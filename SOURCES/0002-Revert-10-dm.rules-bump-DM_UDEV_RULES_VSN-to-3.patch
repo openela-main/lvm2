@@ -1,0 +1,50 @@
+From d6b3f4f4dd526a5a4413e84f4cccb2e92699d1d8 Mon Sep 17 00:00:00 2001
+From: Marian Csontos <mcsontos@redhat.com>
+Date: Thu, 16 May 2024 15:30:02 +0200
+Subject: [PATCH 2/7] Revert "10-dm.rules: bump DM_UDEV_RULES_VSN to 3"
+
+This reverts commit 038f9254d9554654197b59c160e3f775af27cdb1.
+---
+ udev/10-dm.rules.in | 12 +-----------
+ 1 file changed, 1 insertion(+), 11 deletions(-)
+
+diff --git a/udev/10-dm.rules.in b/udev/10-dm.rules.in
+index db4ee771d..ca255c793 100644
+--- a/udev/10-dm.rules.in
++++ b/udev/10-dm.rules.in
+@@ -12,9 +12,6 @@
+ #   DM_NAME - actual DM device's name
+ #   DM_UUID - UUID set for DM device (blank if not specified)
+ #   DM_UDEV_RULES_VSN - DM udev rules version
+-#   DM_UDEV_DISABLE_OTHER_RULES_FLAG - a flag that indicates that
+-#      stacked layers shouldn't attempt to probe the device, and
+-#      should try to import relevant properties from the udev db.
+ #
+ # These rules cover only basic device-mapper functionality in udev.
+ #
+@@ -25,11 +22,6 @@
+ #   11-dm-lvm.rules for LVM subsystem
+ #   11-dm-mpath.rules for multipath subsystem (since version 0.6.0, recommended!)
+ #
+-# 11-dm<subsystem_name>.rules may use other DM related properties besides
+-# those listed above, like .DM_SUSPENDED. These properties are considered
+-# internal to device mapper, and subject to change without notice.
+-# Rules that are executed after 13-dm-disk.rules shouldn't use them.
+-#
+ # Even more specific rules may be required by subsystems so always
+ # check subsystem's upstream repository for recent set of rules.
+ # Also, keep in mind that recent rules may also require recent
+@@ -152,9 +144,7 @@ LABEL="dm_suspended_set"
+ # possible future changes.
+ # VSN 1 - original rules
+ # VSN 2 - add support for synthesized events
+-# VSN 3 - use DM_UDEV_DISABLE_OTHER_RULES_FLAG as the only "API"
+-#         to be consumed by non-dm rules.
+-ENV{DM_UDEV_RULES_VSN}="3"
++ENV{DM_UDEV_RULES_VSN}="2"
+ 
+ ENV{DM_UDEV_DISABLE_DM_RULES_FLAG}!="1", ENV{DM_NAME}=="?*", SYMLINK+="(DM_DIR)/$env{DM_NAME}"
+ 
+-- 
+2.44.0
+
