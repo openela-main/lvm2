@@ -1,0 +1,118 @@
+From 490631e2cd0947116f21192837703b2e563b863c Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Wed, 20 Sep 2023 15:36:54 +0200
+Subject: [PATCH 138/139] debug: correct level
+
+No error for just tracing message.
+
+(cherry picked from commit e930ee93f7361a7b0b7a357acc4187bf630b7f14)
+---
+ daemons/dmeventd/dmeventd.c       | 20 ++++++++++----------
+ device_mapper/ioctl/libdm-iface.c |  2 +-
+ libdm/ioctl/libdm-iface.c         |  2 +-
+ 3 files changed, 12 insertions(+), 12 deletions(-)
+
+diff --git a/daemons/dmeventd/dmeventd.c b/daemons/dmeventd/dmeventd.c
+index 828bc0c7a..f529f8ac5 100644
+--- a/daemons/dmeventd/dmeventd.c
++++ b/daemons/dmeventd/dmeventd.c
+@@ -1765,7 +1765,7 @@ static void _cleanup_unused_threads(void)
+ 		DEBUGLOG("Destroying Thr %x.", (int)thread->thread);
+ 
+ 		if (pthread_join(thread->thread, NULL))
+-			log_sys_error("pthread_join", "");
++			log_sys_debug("pthread_join", "");
+ 
+ 		_free_thread_status(thread);
+ 		_lock_mutex();
+@@ -1796,7 +1796,7 @@ static void _init_thread_signals(void)
+ 	sigdelset(&my_sigset, SIGQUIT);
+ 
+ 	if (pthread_sigmask(SIG_BLOCK, &my_sigset, NULL))
+-		log_sys_error("pthread_sigmask", "SIG_BLOCK");
++		log_sys_debug("pthread_sigmask", "SIG_BLOCK");
+ }
+ 
+ /*
+@@ -1825,7 +1825,7 @@ static int _set_oom_adj(const char *oom_adj_path, int val)
+ 	fprintf(fp, "%i", val);
+ 
+ 	if (dm_fclose(fp))
+-		log_sys_error("fclose", oom_adj_path);
++		log_sys_debug("fclose", oom_adj_path);
+ 
+ 	return 1;
+ }
+@@ -1839,11 +1839,11 @@ static int _protect_against_oom_killer(void)
+ 
+ 	if (stat(OOM_ADJ_FILE, &st) == -1) {
+ 		if (errno != ENOENT)
+-			log_sys_error("stat", OOM_ADJ_FILE);
++			log_sys_debug("stat", OOM_ADJ_FILE);
+ 
+ 		/* Try old oom_adj interface as a fallback */
+ 		if (stat(OOM_ADJ_FILE_OLD, &st) == -1) {
+-			log_sys_error("stat", OOM_ADJ_FILE_OLD);
++			log_sys_debug("stat", OOM_ADJ_FILE_OLD);
+ 			return 1;
+ 		}
+ 
+@@ -1932,14 +1932,14 @@ out:
+ static void _remove_files_on_exit(void)
+ {
+ 	if (unlink(DMEVENTD_PIDFILE))
+-		log_sys_error("unlink", DMEVENTD_PIDFILE);
++		log_sys_debug("unlink", DMEVENTD_PIDFILE);
+ 
+ 	if (!_systemd_activation) {
+ 		if (unlink(DM_EVENT_FIFO_CLIENT))
+-			log_sys_error("unlink", DM_EVENT_FIFO_CLIENT);
++			log_sys_debug("unlink", DM_EVENT_FIFO_CLIENT);
+ 
+ 		if (unlink(DM_EVENT_FIFO_SERVER))
+-			log_sys_error("unlink", DM_EVENT_FIFO_SERVER);
++			log_sys_debug("unlink", DM_EVENT_FIFO_SERVER);
+ 	}
+ }
+ 
+@@ -2428,9 +2428,9 @@ int main(int argc, char *argv[])
+ 	log_notice("dmeventd shutting down.");
+ 
+ 	if (fifos.client >= 0 && close(fifos.client))
+-		log_sys_error("client close", fifos.client_path);
++		log_sys_debug("client close", fifos.client_path);
+ 	if (fifos.server >= 0 && close(fifos.server))
+-		log_sys_error("server close", fifos.server_path);
++		log_sys_debug("server close", fifos.server_path);
+ 
+ 	if (_use_syslog)
+ 		closelog();
+diff --git a/device_mapper/ioctl/libdm-iface.c b/device_mapper/ioctl/libdm-iface.c
+index 533bb9eea..b09284118 100644
+--- a/device_mapper/ioctl/libdm-iface.c
++++ b/device_mapper/ioctl/libdm-iface.c
+@@ -397,7 +397,7 @@ static void _close_control_fd(void)
+ {
+ 	if (_control_fd != -1) {
+ 		if (close(_control_fd) < 0)
+-			log_sys_error("close", "_control_fd");
++			log_sys_debug("close", "_control_fd");
+ 		_control_fd = -1;
+ 	}
+ }
+diff --git a/libdm/ioctl/libdm-iface.c b/libdm/ioctl/libdm-iface.c
+index 28589a15c..7c7259874 100644
+--- a/libdm/ioctl/libdm-iface.c
++++ b/libdm/ioctl/libdm-iface.c
+@@ -396,7 +396,7 @@ static void _close_control_fd(void)
+ {
+ 	if (_control_fd != -1) {
+ 		if (close(_control_fd) < 0)
+-			log_sys_error("close", "_control_fd");
++			log_sys_debug("close", "_control_fd");
+ 		_control_fd = -1;
+ 	}
+ }
+-- 
+2.48.1
+

@@ -1,0 +1,111 @@
+From c499428897b8ea51eefd7a90f4141e532ec9fbb9 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Mon, 25 Sep 2023 15:49:52 +0200
+Subject: [PATCH 136/139] configure: autoreconf
+
+(cherry picked from commit 3da18a06d8e0671374f9bf8b841017cfd5d1e5ea)
+---
+ configure              | 33 +++++++++++++++++++++++----------
+ include/configure.h.in |  3 +++
+ 2 files changed, 26 insertions(+), 10 deletions(-)
+
+diff --git a/configure b/configure
+index cfad36e51..17083e7ff 100755
+--- a/configure
++++ b/configure
+@@ -730,6 +730,7 @@ DEFAULT_PROFILE_SUBDIR
+ DEFAULT_PID_DIR
+ DEFAULT_MIRROR_SEGTYPE
+ DEFAULT_LOCK_DIR
++DEFAULT_DMEVENTD_EXIT_ON_PATH
+ DEFAULT_DM_RUN_DIR
+ DEFAULT_CACHE_SUBDIR
+ DEFAULT_BACKUP_SUBDIR
+@@ -989,6 +990,7 @@ with_systemdsystemunitdir
+ with_tmpfilesdir
+ with_dmeventd_pidfile
+ with_dmeventd_path
++with_dmeventd_exit_on_path
+ with_default_system_dir
+ with_default_profile_subdir
+ with_default_archive_subdir
+@@ -1793,6 +1795,9 @@ Optional Packages:
+                           dmeventd pidfile [PID_DIR/dmeventd.pid]
+   --with-dmeventd-path=PATH
+                           dmeventd path [EPREFIX/sbin/dmeventd]
++  --with-dmeventd-exit-on-path=PATH
++                          Default path to exit-on file in dmeventd
++                          [/run/nologin]
+   --with-default-system-dir=DIR
+                           default LVM system directory [/etc/lvm]
+   --with-default-profile-subdir=SUBDIR
+@@ -14081,8 +14086,6 @@ _ACEOF
+ 
+ 
+ ################################################################################
+-if test "$BUILD_DMEVENTD" = yes; then
+-
+ # Check whether --with-dmeventd-pidfile was given.
+ if test "${with_dmeventd_pidfile+set}" = set; then :
+   withval=$with_dmeventd_pidfile; DMEVENTD_PIDFILE=$withval
+@@ -14091,14 +14094,6 @@ else
+ fi
+ 
+ 
+-cat >>confdefs.h <<_ACEOF
+-#define DMEVENTD_PIDFILE "$DMEVENTD_PIDFILE"
+-_ACEOF
+-
+-fi
+-
+-if test "$BUILD_DMEVENTD" = yes; then
+-
+ # Check whether --with-dmeventd-path was given.
+ if test "${with_dmeventd_path+set}" = set; then :
+   withval=$with_dmeventd_path; DMEVENTD_PATH=$withval
+@@ -14107,10 +14102,28 @@ else
+ fi
+ 
+ 
++# Check whether --with-dmeventd-exit-on-path was given.
++if test "${with_dmeventd_exit_on_path+set}" = set; then :
++  withval=$with_dmeventd_exit_on_path; DEFAULT_DMEVENTD_EXIT_ON_PATH=$withval
++else
++  DEFAULT_DMEVENTD_EXIT_ON_PATH="/run/nologin"
++fi
++
++
++if test "$BUILD_DMEVENTD" = yes; then
++
++cat >>confdefs.h <<_ACEOF
++#define DMEVENTD_PIDFILE "$DMEVENTD_PIDFILE"
++_ACEOF
++
+ cat >>confdefs.h <<_ACEOF
+ #define DMEVENTD_PATH "$DMEVENTD_PATH"
+ _ACEOF
+ 
++cat >>confdefs.h <<_ACEOF
++#define DEFAULT_DMEVENTD_EXIT_ON_PATH "$DEFAULT_DMEVENTD_EXIT_ON_PATH"
++_ACEOF
++
+ fi
+ 
+ ################################################################################
+diff --git a/include/configure.h.in b/include/configure.h.in
+index e0d971bbf..b8b728b73 100644
+--- a/include/configure.h.in
++++ b/include/configure.h.in
+@@ -48,6 +48,9 @@
+ /* Name of default metadata cache subdirectory. */
+ #undef DEFAULT_CACHE_SUBDIR
+ 
++/* Path to exit-on dmeventd file. */
++#undef DEFAULT_DMEVENTD_EXIT_ON_PATH
++
+ /* Define default node creation behavior with dmsetup create */
+ #undef DEFAULT_DM_ADD_NODE
+ 
+-- 
+2.48.1
+

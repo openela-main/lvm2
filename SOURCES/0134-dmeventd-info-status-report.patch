@@ -1,0 +1,149 @@
+From 7dfa1f3d0d03cc682bb3bb503d2ad44ff4e836a6 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Mon, 25 Sep 2023 11:49:14 +0200
+Subject: [PATCH 134/139] dmeventd: info status report
+
+To quickly get info about some internal dmeventd status,
+implment   'dmeventd -i' support.
+
+Reported messages are some 'raw' internal informations mainly
+useful to developers.
+
+(cherry picked from commit 80d34abf4974e45471f947fb2b85146a30feb87d)
+---
+ daemons/dmeventd/dmeventd.c | 69 +++++++++++++++++++++++++++++++++++--
+ man/dmeventd.8_main         |  7 ++++
+ 2 files changed, 74 insertions(+), 2 deletions(-)
+
+diff --git a/daemons/dmeventd/dmeventd.c b/daemons/dmeventd/dmeventd.c
+index e05545403..46c34ada2 100644
+--- a/daemons/dmeventd/dmeventd.c
++++ b/daemons/dmeventd/dmeventd.c
+@@ -2063,6 +2063,68 @@ static int _reinstate_registrations(struct dm_event_fifos *fifos)
+ 	return 1;
+ }
+ 
++static int _info_dmeventd(const char *name, struct dm_event_fifos *fifos)
++{
++	struct dm_event_daemon_message msg = { 0 };
++	int i, count = 0;
++	char *line;
++	int version;
++	int ret = 0;
++
++	/* Get the list of registrations from the running daemon. */
++	if (!init_fifos(fifos)) {
++		fprintf(stderr, "Could not initiate communication with existing dmeventd.\n");
++		return 0;
++	}
++
++	if (!dm_event_get_version(fifos, &version)) {
++		fprintf(stderr, "Could not communicate with existing dmeventd.\n");
++		goto out;
++	}
++
++	if (version < 1) {
++		fprintf(stderr, "The running dmeventd instance is too old.\n"
++			"Protocol version %d (required: 1). Action cancelled.\n", version);
++		goto out;
++	}
++
++	if (daemon_talk(fifos, &msg, DM_EVENT_CMD_GET_STATUS, "-", "-", 0, 0)) {
++		fprintf(stderr, "Failed to acquire status from existing dmeventd.\n");
++		goto out;
++	}
++
++	line = strchr(msg.data, ' ') + 1;
++	for (i = 0; msg.data[i]; ++i)
++		if (msg.data[i] == ';') {
++			msg.data[i] = 0;
++			if (!count)
++				printf("%s is monitoring:\n", name);
++			printf("%s\n", line);
++			line = msg.data + i + 1;
++			++count;
++		}
++
++	free(msg.data);
++
++	if (!count)
++		printf("%s does not monitor any device.\n", name);
++
++	if (version >= 2) {
++		if (daemon_talk(fifos, &msg, DM_EVENT_CMD_GET_PARAMETERS, "-", "-", 0, 0)) {
++			fprintf(stderr, "Failed to acquire parameters from existing dmeventd.\n");
++			goto out;
++		}
++		printf("%s internal status: %s\n", name, msg.data);
++		free(msg.data);
++	}
++
++	ret = 1;
++out:
++	fini_fifos(fifos);
++
++	return ret;
++}
++
+ static void _restart_dmeventd(void)
+ {
+ 	struct dm_event_fifos fifos = {
+@@ -2178,10 +2240,11 @@ bad:
+ static void _usage(char *prog, FILE *file)
+ {
+ 	fprintf(file, "Usage:\n"
+-		"%s [-d [-d [-d]]] [-f] [-h] [-l] [-R] [-V] [-?]\n\n"
++		"%s [-d [-d [-d]]] [-f] [-h] [i] [-l] [-R] [-V] [-?]\n\n"
+ 		"   -d       Log debug messages to syslog (-d, -dd, -ddd)\n"
+ 		"   -f       Don't fork, run in the foreground\n"
+ 		"   -h       Show this help information\n"
++		"   -i       Query running instance of dmeventd for info\n"
+ 		"   -l       Log to stdout,stderr instead of syslog\n"
+ 		"   -?       Show this help information on stderr\n"
+ 		"   -R       Restart dmeventd\n"
+@@ -2201,7 +2264,7 @@ int main(int argc, char *argv[])
+ 
+ 	optopt = optind = opterr = 0;
+ 	optarg = (char*) "";
+-	while ((opt = getopt(argc, argv, "?fhVdlR")) != EOF) {
++	while ((opt = getopt(argc, argv, "?fhiVdlR")) != EOF) {
+ 		switch (opt) {
+ 		case 'h':
+ 			_usage(argv[0], stdout);
+@@ -2209,6 +2272,8 @@ int main(int argc, char *argv[])
+ 		case '?':
+ 			_usage(argv[0], stderr);
+ 			return EXIT_SUCCESS;
++		case 'i':
++			return _info_dmeventd(argv[0], &fifos) ? EXIT_SUCCESS : EXIT_FAILURE;
+ 		case 'R':
+ 			_restart++;
+ 			break;
+diff --git a/man/dmeventd.8_main b/man/dmeventd.8_main
+index 77b07e4d8..75926bae5 100644
+--- a/man/dmeventd.8_main
++++ b/man/dmeventd.8_main
+@@ -12,6 +12,7 @@ dmeventd \(em Device-mapper event daemon
+ .RB [ -d ]]]
+ .RB [ -f ]
+ .RB [ -h ]
++.RB [ -i ]
+ .RB [ -l ]
+ .RB [ -R ]
+ .RB [ -V ]
+@@ -44,6 +45,12 @@ Don't fork, run in the foreground.
+ Show help information.
+ .
+ .TP
++.B -i
++Query the running daemon instance for the status informations. The format is
++internal and unstable and it is targeted for developers.
++Format may change between versions.
++.
++.TP
+ .B -l
+ Log through stdout and stderr instead of syslog.
+ This option works only with option -f, otherwise it is ignored.
+-- 
+2.48.1
+

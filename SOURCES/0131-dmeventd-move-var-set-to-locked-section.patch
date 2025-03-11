@@ -1,0 +1,31 @@
+From 068897bbd15e16b666079952f465239d933d2228 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Thu, 31 Aug 2023 18:45:30 +0200
+Subject: [PATCH 131/139] dmeventd: move var set to locked section
+
+It should not change the actual code flow, however make the
+set of the current_event variable inside locked section.
+
+(cherry picked from commit 29630b2d7fcb28827f0c928edd6cd638f6ea2591)
+---
+ daemons/dmeventd/dmeventd.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/daemons/dmeventd/dmeventd.c b/daemons/dmeventd/dmeventd.c
+index d89ab4af8..fa60b6f31 100644
+--- a/daemons/dmeventd/dmeventd.c
++++ b/daemons/dmeventd/dmeventd.c
+@@ -1043,9 +1043,9 @@ static void *_monitor_thread(void *arg)
+ 			_unlock_mutex();
+ 
+ 			_do_process_event(thread);
+-			thread->current_events = 0; /* Current events processed */
+ 
+ 			_lock_mutex();
++			thread->current_events = 0; /* Current events processed */
+ 			thread->processing = 0;
+ 
+ 			/*
+-- 
+2.48.1
+

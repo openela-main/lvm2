@@ -68,7 +68,7 @@ Version: 2.03.14
 %if 0%{?from_snapshot}
 Release: 0.1.20210426git%{shortcommit}%{?dist}%{?rel_suffix}
 %else
-Release: 14%{?dist}%{?rel_suffix}
+Release: 15%{?dist}%{?rel_suffix}
 %endif
 License: GPLv2
 URL: http://sourceware.org/lvm2
@@ -227,6 +227,16 @@ Patch126: 0125-raid-add-messages-to-lvs-command-output-in-case-Raid.patch
 #Patch130: 0129-remove-unused-variable.patch
 #
 Patch131: 0130-spec-Install-and-package-etc-lvm-devices.patch
+# RHEL-8288:
+Patch132: 0131-dmeventd-move-var-set-to-locked-section.patch
+Patch133: 0132-dmeventd-use-return.patch
+Patch134: 0133-dmeventd-unregister-all-devices-on-restart.patch
+Patch135: 0134-dmeventd-info-status-report.patch
+Patch136: 0135-configure.ac-add-with-dmeventd-exit-on-path.patch
+Patch137: 0136-configure-autoreconf.patch
+Patch138: 0137-dmeventd-implement-exit_on-file-check.patch
+Patch139: 0138-debug-correct-level.patch
+Patch140: 0139-tests-check-exit_on-works.patch
 
 BuildRequires: gcc
 %if %{enable_testsuite}
@@ -905,6 +915,10 @@ An extensive functional testsuite for LVM2.
 %endif
 
 %changelog
+* Wed Jan 22 2025 Marian Csontos <mcsontos@redhat.com> - 2.03.14-15
+- Fix dmeventd blocking on shutdown.
+- Force exit dmeventd when /run/nologin is present.
+
 * Fri Feb 02 2024 Marian Csontos <mcsontos@redhat.com> - 2.03.14-14
 - Fix multisegment RAID1 allocator using one disk for both legs.
 - Fix lvconvert -m 0 taking rimage_0 even if it is out of sync.

@@ -1,0 +1,68 @@
+From ebe966020d2378bcc1a7f61551d4278bde6b8f6c Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Mon, 25 Sep 2023 15:48:06 +0200
+Subject: [PATCH 135/139] configure.ac: add --with-dmeventd-exit-on-path
+
+(cherry picked from commit 744cdc3ba885f9dc8e1444cb77a190d5ea0007ed)
+---
+ configure.ac | 32 +++++++++++++++++++-------------
+ 1 file changed, 19 insertions(+), 13 deletions(-)
+
+diff --git a/configure.ac b/configure.ac
+index 6cdf1a7e6..01e0b4d51 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -1715,24 +1715,29 @@ AC_DEFINE_UNQUOTED(LVMIMPORTVDO_PATH, ["$LVMIMPORTVDO_PATH"], [Path to lvm_impor
+ 
+ ################################################################################
+ dnl -- dmeventd pidfile and executable path
++AC_ARG_WITH(dmeventd-pidfile,
++	    AS_HELP_STRING([--with-dmeventd-pidfile=PATH],
++			   [dmeventd pidfile [PID_DIR/dmeventd.pid]]),
++	    DMEVENTD_PIDFILE=$withval,
++	    DMEVENTD_PIDFILE="$DEFAULT_PID_DIR/dmeventd.pid")
++AC_ARG_WITH(dmeventd-path,
++	    AS_HELP_STRING([--with-dmeventd-path=PATH],
++			   [dmeventd path [EPREFIX/sbin/dmeventd]]),
++	    DMEVENTD_PATH=$withval,
++	    DMEVENTD_PATH="$SBINDIR/dmeventd")
++AC_ARG_WITH(dmeventd-exit-on-path,
++	    AS_HELP_STRING([--with-dmeventd-exit-on-path=PATH],
++			   [Default path to exit-on file in dmeventd [/run/nologin]]),
++	    DEFAULT_DMEVENTD_EXIT_ON_PATH=$withval,
++	    DEFAULT_DMEVENTD_EXIT_ON_PATH="/run/nologin")
++
+ if test "$BUILD_DMEVENTD" = yes; then
+-	AC_ARG_WITH(dmeventd-pidfile,
+-		    AS_HELP_STRING([--with-dmeventd-pidfile=PATH],
+-				   [dmeventd pidfile [PID_DIR/dmeventd.pid]]),
+-		    DMEVENTD_PIDFILE=$withval,
+-		    DMEVENTD_PIDFILE="$DEFAULT_PID_DIR/dmeventd.pid")
+ 	AC_DEFINE_UNQUOTED(DMEVENTD_PIDFILE, ["$DMEVENTD_PIDFILE"],
+ 			   [Path to dmeventd pidfile.])
+-fi
+-
+-if test "$BUILD_DMEVENTD" = yes; then
+-	AC_ARG_WITH(dmeventd-path,
+-		    AS_HELP_STRING([--with-dmeventd-path=PATH],
+-				   [dmeventd path [EPREFIX/sbin/dmeventd]]),
+-		    DMEVENTD_PATH=$withval,
+-		    DMEVENTD_PATH="$SBINDIR/dmeventd")
+ 	AC_DEFINE_UNQUOTED(DMEVENTD_PATH, ["$DMEVENTD_PATH"],
+ 			   [Path to dmeventd binary.])
++	AC_DEFINE_UNQUOTED(DEFAULT_DMEVENTD_EXIT_ON_PATH, ["$DEFAULT_DMEVENTD_EXIT_ON_PATH"],
++			   [Path to exit-on dmeventd file.])
+ fi
+ 
+ ################################################################################
+@@ -1861,6 +1866,7 @@ AC_SUBST(DEFAULT_ARCHIVE_SUBDIR)
+ AC_SUBST(DEFAULT_BACKUP_SUBDIR)
+ AC_SUBST(DEFAULT_CACHE_SUBDIR)
+ AC_SUBST(DEFAULT_DM_RUN_DIR)
++AC_SUBST(DEFAULT_DMEVENTD_EXIT_ON_PATH)
+ AC_SUBST(DEFAULT_LOCK_DIR)
+ AC_SUBST(DEFAULT_MIRROR_SEGTYPE)
+ AC_SUBST(DEFAULT_PID_DIR)
+-- 
+2.48.1
+

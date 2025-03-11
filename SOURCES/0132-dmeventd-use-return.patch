@@ -1,0 +1,50 @@
+From d7f61ce3933f75f3ebcd74c2a815cdcea28ea8d5 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Mon, 25 Sep 2023 11:51:25 +0200
+Subject: [PATCH 132/139] dmeventd: use return
+
+Use 'return' instead of calling exit() when possible.
+
+(cherry picked from commit c31dcf3632988ef4e8d1c62a685f4c436b5f115e)
+---
+ daemons/dmeventd/dmeventd.c | 10 +++++-----
+ 1 file changed, 5 insertions(+), 5 deletions(-)
+
+diff --git a/daemons/dmeventd/dmeventd.c b/daemons/dmeventd/dmeventd.c
+index fa60b6f31..9d7118ced 100644
+--- a/daemons/dmeventd/dmeventd.c
++++ b/daemons/dmeventd/dmeventd.c
+@@ -2169,17 +2169,17 @@ int main(int argc, char *argv[])
+ 		.server_path = DM_EVENT_FIFO_SERVER
+ 	};
+ 	time_t now, idle_exit_timeout = DMEVENTD_IDLE_EXIT_TIMEOUT;
+-	opterr = 0;
+-	optind = 0;
+ 
++	optopt = optind = opterr = 0;
++	optarg = (char*) "";
+ 	while ((opt = getopt(argc, argv, "?fhVdlR")) != EOF) {
+ 		switch (opt) {
+ 		case 'h':
+ 			_usage(argv[0], stdout);
+-			exit(EXIT_SUCCESS);
++			return EXIT_SUCCESS;
+ 		case '?':
+ 			_usage(argv[0], stderr);
+-			exit(EXIT_SUCCESS);
++			return EXIT_SUCCESS;
+ 		case 'R':
+ 			_restart++;
+ 			break;
+@@ -2194,7 +2194,7 @@ int main(int argc, char *argv[])
+ 			break;
+ 		case 'V':
+ 			printf("dmeventd version: %s\n", DM_LIB_VERSION);
+-			exit(EXIT_SUCCESS);
++			return EXIT_SUCCESS;
+ 		}
+ 	}
+ 
+-- 
+2.48.1
+
