@@ -1,4 +1,4 @@
-%global device_mapper_version 1.02.198
+%global device_mapper_version 1.02.202
 
 %global enable_cache 1
 %global enable_lvmdbusd 1
@@ -50,13 +50,13 @@ Name: lvm2
 %if 0%{?rhel}
 Epoch: %{rhel}
 %endif
-Version: 2.03.24
+Version: 2.03.28
 %if 0%{?from_snapshot}
 Release: 0.1.20211115git%{shortcommit}%{?dist}%{?rel_suffix}
 %else
-Release: 2%{?dist}%{?rel_suffix}
+Release: 6%{?dist}%{?rel_suffix}
 %endif
-License: GPLv2
+License: GPL-2.0-only
 URL: https://sourceware.org/lvm2
 %if 0%{?from_snapshot}
 Source0: lvm2-%{shortcommit}.tgz
@@ -70,13 +70,34 @@ Patch4: 0004-Revert-dm-udev-rules-don-t-export-and-save-DM_SUSPEN.patch
 Patch5: 0005-Revert-11-dm-lvm.rules-don-t-restore-DM_UDEV_DISABLE.patch
 Patch6: 0006-Revert-10-dm-rules-don-t-restore-DM_UDEV_DISABLE_OTH.patch
 Patch7: 0007-WHATS_NEW-update.patch
-Patch8: 0008-Allow-system.devices-to-be-automatically-created-on-.patch
-Patch9: 0009-lvm-fix-shell-completion.patch
-Patch10: 0010-vgimportdevices-skip-global-lockd-locking.patch
-Patch11: 0011-scripts-Install-services-for-devices-file-init.patch
-Patch12: 0012-lvmlockd-avoid-lockd_vg-for-local-VGs.patch
-Patch13: 0013-lvmlockd-allow-forced-vgchange-locktype-from-none.patch
-Patch14: 0014-lv_manip-avoid-unreleased-memory-pool-s-message-on-R.patch
+Patch8: 0008-lv_manip-fix-stripe-count-and-size-validation-for-RA.patch
+Patch9: 0009-lv_manip-use-the-same-param-validation-for-RAID-0-as.patch
+Patch10: 0010-tests-remove-superfluous-a-option-for-df-used-in-lvr.patch
+Patch11: 0011-WHATS_NEW-update.patch
+Patch12: 0012-vdo-fix-input-units-for-minimim_io_size.patch
+Patch13: 0013-tests-check-vdo-minimum_io_size.patch
+Patch14: 0014-raid-fix-name-rotation.patch
+Patch15: 0015-tests-check-_tdata-conversion-to-raid1.patch
+Patch16: 0016-WHATS_NEW-update.patch
+# RHEL-68982:
+Patch17: 0017-device_id-nvme-devices-may-use-alternate-wwids.patch
+Patch18: 0018-configure.ac-add-support-for-libnvme.patch
+Patch19: 0019-configure-autoreconf.patch
+# RHEL-53866:
+Patch20: 0020-thin-deactivate-converted-volume-early.patch
+Patch21: 0021-tests-check-conversion-of-in-use-volume.patch
+Patch22: 0022-WHATS_NEW-update.patch
+# RHEL-65845:
+Patch23: 0023-lv_manip-check-fs-resize-is-supported-before-LV-exte.patch
+Patch24: 0024-tests-adjust-lvresize-xfs-tests-for-recent-lvextend-.patch
+Patch25: 0025-WHATS_NEW-update.patch
+# RHEL-60943:
+Patch26: 0026-memlock-check-for-proper-reserved-size.patch
+Patch27: 0027-WHATS_NEW-update.patch
+# RHEL-76039:
+Patch28: 0028-vg_read-rescanning-DM-cache-after-taking-lock.patch
+Patch29: 0029-vg_read-matching-missed-empty-cache.patch
+Patch30: 0030-vg_read-correct-error-path-for-DM-cache-update.patch
 
 BuildRequires: make
 BuildRequires: gcc
@@ -88,6 +109,7 @@ BuildRequires: libblkid-devel >= %{util_linux_version}
 BuildRequires: ncurses-devel
 BuildRequires: libedit-devel
 BuildRequires: libaio-devel
+BuildRequires: libnvme-devel
 %if %{enable_lockd_dlm}
 BuildRequires: dlm-devel >= %{dlm_version}
 %endif
@@ -414,7 +436,7 @@ systemctl start lvm2-lvmpolld.socket >/dev/null 2>&1 || :
 ##############################################################################
 %package devel
 Summary: Development libraries and headers
-License: LGPLv2
+License: LGPL-2.1-only
 Requires: %{name} = %{?epoch}:%{version}-%{release}
 Requires: device-mapper-devel = %{?epoch}:%{device_mapper_version}-%{release}
 Requires: device-mapper-event-devel = %{?epoch}:%{device_mapper_version}-%{release}
@@ -432,7 +454,7 @@ the lvm2 libraries.
 
 %package libs
 Summary: Shared libraries for lvm2
-License: LGPLv2
+License: LGPL-2.1-only
 Requires: device-mapper-event = %{?epoch}:%{device_mapper_version}-%{release}
 
 %description libs
@@ -510,7 +532,7 @@ LVM commands use lvmlockd to coordinate access to shared storage.
 
 %package dbusd
 Summary: LVM2 D-Bus daemon
-License: GPLv2
+License: GPL-2.0-only
 BuildArch: noarch
 Requires: lvm2 >= %{?epoch}:%{version}-%{release}
 Requires: dbus
@@ -552,7 +574,7 @@ Daemon for access to LVM2 functionality through a D-Bus interface.
 %package -n device-mapper
 Summary: Device mapper utility
 Version: %{device_mapper_version}
-License: GPLv2
+License: GPL-2.0-only
 URL: http://sources.redhat.com/dm
 Requires: device-mapper-libs = %{?epoch}:%{device_mapper_version}-%{release}
 Requires: util-linux-core >= %{util_linux_version}
@@ -588,7 +610,7 @@ for the kernel device-mapper.
 %package -n device-mapper-devel
 Summary: Development libraries and headers for device-mapper
 Version: %{device_mapper_version}
-License: LGPLv2
+License: LGPL-2.1-only
 Requires: device-mapper = %{?epoch}:%{device_mapper_version}-%{release}
 Requires: pkgconfig
 
@@ -605,7 +627,7 @@ the device-mapper libraries.
 %package -n device-mapper-libs
 Summary: Device-mapper shared library
 Version: %{device_mapper_version}
-License: LGPLv2
+License: LGPL-2.1-only
 Requires: device-mapper = %{?epoch}:%{device_mapper_version}-%{release}
 
 %description -n device-mapper-libs
@@ -656,7 +678,7 @@ fi
 %package -n device-mapper-event-libs
 Summary: Device-mapper event daemon shared library
 Version: %{device_mapper_version}
-License: LGPLv2
+License: LGPL-2.1-only
 
 %description -n device-mapper-event-libs
 This package contains the device-mapper event daemon shared library,
@@ -673,7 +695,7 @@ libdevmapper-event.
 %package -n device-mapper-event-devel
 Summary: Development libraries and headers for the device-mapper event daemon
 Version: %{device_mapper_version}
-License: LGPLv2
+License: LGPL-2.1-only
 Requires: device-mapper-event = %{?epoch}:%{device_mapper_version}-%{release}
 Requires: pkgconfig
 
@@ -693,8 +715,8 @@ the device-mapper event library.
 %if %{enable_testsuite}
 %package testsuite
 Summary: LVM2 Testsuite
-# Most of the code is GPLv2, the harness in test/lib/{brick-shelltest.h,runner.cpp} is BSD, and C files in test/api are LGPLv2...
-License: LGPLv2 and GPLv2 and BSD-2-Clause
+# Most of the code is GPL-2.0-only, the harness in test/lib/{brick-shelltest.h,runner.cpp} is BSD, and C files in test/api are LGPL-2.1-only...
+License: LGPL-2.1-only AND GPL-2.0-only AND BSD-2-Clause
 
 %description testsuite
 An extensive functional testsuite for LVM2.
@@ -707,12 +729,39 @@ An extensive functional testsuite for LVM2.
 %endif
 
 %changelog
+* Mon Feb 03 2025 Marian Csontos <mcsontos@redhat.com> - 2.03.28-6
+- Fix race causing lvm2 not recognizing active devices.
+
+* Fri Jan 10 2025 Marian Csontos <mcsontos@redhat.com> - 2.03.28-5
+- Fix temporary LVs not cleaned when converting in use LV to a thin pool.
+- Check FS resize is supported before extending LV.
+- Fix issue affecting memory locking before suspend (2.03.27).
+
+* Tue Dec 17 2024 Marian Csontos <mcsontos@redhat.com> - 2.03.28-4
+- Workaround for NVMe WWID changing after kernel update.
+
+* Thu Nov 14 2024 Marian Csontos <mcsontos@redhat.com> - 2.03.28-3
+- Fix duplicate LV names when converting pools to RAID1 with more than 2 legs.
+
+* Wed Nov 13 2024 Marian Csontos <mcsontos@redhat.com> - 2.03.28-2
+- Fix SPDX License identifiers.
+- Fix input units for VDO LV's minimim_io_size.
+- Fix stripe count and validation for RAID LVs.
+
+* Tue Nov 05 2024 Marian Csontos <mcsontos@redhat.com> - 2.03.28-1
+- Update to upstream version 2.03.28.
+- See WHATS_NEW and WHATS_NEW_DM for more information.
+
+* Wed Oct 09 2024 Marian Csontos <mcsontos@redhat.com> - 2.03.27-1
+- Update to upstream version 2.03.27.
+- See WHATS_NEW and WHATS_NEW_DM for more information.
+
 * Wed Aug 07 2024 Marian Csontos <mcsontos@redhat.com> - 2.03.24-2
 - Fix unreleased memory pools on RAID's lvextend.
 
 * Wed Jul 10 2024 Marian Csontos <mcsontos@redhat.com> - 2.03.24-1
-- Update to upstream version 2.03.24.
-- See WHATS_NEW and WHATS_NEW_DM for more information.
+- update to upstream version 2.03.24.
+- see whats_new and whats_new_dm for more information.
 
 * Fri Feb 02 2024 Marian Csontos <mcsontos@redhat.com> - 2.03.23-2
 - Add warning message when mirror images have (r)efresh bit set.

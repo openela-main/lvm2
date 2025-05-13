@@ -1,0 +1,42 @@
+From f3eb858a302ec27801ee8bbe90030c0c2f8cc3fe Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Wed, 8 Jan 2025 17:48:53 +0100
+Subject: [PATCH 26/27] memlock: check for proper reserved size
+
+Fix regression introduced with commit:
+964012fdb924076e9ab97fabe00e759ddbf7c3bd
+that effectively disabled memory locking before suspending volumes.
+From merging/testing there remained wrong condition
+as we really want to check for 0 memory reservation value
+for both checked settings.
+
+(cherry picked from commit 4ef211a187dac348fa1857d577f5c17c9dace190)
+---
+ lib/mm/memlock.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/lib/mm/memlock.c b/lib/mm/memlock.c
+index e28044df6..e7b0b4f7a 100644
+--- a/lib/mm/memlock.c
++++ b/lib/mm/memlock.c
+@@ -517,7 +517,7 @@ static void _restore_priority_if_possible(struct cmd_context *cmd)
+ /* Stop memory getting swapped out */
+ static void _lock_mem(struct cmd_context *cmd)
+ {
+-	if (!_size_stack || _size_malloc_tmp) {
++	if (!_size_stack || !_size_malloc_tmp) {
+ 		log_debug_mem("Skipping memory locking (reserved memory: "
+ 			      FMTsize_t "  stack: " FMTsize_t ").",
+ 			      _size_malloc_tmp, _size_stack);
+@@ -564,7 +564,7 @@ static void _unlock_mem(struct cmd_context *cmd)
+ {
+ 	size_t unlock_mstats = 0;
+ 
+-	if (!_size_stack || _size_malloc_tmp) {
++	if (!_size_stack || !_size_malloc_tmp) {
+ 		log_debug_mem("Skipping memory unlocking (reserved memory: "
+ 			      FMTsize_t "  stack: " FMTsize_t ").",
+ 			      _size_malloc_tmp, _size_stack);
+-- 
+2.47.1
+

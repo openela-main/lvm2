@@ -1,7 +1,7 @@
-From d6b3f4f4dd526a5a4413e84f4cccb2e92699d1d8 Mon Sep 17 00:00:00 2001
+From 290f2740efee0f9a3f6b9f84c277e0d4e81927db Mon Sep 17 00:00:00 2001
 From: Marian Csontos <mcsontos@redhat.com>
 Date: Thu, 16 May 2024 15:30:02 +0200
-Subject: [PATCH 2/7] Revert "10-dm.rules: bump DM_UDEV_RULES_VSN to 3"
+Subject: [PATCH 02/13] Revert "10-dm.rules: bump DM_UDEV_RULES_VSN to 3"
 
 This reverts commit 038f9254d9554654197b59c160e3f775af27cdb1.
 ---
@@ -46,5 +46,5 @@ index db4ee771d..ca255c793 100644
  ENV{DM_UDEV_DISABLE_DM_RULES_FLAG}!="1", ENV{DM_NAME}=="?*", SYMLINK+="(DM_DIR)/$env{DM_NAME}"
  
 -- 
-2.44.0
+2.47.0
 

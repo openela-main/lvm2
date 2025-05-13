@@ -1,7 +1,7 @@
-From da6319b9f5d263a210cf51b471fdbf1c343facf3 Mon Sep 17 00:00:00 2001
+From 57fa9b840028112e9e455c960dad5bd595625428 Mon Sep 17 00:00:00 2001
 From: Marian Csontos <mcsontos@redhat.com>
 Date: Thu, 16 May 2024 15:30:15 +0200
-Subject: [PATCH 3/7] Revert "dm udev rules: don't export and save DM_NOSCAN"
+Subject: [PATCH 03/13] Revert "dm udev rules: don't export and save DM_NOSCAN"
 
 This reverts commit a196752969320cfc34a97cc97afa1978fa57da73.
 ---
@@ -10,7 +10,7 @@ This reverts commit a196752969320cfc34a97cc97afa1978fa57da73.
  2 files changed, 3 insertions(+), 3 deletions(-)
 
 diff --git a/udev/11-dm-lvm.rules.in b/udev/11-dm-lvm.rules.in
-index cfc022489..5b0cc5242 100644
+index 8b8d0561f..6dd556aa9 100644
 --- a/udev/11-dm-lvm.rules.in
 +++ b/udev/11-dm-lvm.rules.in
 @@ -30,7 +30,7 @@ IMPORT{program}="(DM_EXEC)/dmsetup splitname --nameprefixes --noheadings --rows
@@ -23,7 +23,7 @@ index cfc022489..5b0cc5242 100644
  ENV{DM_UDEV_DISABLE_SUBSYSTEM_RULES_FLAG}=="1", GOTO="lvm_end"
  
 diff --git a/udev/13-dm-disk.rules.in b/udev/13-dm-disk.rules.in
-index b53bb62de..b748cc909 100644
+index 03ea203ee..96f1efc00 100644
 --- a/udev/13-dm-disk.rules.in
 +++ b/udev/13-dm-disk.rules.in
 @@ -18,9 +18,9 @@ SYMLINK+="disk/by-id/dm-name-$env{DM_NAME}"
@@ -39,5 +39,5 @@ index b53bb62de..b748cc909 100644
  (BLKID_RULE)
  GOTO="dm_link"
 -- 
-2.44.0
+2.47.0
 
