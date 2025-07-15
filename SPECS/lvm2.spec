@@ -55,7 +55,7 @@
 %global commit 4dc5d4ac7e7a9457ccc46ff04796b347e58bf4da
 %global shortcommit %(c=%{commit}; echo ${c:0:7})
 %endif
-#%%global rel_suffix .bz2233901_1
+%global rel_suffix .2
 
 # Do not reset Release to 1 unless both lvm2 and device-mapper
 # versions are increased together.
@@ -237,6 +237,10 @@ Patch137: 0136-configure-autoreconf.patch
 Patch138: 0137-dmeventd-implement-exit_on-file-check.patch
 Patch139: 0138-debug-correct-level.patch
 Patch140: 0139-tests-check-exit_on-works.patch
+# RHEL-62764:
+Patch141: 0140-mirror-enhance-error-path-for-pvmove-finish.patch
+# RHEL-66486:
+Patch142: 0141-lvmlockd-vgchange-systemid-doen-t-need-global-lock.patch
 
 BuildRequires: gcc
 %if %{enable_testsuite}
@@ -902,7 +906,7 @@ the device-mapper event library.
 %package testsuite
 Summary: LVM2 Testsuite
 # Most of the code is GPLv2, the harness in test/lib/{brick-shelltest.h,runner.cpp} is BSD, and C files in test/api are LGPLv2...
-License: LGPLv2 and GPLv2 and BSD-2-Clause
+License: GPL-2.0-only AND LGPL-2.1-only AND BSD-2-Clause
 
 %description testsuite
 An extensive functional testsuite for LVM2.
@@ -915,6 +919,12 @@ An extensive functional testsuite for LVM2.
 %endif
 
 %changelog
+* Mon Jun 02 2025 Marian Csontos <mcsontos@redhat.com> - 2.03.14-15.el8_10.2
+- Fix vgchange exit code when lvmlockd is not running and no change is done.
+
+* Wed Apr 30 2025 Marian Csontos <mcsontos@redhat.com> - 2.03.14-15.el8_10.1
+- Fix incomplete pvmove write bad metadata requiring manual intervention.
+
 * Wed Jan 22 2025 Marian Csontos <mcsontos@redhat.com> - 2.03.14-15
 - Fix dmeventd blocking on shutdown.
 - Force exit dmeventd when /run/nologin is present.
