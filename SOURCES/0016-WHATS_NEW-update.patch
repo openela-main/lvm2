@@ -1,0 +1,25 @@
+From ba5ec30c20fa9c422282595871a0caca6f882c8b Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Thu, 19 Dec 2024 14:57:43 +0100
+Subject: [PATCH 16/21] WHATS_NEW: update
+
+(cherry picked from commit 5ef958704c82c45a6bd8215d920e4366c0c5e1bd)
+---
+ WHATS_NEW | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/WHATS_NEW b/WHATS_NEW
+index bea47f154..e63dfc393 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,3 +1,7 @@
++Version 2.03.30 - 
++==================
++  lvconvert detects early volume in use when converting it to a pool.
++
+ Version 2.03.29 - 
+ ==================
+   Fix renaming of raid sub LVs when converting a volume to raid (2.03.28).
+-- 
+2.47.1
+

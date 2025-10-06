@@ -1,0 +1,31 @@
+From a6b5d4dad0e71c2774edb29bb087c84bfac53210 Mon Sep 17 00:00:00 2001
+From: Peter Rajnoha <prajnoha@redhat.com>
+Date: Tue, 5 Nov 2024 14:20:59 +0100
+Subject: [PATCH 4/7] tests: remove superfluous -a option for df used in
+ lvresize-xfs.sh
+
+The df -a looks at whole system and it returns an error code in case
+there's an inaccessible fs which is not even part of the testing environment.
+The -a for df is not actually needed here in the lvresize-xfs test, so remove it.
+
+(cherry picked from commit a2ca20dad98f4d7389d449672b3ff0b16858f02b)
+---
+ test/shell/lvresize-xfs.sh | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/test/shell/lvresize-xfs.sh b/test/shell/lvresize-xfs.sh
+index da204dac6..87fbf6f9d 100644
+--- a/test/shell/lvresize-xfs.sh
++++ b/test/shell/lvresize-xfs.sh
+@@ -113,7 +113,7 @@ dd if=/dev/zero of="$mount_dir_space/zeros1" bs=1M count=20 oflag=direct
+ # succeeds, then the xfs extend fails because it cannot be done unmounted
+ not lvextend --fs resize --fsmode offline -L+20M $vg/$lv
+ check lv_field $vg/$lv lv_size "320.00m"
+-df -a | tee dfa
++df | tee dfa
+ grep "$mount_dir_space" dfa
+ df --output=size "$mount_dir_space" |tee df2
+ # fs not extended so fs size not changed
+-- 
+2.47.0
+

@@ -1,0 +1,59 @@
+From 9a735a3998b96adf8259759b4c228c308327a54d Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Fri, 8 Nov 2024 16:12:30 +0100
+Subject: [PATCH 6/7] vdo: fix input units for minimim_io_size
+
+When specifying minimum_io_size with --vdosettings,
+command assumed wrong unit (sectors).
+
+So '--vdosettings minimum_io_size=512|4096' resulted into
+an error that only 512 or 4096 values are allowed, but
+at the same time values  1 or 8 were accepted.
+
+So fix by converting any number >= 512 to 'sectors' and
+keep input of 1 or 8 still valid if anyone has been using
+this before.
+
+So now we take  512 or 4096  and still also  1 or 8 with the
+same effect.
+
+Also correct the 'error' message when invalid minimum_io_size
+is specified.
+
+(cherry picked from commit 158d3243b638f50f62c60128168c21840787f1ab)
+---
+ device_mapper/vdo/vdo_target.c | 2 +-
+ tools/toollib.c                | 4 ++++
+ 2 files changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/device_mapper/vdo/vdo_target.c b/device_mapper/vdo/vdo_target.c
+index a8a753e39..cdd3dbe6d 100644
+--- a/device_mapper/vdo/vdo_target.c
++++ b/device_mapper/vdo/vdo_target.c
+@@ -28,7 +28,7 @@ bool dm_vdo_validate_target_params(const struct dm_vdo_target_params *vtp,
+ 	if ((vtp->minimum_io_size != (512 >> SECTOR_SHIFT)) &&
+ 	    (vtp->minimum_io_size != (4096 >> SECTOR_SHIFT))) {
+ 		log_error("VDO minimum io size %u is unsupported [512, 4096].",
+-			  vtp->minimum_io_size);
++			  (vtp->minimum_io_size << SECTOR_SHIFT));
+ 		valid = false;
+ 	}
+ 
+diff --git a/tools/toollib.c b/tools/toollib.c
+index dcb6c8f4f..f854d17c5 100644
+--- a/tools/toollib.c
++++ b/tools/toollib.c
+@@ -1372,6 +1372,10 @@ int get_vdo_settings(struct cmd_context *cmd,
+ 			u |= VDO_CHANGE_ONLINE;
+ 	}
+ 
++	/* store size in sector units */
++	if (vtp->minimum_io_size >= 512)
++		vtp->minimum_io_size >>= SECTOR_SHIFT;
++
+ 	// validation of updated VDO option
+ 	if (!dm_vdo_validate_target_params(vtp, 0 /* vdo_size */))
+ 		goto_out;
+-- 
+2.47.0
+

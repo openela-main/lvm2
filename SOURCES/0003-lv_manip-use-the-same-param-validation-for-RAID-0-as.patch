@@ -1,0 +1,30 @@
+From f006e040090f9f3466c5e789157903607447a08e Mon Sep 17 00:00:00 2001
+From: Peter Rajnoha <prajnoha@redhat.com>
+Date: Tue, 5 Nov 2024 14:48:23 +0100
+Subject: [PATCH 3/7] lv_manip: use the same param validation for RAID 0 as for
+ RAID 1/4/5/6
+
+This actually reverts commit 83ae675f8df53010c984b78d0318d0d92d5ac83a.
+
+(cherry picked from commit 1d8a4c4817895f45a5fee00ccf721b351e5a4668)
+---
+ lib/metadata/lv_manip.c | 3 ---
+ 1 file changed, 3 deletions(-)
+
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index e14947357..15a7f3c9a 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -5465,9 +5465,6 @@ static int _lvresize_adjust_extents(struct logical_volume *lv,
+ 			/* FIXME Warn if command line values are being overridden? */
+ 			lp->stripes = seg_last->area_count / seg_mirrors;
+ 			lp->stripe_size = seg_last->stripe_size;
+-		} else if (seg_is_raid0(seg_last)) {
+-			lp->stripes = seg_last->area_count;
+-			lp->stripe_size = seg_last->stripe_size;
+ 		} else {
+ 			/* If extending, find stripes, stripesize & size of last segment */
+ 			/* FIXME Don't assume mirror seg will always be AREA_LV */
+-- 
+2.47.0
+

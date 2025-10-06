@@ -1,0 +1,24 @@
+From 170d6658c5ba33c01e07de3e1fe60b8e66a01712 Mon Sep 17 00:00:00 2001
+From: Peter Rajnoha <prajnoha@redhat.com>
+Date: Mon, 6 Jan 2025 15:35:44 +0100
+Subject: [PATCH 19/21] WHATS_NEW: update
+
+(cherry picked from commit 1576273273b84bc8d3d330f113ffb1ac67f2c0a2)
+---
+ WHATS_NEW | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/WHATS_NEW b/WHATS_NEW
+index e63dfc393..40c6c2cd0 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.03.30 - 
+ ==================
++  Do not extend an LV if FS resize unsupported and '--fs resize' used.
+   lvconvert detects early volume in use when converting it to a pool.
+ 
+ Version 2.03.29 - 
+-- 
+2.47.1
+

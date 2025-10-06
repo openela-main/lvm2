@@ -1,0 +1,104 @@
+From 4a34959c1cc199c05b9d9d4516a05164d36370e1 Mon Sep 17 00:00:00 2001
+From: Peter Rajnoha <prajnoha@redhat.com>
+Date: Tue, 5 Nov 2024 09:26:03 +0100
+Subject: [PATCH 2/7] lv_manip: fix stripe count and size validation for RAID
+ LVs
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Fix stripe count and size parameter validation for RAID LVs and
+include existing automatic setting of these parameters based
+on current shape of the RAID LV in case these are not set
+on command line fully.
+
+Previously, this was done only to a certain subset given by this
+condition (where the 'stripes' is the '-i|--stripes' cmd line arg
+and  the 'stripe_size' is actually the '-I|--stripesize' cmd line arg):
+
+  !(stripes == 1 || (stripes > 1 && stripe_size))
+
+This condition is a bit harder to follow at first sight and there
+are no comments around with explanation for why this one is used,
+so let's analyze it a bit more.
+
+First, let's convert this to an equivalent condition (De Morgan law)
+so it's easier to read for humans:
+
+  stripes != 1 && !(stripes > 1 && stripe_size)
+
+Note: Both stripe and stripesize are unsigned integers, so they can't be negative.
+
+Now, based on that condition, we were running the code to deduce the
+stripe/stripesize and do the checks ("the code") only if both of these
+are true:
+
+  - stripes is different from 1
+
+  - we don't have stripes > 1 and stripe_size defined at the same time
+
+But this is not correct in all cases, because:
+
+  A) if someone uses stripes = 0, then "the code" is executed
+    (correct)
+
+  B) if someone uses stripes = 1, then "the code" is not executed
+    (wrong: we still need to be able to check the args against
+            existing RAID LV stripes whether it matches)
+
+  - if someone uses stripes > 1, then "the code" is:
+
+     C) if stripe_size = 0, executed
+       (correct)
+
+     D) if stripe_size > 0, not executed
+       (wrong: we still want to check against existing RAID LV stripes)
+
+Current issues with this condition:
+  The B) ends up with segfault.
+
+    ❯ lvextend -i 1 -l+1 vg/lvol0
+      Rounding size 4.00 MiB (1 extents) up to stripe boundary size 8.00 MiB (2 extents).
+    Segmentation fault (core dumped)
+
+  The D) ends up with errors like:
+
+    ❯ lvextend -i 3 -l+1 -I128k vg/lvol0
+      Rounding size 4.00 MiB (1 extents) up to stripe boundary size 8.00 MiB (2 extents).
+      Rounding size (4 extents) up to stripe boundary size for segment (5 extents).
+      Size of logical volume vg/lvol0 changed from 8.00 MiB (2 extents) to 20.00 MiB (5 extents).
+      LV lvol0: segment 1 with len=5  has inconsistent area_len 3
+      Couldn't read all logical volumes for volume group vg.
+      Failed to write VG vg.
+
+Conclusion:
+  The condition needs to be removed so we always run "the code" to check
+  given striping args given on command line against existing RAID LV
+  striping. The reason is that we don't want to allow changing stripe
+  count for RAID LVs through lvextend and we need to end up with the
+  error:
+    "Unable to extend <RAID segment type> segment type with different number of stripes"
+
+  (We do support changing the striping by lvconvert's reshaping functionality only).
+
+(cherry picked from commit b5249fa3c20fe5d9e1d4811e7e5bfd957b15a820)
+---
+ lib/metadata/lv_manip.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index a1d4f641a..e14947357 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -5468,7 +5468,7 @@ static int _lvresize_adjust_extents(struct logical_volume *lv,
+ 		} else if (seg_is_raid0(seg_last)) {
+ 			lp->stripes = seg_last->area_count;
+ 			lp->stripe_size = seg_last->stripe_size;
+-		} else if (!(lp->stripes == 1 || (lp->stripes > 1 && lp->stripe_size))) {
++		} else {
+ 			/* If extending, find stripes, stripesize & size of last segment */
+ 			/* FIXME Don't assume mirror seg will always be AREA_LV */
+ 			/* FIXME We will need to support resize for metadata LV as well,
+-- 
+2.47.0
+

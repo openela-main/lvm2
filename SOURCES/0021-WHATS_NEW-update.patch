@@ -1,0 +1,27 @@
+From caf9a0dc9139a676f8afa09206511b955b67a76b Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Wed, 8 Jan 2025 23:05:12 +0100
+Subject: [PATCH 21/21] WHATS_NEW: update
+
+---
+ WHATS_NEW | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 40c6c2cd0..0296720d3 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,7 +1,10 @@
+ Version 2.03.30 - 
+ ==================
++  Fix support for disabling memory locking (2.03.27).
+   Do not extend an LV if FS resize unsupported and '--fs resize' used.
++  Prevent leftover temporary device when converting in use volume to a pool.
+   lvconvert detects early volume in use when converting it to a pool.
++  Handle NVMe with quirk changed WWID not matching WWID in devices file.
+ 
+ Version 2.03.29 - 
+ ==================
+-- 
+2.47.1
+
