@@ -1,4 +1,4 @@
-%global device_mapper_version 1.02.202
+%global device_mapper_version 1.02.206
 
 %global enable_cache 1
 %global enable_lvmdbusd 1
@@ -50,11 +50,11 @@ Name: lvm2
 %if 0%{?rhel}
 Epoch: %{rhel}
 %endif
-Version: 2.03.28
+Version: 2.03.32
 %if 0%{?from_snapshot}
 Release: 0.1.20211115git%{shortcommit}%{?dist}%{?rel_suffix}
 %else
-Release: 6%{?dist}%{?rel_suffix}
+Release: 2%{?dist}%{?rel_suffix}
 %endif
 License: GPL-2.0-only
 URL: https://sourceware.org/lvm2
@@ -69,35 +69,16 @@ Patch3: 0003-Revert-dm-udev-rules-don-t-export-and-save-DM_NOSCAN.patch
 Patch4: 0004-Revert-dm-udev-rules-don-t-export-and-save-DM_SUSPEN.patch
 Patch5: 0005-Revert-11-dm-lvm.rules-don-t-restore-DM_UDEV_DISABLE.patch
 Patch6: 0006-Revert-10-dm-rules-don-t-restore-DM_UDEV_DISABLE_OTH.patch
-Patch7: 0007-WHATS_NEW-update.patch
-Patch8: 0008-lv_manip-fix-stripe-count-and-size-validation-for-RA.patch
-Patch9: 0009-lv_manip-use-the-same-param-validation-for-RAID-0-as.patch
-Patch10: 0010-tests-remove-superfluous-a-option-for-df-used-in-lvr.patch
-Patch11: 0011-WHATS_NEW-update.patch
-Patch12: 0012-vdo-fix-input-units-for-minimim_io_size.patch
-Patch13: 0013-tests-check-vdo-minimum_io_size.patch
-Patch14: 0014-raid-fix-name-rotation.patch
-Patch15: 0015-tests-check-_tdata-conversion-to-raid1.patch
-Patch16: 0016-WHATS_NEW-update.patch
-# RHEL-68982:
-Patch17: 0017-device_id-nvme-devices-may-use-alternate-wwids.patch
-Patch18: 0018-configure.ac-add-support-for-libnvme.patch
-Patch19: 0019-configure-autoreconf.patch
-# RHEL-53866:
-Patch20: 0020-thin-deactivate-converted-volume-early.patch
-Patch21: 0021-tests-check-conversion-of-in-use-volume.patch
-Patch22: 0022-WHATS_NEW-update.patch
-# RHEL-65845:
-Patch23: 0023-lv_manip-check-fs-resize-is-supported-before-LV-exte.patch
-Patch24: 0024-tests-adjust-lvresize-xfs-tests-for-recent-lvextend-.patch
-Patch25: 0025-WHATS_NEW-update.patch
-# RHEL-60943:
-Patch26: 0026-memlock-check-for-proper-reserved-size.patch
-Patch27: 0027-WHATS_NEW-update.patch
-# RHEL-76039:
-Patch28: 0028-vg_read-rescanning-DM-cache-after-taking-lock.patch
-Patch29: 0029-vg_read-matching-missed-empty-cache.patch
-Patch30: 0030-vg_read-correct-error-path-for-DM-cache-update.patch
+Patch7: 0007-WHATS_NEW_DM-update.patch
+# RHEL-94577:
+Patch8: 0008-lvmlockd-fix-hosts-check-for-vgremove.patch
+Patch9: 0009-lvmlockd-fix-sanlock_release-for-vgremove.patch
+# RHEL-67039:
+Patch10: 0010-raid-count-or-clear-transiently-failed-devices.patch
+Patch11: 0011-lvconvert-allow-clearing-superblocks.patch
+Patch12: 0012-test-check-raid-superblock-clearing.patch
+Patch13: 0013-man-update-raid-man.patch
+Patch14: 0014-WHATS_NEW-update.patch
 
 BuildRequires: make
 BuildRequires: gcc
@@ -729,6 +710,14 @@ An extensive functional testsuite for LVM2.
 %endif
 
 %changelog
+* Tue Jun 03 2025 Marian Csontos <mcsontos@redhat.com> - 2.03.32-2
+- Fix vgremove hanging immediately after lockstart.
+- Add repair option for RAID volumes with too many transiently failed devices.
+
+* Tue May 06 2025 Marian Csontos <mcsontos@redhat.com> - 2.03.32-1
+- Update to upstream version 2.03.32.
+- See WHATS_NEW and WHATS_NEW_DM for more information.
+
 * Mon Feb 03 2025 Marian Csontos <mcsontos@redhat.com> - 2.03.28-6
 - Fix race causing lvm2 not recognizing active devices.
 

@@ -1,7 +1,7 @@
-From cccc336a97ce85cf68ec7a80390c42dae243621b Mon Sep 17 00:00:00 2001
+From ebd5feaca2779c9379a14ba6f74a47214d03d94b Mon Sep 17 00:00:00 2001
 From: Marian Csontos <mcsontos@redhat.com>
 Date: Thu, 16 May 2024 15:30:48 +0200
-Subject: [PATCH 06/13] Revert "10-dm-rules: don't restore
+Subject: [PATCH 6/7] Revert "10-dm-rules: don't restore
  DM_UDEV_DISABLE_OTHER_RULES_FLAG from db"
 
 This reverts commit f98d020eadafe7d8db7bec1f5a26915615e5a6a9.
@@ -45,5 +45,5 @@ index 29fe71527..2c6903da7 100644
  
  # If DISK_RO is set, it's an uevent that changes the ro attribute of the device.
 -- 
-2.47.0
+2.49.0
 

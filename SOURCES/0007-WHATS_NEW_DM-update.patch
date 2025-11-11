@@ -1,0 +1,30 @@
+From 72f203a02d7f30d5afdaa853a082b2b1d1f56297 Mon Sep 17 00:00:00 2001
+From: Marian Csontos <mcsontos@redhat.com>
+Date: Mon, 5 May 2025 17:36:05 +0200
+Subject: [PATCH 7/7] WHATS_NEW_DM: update
+
+---
+ WHATS_NEW_DM | 10 ++++++++++
+ 1 file changed, 10 insertions(+)
+
+diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
+index 62ad0a055..0b167ec36 100644
+--- a/WHATS_NEW_DM
++++ b/WHATS_NEW_DM
+@@ -1,3 +1,13 @@
++Version 1.02.207 - 
++================================
++
++RHEL9 - 05th May 2025
++=====================
++  Revert Increase DM_UDEV_RULES_VSN to 3 to indicate changed udev rules.
++  Revert Rename DM_NOSCAN to .DM_NOSCAN so it's not stored in udev db.
++  Revert Rename DM_SUSPENDED to .DM_SUSPENDED so it's not stored in udev db.
++  Revert Do not import DM_UDEV_DISABLE_OTHER_RULES_FLAG from db in 10-dm-disk.rules.
++
+ Version 1.02.206 - 05th May 2025
+ ================================
+   Add support for using regex in selection criteria for string lists.
+-- 
+2.49.0
+

@@ -1,0 +1,460 @@
+From ad632cf9f19f3b8efbcf087cbf60527160ba5fec Mon Sep 17 00:00:00 2001
+From: Heinz Mauelshagen <heinzm@redhat.com>
+Date: Tue, 5 Nov 2024 18:33:19 +0100
+Subject: [PATCH 10/14] raid: count or clear transiently failed devices
+
+Count or clear transiently failed devices as of dm-raid superblocks.
+Updated debuging.
+Use lvconvert --repair to repair transiently failed legs.
+Activating all 'meta' LVs with single sync_local_dev_names().
+Using proper DM path for meta LV.
+
+Modified-by: zkabelac@redhat.com
+(cherry picked from commit 03d8661657bb3d1cb5dd764f3a450a8211f892e6)
+---
+ device_mapper/Makefile           |   1 +
+ device_mapper/all.h              |   1 +
+ device_mapper/raid/raid_parser.c | 164 ++++++++++++++++++++++++++++
+ device_mapper/raid/target.h      |  23 ++++
+ lib/activate/activate.h          |   2 +
+ lib/metadata/raid_manip.c        | 179 ++++++++++++++++++++++++++++++-
+ 6 files changed, 369 insertions(+), 1 deletion(-)
+ create mode 100644 device_mapper/raid/raid_parser.c
+ create mode 100644 device_mapper/raid/target.h
+
+diff --git a/device_mapper/Makefile b/device_mapper/Makefile
+index b1aa53c36..4dfcd4f12 100644
+--- a/device_mapper/Makefile
++++ b/device_mapper/Makefile
+@@ -25,6 +25,7 @@ DEVICE_MAPPER_SOURCE=\
+ 	device_mapper/libdm-targets.c \
+ 	device_mapper/libdm-timestamp.c \
+ 	device_mapper/mm/pool.c \
++	device_mapper/raid/raid_parser.c \
+ 	device_mapper/regex/matcher.c \
+ 	device_mapper/regex/parse_rx.c \
+ 	device_mapper/regex/ttree.c \
+diff --git a/device_mapper/all.h b/device_mapper/all.h
+index 91c085e76..97279c10b 100644
+--- a/device_mapper/all.h
++++ b/device_mapper/all.h
+@@ -19,6 +19,7 @@
+ 
+ #include "base/data-struct/list.h"
+ #include "base/data-struct/hash.h"
++#include "raid/target.h"
+ #include "vdo/target.h"
+ 
+ #include <inttypes.h>
+diff --git a/device_mapper/raid/raid_parser.c b/device_mapper/raid/raid_parser.c
+new file mode 100644
+index 000000000..adef7bb6c
+--- /dev/null
++++ b/device_mapper/raid/raid_parser.c
+@@ -0,0 +1,164 @@
++/*
++ * Copyright (C) 2024 Red Hat, Inc. All rights reserved.
++ *
++ * This file is part of the device-mapper userspace tools.
++ *
++ * This copyrighted material is made available to anyone wishing to use,
++ * modify, copy, or redistribute it subject to the terms and conditions
++ * of the GNU Lesser General Public License v.2.1.
++ *
++ * You should have received a copy of the GNU Lesser General Public License
++ * along with this program; if not, write to the Free Software Foundation,
++ * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
++ */
++
++/*
++ * Support counting number of failed device bits in dm-raid superblock bit arrays or clear them out.
++ */
++
++#include "device_mapper/misc/dmlib.h"
++#include "device_mapper/all.h"
++#include "device_mapper/raid/target.h"
++#include <fcntl.h>
++#include <unistd.h>
++
++/* Copied/derived from kernel's drivers/md/dm-raid.c so this is prone to out-of-sync (factor out to header file?). */
++#define	MAX_RAID_DEVICES		253 /* md-raid kernel limit? */
++#define UINT64_BITS			(sizeof(uint64_t) * 8)
++#define DISKS_ARRAY_ELEMS		((MAX_RAID_DEVICES + (UINT64_BITS - 1)) / UINT64_BITS)
++#define DM_RAID_SB_MAGIC		0x446D5264 /* "DmRd" */
++#define	FEATURE_FLAG_SUPPORTS_V190	0x1 /* Supports extended superblock */
++
++/* RAID superblock at beginning of rmeta SubLVs trimmed down to mandatory members. */
++struct dm_raid_superblock {
++	__le32 magic;		/* "DmRd" */
++	__le32 compat_features;	/* Used to indicate compatible features (like 1.9.0 ondisk metadata extension) */
++	__le32 dummy[4];
++	__le64 failed_devices;	/* Pre 1.9.0 part of bit field of devices to */
++				/* indicate device failures (see extension below) */
++	__le32 dummy1[7];
++
++	/********************************************************************
++	 * BELOW FOLLOW V1.9.0 EXTENSIONS TO THE PRISTINE SUPERBLOCK FORMAT!!!
++	 *
++	 * FEATURE_FLAG_SUPPORTS_V190 in the compat_features member indicates that those exist
++	 */
++	__le32 flags; /* Flags defining array states for reshaping */
++	__le32 dummy2[14];
++	__le64 extended_failed_devices[DISKS_ARRAY_ELEMS - 1];
++
++	__le32 dummy3;
++	/* Always set rest up to logical block size to 0 when writing ... */
++} __packed;
++/* END: Copied from ... */
++
++/* Superblock I/O buffer size to be able to Cope with 4K native devices... */
++#define	SB_BUFSZ	4096
++
++static size_t _get_sb_size(const struct dm_raid_superblock *sb)
++{
++	return (FEATURE_FLAG_SUPPORTS_V190 & le32toh(sb->compat_features)) ?
++	       sizeof(*sb) : ((char *) &sb->flags - (char *) sb);
++}
++
++static uint32_t _hweight64(__le64 v)
++{
++	uint32_t r = 0;
++
++	while (v) {
++		r += v & 1;
++		v >>= 1;
++	}
++
++	return r;
++}
++
++static uint32_t _hweight_failed(struct dm_raid_superblock *sb)
++{
++	uint32_t r = _hweight64(sb->failed_devices);
++
++	if (_get_sb_size(sb) == sizeof(*sb)) {
++		size_t i = DM_ARRAY_SIZE(sb->extended_failed_devices);
++
++		while (i--)
++			r = max(r, _hweight64(sb->extended_failed_devices[i]));
++	}
++
++	return r;
++}
++
++static void _clear_failed_devices(struct dm_raid_superblock *sb)
++{
++
++	sb->failed_devices = 0;
++
++	if (_get_sb_size(sb) == sizeof(*sb))
++		memset(sb->extended_failed_devices, 0, sizeof(sb->extended_failed_devices));
++}
++
++static int _count_or_clear_failed_devices(const char *dev_path, bool clear, uint32_t *nr_failed)
++{
++	struct dm_raid_superblock *sb = NULL;
++	size_t sz;
++	int fd, r = 0;
++
++	if (posix_memalign((void *) &sb, SB_BUFSZ, SB_BUFSZ)) {
++		log_sys_error("Failed to allocate RAID superblock buffer", dev_path);
++		return 0;
++	}
++
++	fd = open(dev_path, O_EXCL | ((clear) ?  O_RDWR : O_RDONLY) | O_DIRECT);
++	if (fd < 0) {
++		log_sys_error("Failed to open RAID metadata volume", dev_path);
++		goto out;
++	}
++
++	if (read(fd, sb, SB_BUFSZ) != SB_BUFSZ) {
++		log_sys_error("Failed to read RAID metadata volume", dev_path);
++		goto out;
++	}
++
++	/* FIXME: big endian??? */
++	if (sb->magic != htobe32(DM_RAID_SB_MAGIC)) {
++		log_error("No RAID signature on %s.", dev_path);
++		goto out;
++	}
++
++	if (nr_failed)
++		*nr_failed = _hweight_failed(sb);
++
++	if (clear) {
++		if (lseek(fd, 0, SEEK_SET) < 0) {
++			log_sys_error("Failed to seek RAID metadata volume", dev_path);
++			goto out;
++		}
++
++		sz = _get_sb_size(sb);
++		memset((void *)((char *) sb + sz), 0, SB_BUFSZ - sz);
++		_clear_failed_devices(sb);
++		if (write(fd, sb, SB_BUFSZ) != SB_BUFSZ) {
++			log_sys_error("Failed to clear RAID metadata volume", dev_path);
++			goto out;
++		}
++	}
++
++	r = 1;
++
++out:
++	if ((fd >= 0) && close(fd))
++		log_sys_debug("close", dev_path);
++
++	free(sb);
++
++	return r;
++}
++
++int dm_raid_count_failed_devices(const char *dev_path, uint32_t *nr_failed)
++{
++	return _count_or_clear_failed_devices(dev_path, false, nr_failed);
++}
++
++int dm_raid_clear_failed_devices(const char *dev_path, uint32_t *nr_failed)
++{
++	return _count_or_clear_failed_devices(dev_path, true, nr_failed);
++}
+diff --git a/device_mapper/raid/target.h b/device_mapper/raid/target.h
+new file mode 100644
+index 000000000..3e3ec024c
+--- /dev/null
++++ b/device_mapper/raid/target.h
+@@ -0,0 +1,23 @@
++/*
++ * Copyright (C) 2024 Red Hat, Inc. All rights reserved.
++ *
++ * This file is part of the device-mapper userspace tools.
++ *
++ * This copyrighted material is made available to anyone wishing to use,
++ * modify, copy, or redistribute it subject to the terms and conditions
++ * of the GNU Lesser General Public License v.2.1.
++ *
++ * You should have received a copy of the GNU Lesser General Public License
++ * along with this program; if not, write to the Free Software Foundation,
++ * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
++ */
++
++#ifndef DEVICE_MAPPER_RAID_TARGET_H
++#define DEVICE_MAPPER_RAID_TARGET_H
++
++#include <stdint.h>
++
++int dm_raid_count_failed_devices(const char *dev_path, uint32_t *nr_failed);
++int dm_raid_clear_failed_devices(const char *dev_path, uint32_t *nr_failed);
++
++#endif
+diff --git a/lib/activate/activate.h b/lib/activate/activate.h
+index bd30e2655..155936135 100644
+--- a/lib/activate/activate.h
++++ b/lib/activate/activate.h
+@@ -197,6 +197,8 @@ int lv_raid_mismatch_count(const struct logical_volume *lv, uint64_t *cnt);
+ int lv_raid_sync_action(const struct logical_volume *lv, char **sync_action);
+ int lv_raid_message(const struct logical_volume *lv, const char *msg);
+ int lv_raid_status(const struct logical_volume *lv, struct lv_status_raid **status);
++int lv_raid_clear_failed_devices(const struct logical_volume *lv);
++int lv_raid_count_failed_devices(const struct logical_volume *lv, uint32_t *failed_cnt);
+ int lv_writecache_message(const struct logical_volume *lv, const char *msg);
+ int lv_cache_status(const struct logical_volume *cache_lv,
+ 		    struct lv_status_cache **status);
+diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
+index eb4a2eb45..2a78a0bec 100644
+--- a/lib/metadata/raid_manip.c
++++ b/lib/metadata/raid_manip.c
+@@ -3242,7 +3242,7 @@ static int _raid_leg_degraded(struct lv_segment *raid_seg, uint32_t s)
+ 		 _sublv_is_degraded(seg_metalv(raid_seg, s))));
+ }
+ 
+-/* Return failed component SubLV count for @lv. */
++/* Return failed component SubLV pair count for @lv. */
+ static uint32_t _lv_get_nr_failed_components(const struct logical_volume *lv)
+ {
+ 	uint32_t r = 0, s;
+@@ -7328,6 +7328,183 @@ int lv_raid_remove_missing(struct logical_volume *lv)
+ 	return 1;
+ }
+ 
++/*
++ * Count number of failed device bits in dm-raid superblock bit arrays -or- clear them out.
++ *
++ * If any failed devices, return != 0 maximum of failed SubLVs and parity_devs so that the
++ * caller will ask to clear and try activation of the RaidLV unless more than parity_devs
++ * component device pairs (rmeta and rimage) are still failed.  This'll allow early exit
++ * in the caller preventing MD kernel rejection to activate the RAID array with > parity_devs
++ * failed component device pairs.
++ */
++static int _count_or_clear_failed_devices_bits(struct logical_volume *meta_lv,
++					       bool clear, uint32_t *nr_failed)
++{
++	char *meta_path = lv_dmpath_dup(meta_lv->vg->cmd->mem, meta_lv);
++
++	if (!meta_path) {
++		log_error("Failed to build device path for %s.",
++			  display_lvname(meta_lv));
++		return 0;
++	}
++
++	if (!clear) /* only counting */
++		return dm_raid_count_failed_devices(meta_path, nr_failed);
++
++	return dm_raid_clear_failed_devices(meta_path, nr_failed);
++}
++
++/* Count or clear failed devices bits in RAID superblocks for
++ * recurred transiently failed component SubLV pairs. */
++static int _raid_count_or_clear_failed_devices(const struct logical_volume *lv,
++					       bool clear, uint32_t *failed_devices)
++{
++	uint32_t nr_failed = 0, nr_failed_tmp = 0, failed_sublvs = 0, s;
++	struct lv_segment *raid_seg = first_seg(lv);
++	struct logical_volume *meta_lv;
++	const char *str;
++	int r = 1, cleared_devs = 0;
++
++	/* Prevent bogus use. */
++	if (!seg_is_raid_with_meta(raid_seg)) {
++		log_error("%s is not a RaidLV with metadata.", display_lvname(lv));
++		return 0;
++	}
++
++	failed_sublvs = _lv_get_nr_failed_components(lv);
++
++	if (clear && (failed_sublvs > raid_seg->segtype->parity_devs)) {
++		log_error("Can't clear transiently failed devices on still failed %s.",
++			  display_lvname(lv));
++		return 0;
++	}
++
++	if (!raid_seg->meta_areas) {
++		log_error(INTERNAL_ERROR "Missing metadata areas on %s!", display_lvname(lv));
++		return 0;
++	}
++
++	/* Check if there isn't any meta LV already active */
++	for (s = 0; s < raid_seg->area_count; s++) {
++		if (_raid_leg_degraded(raid_seg, s))
++			continue;
++
++		meta_lv = seg_metalv(raid_seg, s);
++
++		if (lv_is_active(meta_lv)) {
++			/* DM table is in some unknown condition, aborting... */
++			log_error("Can't %s failed devices with active %s metadata volume %s.",
++				  clear ? "clear" : "count",
++				  lvseg_name(raid_seg), display_lvname(meta_lv));
++			return 0;
++		}
++	}
++
++	/* Activate all non degraded meta LVs before count or clear */
++	for (s = 0; s < raid_seg->area_count; s++) {
++		meta_lv = seg_metalv(raid_seg, s);
++
++		if (_raid_leg_degraded(raid_seg, s)) {
++			log_debug("Skipping activation of failed devices for degraded %s metadata volume %s.",
++				  lvseg_name(raid_seg), display_lvname(meta_lv));
++			continue;
++		}
++
++		if (!activate_lv(lv->vg->cmd, meta_lv)) {
++			log_error("Failed to activate %s metadata volume %s.",
++				  lvseg_name(raid_seg), display_lvname(meta_lv));
++			r = 0; /* how many can be counted... */
++		}
++	}
++
++	/* Wait for meta activation. */
++	if (!sync_local_dev_names(lv->vg->cmd))
++		stack;
++
++	for (s = 0; s < raid_seg->area_count; s++) {
++		meta_lv = seg_metalv(raid_seg, s);
++
++		if (_raid_leg_degraded(raid_seg, s)) {
++			if (clear)
++				log_debug("Skipping clear of failed devices for degraded %s metadata volume %s.",
++					  lvseg_name(raid_seg), display_lvname(meta_lv));
++			continue;
++		}
++
++		if (lv_is_active(meta_lv) &&
++		    !_count_or_clear_failed_devices_bits(meta_lv, clear,
++							 &nr_failed_tmp)) {
++			log_error("Failed to %s failed device(s) in superblock of %s metadata volume %s.",
++				  clear ? "clear" : "count",
++				  lvseg_name(raid_seg), display_lvname(meta_lv));
++			r = 0;
++			continue;
++		}
++
++		if (nr_failed_tmp) {
++			log_verbose("%s %u failed device(s) in superblock of %s metadata volume %s.",
++				    clear ? "Cleared" : "Counted", nr_failed_tmp,
++				    lvseg_name(raid_seg), display_lvname(meta_lv));
++			cleared_devs++;
++		}
++
++		if (nr_failed_tmp > nr_failed)
++			nr_failed = nr_failed_tmp;
++	}
++
++	/* Deactivate meta LVs */
++	for (s = 0; s < raid_seg->area_count; s++) {
++		if (_raid_leg_degraded(raid_seg, s))
++			continue;
++
++		if (!deactivate_lv(lv->vg->cmd, seg_metalv(raid_seg, s))) {
++			stack;
++			r = 0;
++		}
++	}
++
++	if (clear) {
++		if (!failed_sublvs)
++			str = "fully operational";
++		else if (failed_sublvs <= raid_seg->segtype->parity_devs)
++			str = "degraded";
++		else
++			str = "still failed";
++
++		log_print_unless_silent("The %s volume %s is %s with %u transiently failed device(s).",
++					lvseg_name(raid_seg), display_lvname(lv), str,
++					nr_failed - failed_sublvs);
++
++		if (r && cleared_devs &&
++		    (failed_sublvs <= raid_seg->segtype->parity_devs))
++			/* TODO: maybe we want to activate RAID volume here ? */
++			log_print_unless_silent("Volume has been restored after clearing %u superblocks(s). Once online please check its content.",
++						cleared_devs);
++	}
++
++	if (failed_devices)
++		*failed_devices = max(failed_sublvs, raid_seg->segtype->parity_devs);
++
++	return r;
++}
++
++/* Clear failed device bits in RAID superblocks for recurred
++ * transiently failed component SubLV pairs. */
++int lv_raid_clear_failed_devices(const struct logical_volume *lv)
++{
++	return _raid_count_or_clear_failed_devices(lv, true, NULL);
++}
++
++/* Count failed device bits in RAID superblocks for recurred
++ * transiently failed component SubLV pairs.
++ *
++ * On success, @failed_cnt contains the current number.
++ */
++int lv_raid_count_failed_devices(const struct logical_volume *lv, uint32_t *failed_cnt)
++{
++	return _raid_count_or_clear_failed_devices(lv, false, failed_cnt);
++}
++
+ /* Return 1 if a partial raid LV can be activated redundantly */
+ static int _partial_raid_lv_is_redundant(const struct logical_volume *lv)
+ {
+-- 
+2.49.0
+

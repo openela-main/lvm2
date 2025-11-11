@@ -1,0 +1,25 @@
+From 14f920c81c9499bcfcc0414c494f7abc0b9f3d58 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Mon, 12 May 2025 15:07:15 +0200
+Subject: [PATCH 14/14] WHATS_NEW: update
+
+(cherry picked from commit 759d1bfe113ca7a80248821808d13ed9e011201c)
+---
+ WHATS_NEW | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 4d8b59681..c9af7be6e 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,3 +1,7 @@
++Version 2.03.33 - 
++==================
++  Repair raid arrays with transiently lost devices.
++
+ Version 2.03.32 - 05th May 2025
+ ===============================
+   Lvconvert vdopool conversion propperly validates acceptable LVs.
+-- 
+2.49.0
+

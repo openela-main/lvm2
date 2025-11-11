@@ -1,7 +1,7 @@
-From 57fa9b840028112e9e455c960dad5bd595625428 Mon Sep 17 00:00:00 2001
+From 6a15577cb02603512afce0f13a591183105c8f73 Mon Sep 17 00:00:00 2001
 From: Marian Csontos <mcsontos@redhat.com>
 Date: Thu, 16 May 2024 15:30:15 +0200
-Subject: [PATCH 03/13] Revert "dm udev rules: don't export and save DM_NOSCAN"
+Subject: [PATCH 3/7] Revert "dm udev rules: don't export and save DM_NOSCAN"
 
 This reverts commit a196752969320cfc34a97cc97afa1978fa57da73.
 ---
@@ -23,11 +23,11 @@ index 8b8d0561f..6dd556aa9 100644
  ENV{DM_UDEV_DISABLE_SUBSYSTEM_RULES_FLAG}=="1", GOTO="lvm_end"
  
 diff --git a/udev/13-dm-disk.rules.in b/udev/13-dm-disk.rules.in
-index 03ea203ee..96f1efc00 100644
+index 9bfeebe13..a9ad67e9f 100644
 --- a/udev/13-dm-disk.rules.in
 +++ b/udev/13-dm-disk.rules.in
-@@ -18,9 +18,9 @@ SYMLINK+="disk/by-id/dm-name-$env{DM_NAME}"
- ENV{DM_UUID}=="?*", SYMLINK+="disk/by-id/dm-uuid-$env{DM_UUID}"
+@@ -20,9 +20,9 @@ ENV{DM_UUID}=="?*", SYMLINK+="disk/by-id/dm-uuid-$env{DM_UUID}"
+ ENV{DISKSEQ}=="?*", SYMLINK+="disk/by-diskseq/$env{DISKSEQ}"
  
  ENV{.DM_SUSPENDED}=="1", ENV{DM_UDEV_PRIMARY_SOURCE_FLAG}=="1", GOTO="dm_import"
 -ENV{.DM_NOSCAN}=="1", ENV{DM_UDEV_PRIMARY_SOURCE_FLAG}=="1", GOTO="dm_import"
@@ -39,5 +39,5 @@ index 03ea203ee..96f1efc00 100644
  (BLKID_RULE)
  GOTO="dm_link"
 -- 
-2.47.0
+2.49.0
 

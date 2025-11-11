@@ -1,7 +1,7 @@
-From 885113b30d7873ac671490715312431f706d26e8 Mon Sep 17 00:00:00 2001
+From 2280f85310b82c03b43dfd88e0712c5921a36ffc Mon Sep 17 00:00:00 2001
 From: Marian Csontos <mcsontos@redhat.com>
 Date: Thu, 16 May 2024 15:30:24 +0200
-Subject: [PATCH 04/13] Revert "dm udev rules: don't export and save
+Subject: [PATCH 4/7] Revert "dm udev rules: don't export and save
  DM_SUSPENDED"
 
 This reverts commit 21ca92c4325b6b161fb1e1f10942ad9f8d23c144.
@@ -68,12 +68,12 @@ index 9624ddc5e..8d3bc224a 100644
  #   DM_VG_NAME - volume group name (not set if LVM device not present)
  #   DM_LV_LAYER - logical volume layer (not set if LVM device not present)
 diff --git a/udev/13-dm-disk.rules.in b/udev/13-dm-disk.rules.in
-index 96f1efc00..3e1eaa6ee 100644
+index a9ad67e9f..e136ee441 100644
 --- a/udev/13-dm-disk.rules.in
 +++ b/udev/13-dm-disk.rules.in
-@@ -17,9 +17,9 @@ ENV{DM_UDEV_DISABLE_DISK_RULES_FLAG}=="1", GOTO="dm_end"
- SYMLINK+="disk/by-id/dm-name-$env{DM_NAME}"
- ENV{DM_UUID}=="?*", SYMLINK+="disk/by-id/dm-uuid-$env{DM_UUID}"
+@@ -19,9 +19,9 @@ ENV{DM_UUID}=="?*", SYMLINK+="disk/by-id/dm-uuid-$env{DM_UUID}"
+ 
+ ENV{DISKSEQ}=="?*", SYMLINK+="disk/by-diskseq/$env{DISKSEQ}"
  
 -ENV{.DM_SUSPENDED}=="1", ENV{DM_UDEV_PRIMARY_SOURCE_FLAG}=="1", GOTO="dm_import"
 +ENV{DM_SUSPENDED}=="1", ENV{DM_UDEV_PRIMARY_SOURCE_FLAG}=="1", GOTO="dm_import"
@@ -84,5 +84,5 @@ index 96f1efc00..3e1eaa6ee 100644
  
  (BLKID_RULE)
 -- 
-2.47.0
+2.49.0
 
