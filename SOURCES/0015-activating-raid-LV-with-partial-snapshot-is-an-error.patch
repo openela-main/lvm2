@@ -1,0 +1,48 @@
+From 1742273a30f6ed5fa0176805f8bd1c133b2a600c Mon Sep 17 00:00:00 2001
+From: David Teigland <teigland@redhat.com>
+Date: Mon, 27 Oct 2025 11:01:16 -0500
+Subject: [PATCH 15/18] activating raid LV with partial snapshot is an error
+
+Detect and report this error early in the command, with
+a clear message, including a possible remedy.  Previously,
+the command failed at a lower level, where the message is
+confusing or even misleading.
+
+Old error message:
+  "Aborting.  LV vg/snap1 is incomplete and --activationmode partial was not specified."
+
+New error message:
+  "Activating raid LV vg/main requires the removal of partial snapshot vg/snap1."
+
+(cherry picked from commit 2760e804630a36bab2c3938ce9ac0b08c5e75395)
+---
+ tools/toollib.c | 13 +++++++++++++
+ 1 file changed, 13 insertions(+)
+
+diff --git a/tools/toollib.c b/tools/toollib.c
+index 9235f431f..0e711fbc7 100644
+--- a/tools/toollib.c
++++ b/tools/toollib.c
+@@ -781,6 +781,19 @@ int lv_change_activate(struct cmd_context *cmd, struct logical_volume *lv,
+ 		}
+ 	}
+ 
++	if (lv_is_raid(lv) && lv_is_origin(lv) && lv_is_partial(lv)) {
++		struct lv_list *lvl;
++		dm_list_iterate_items(lvl, &lv->vg->lvs) {
++			if (lv_is_cow(lvl->lv) &&
++			    (lv_origin_lv(lvl->lv) == lv) &&
++			    lv_is_partial(lvl->lv)) {
++				log_error("Activating raid LV %s requires the removal of partial snapshot %s.",
++					  display_lvname(lv), display_lvname(lvl->lv));
++				return 0;
++			}
++		}
++	}
++
+ 	if (is_change_activating(activate) &&
+ 	    lvmcache_has_duplicate_devs() &&
+ 	    vg_has_duplicate_pvs(lv->vg) &&
+-- 
+2.51.1
+

@@ -1,0 +1,34 @@
+From 2e8e66c62f67405223c6c208f343f0540505aa36 Mon Sep 17 00:00:00 2001
+From: Heinz Mauelshagen <heinzm@redhat.com>
+Date: Mon, 27 Oct 2025 17:37:09 +0100
+Subject: [PATCH 16/18] lv_manip: show a warning during classic snapshot
+ creation on a RaidLV.
+
+The RaidLV will fail to activate in case of the loss of any of its snapshots.
+Once created, commit 2760e804630a36bab2c3938ce9ac0b08c5e75395 will
+catch any loss of such snapshots and provide remedy information.
+
+(cherry picked from commit ae81b41811ede78b77f6badf0c65c88fa56cc951)
+---
+ lib/metadata/lv_manip.c | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index b188ea280..2de982b24 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -9628,6 +9628,11 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
+ 			goto revert_new_lv;
+ 	}
+ 
++	if (lp->snapshot && origin_lv && lv_is_raid(origin_lv)) {
++		log_warn("WARNING: Loss of snapshot %s will cause the activation of the %s LV %s to fail!",
++			 lp->lv_name, lvseg_name(first_seg(origin_lv)), display_lvname(origin_lv));
++	}
++
+ 	/* Do not scan this LV until properly zeroed/wiped. */
+ 	if (_should_wipe_lv(lp, lv, 0))
+ 		lv->status |= LV_NOSCAN;
+-- 
+2.51.1
+

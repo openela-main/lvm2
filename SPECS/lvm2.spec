@@ -41,7 +41,7 @@
 %global commit 4a1f6173d29a7d7ecab14a9313000aa5f81170d0
 %global shortcommit %(c=%{commit}; echo ${c:0:7})
 %endif
-#%%global rel_suffix .bz2141837
+%global rel_suffix .1
 
 # Do not reset Release to 1 unless both lvm2 and device-mapper
 # versions are increased together.
@@ -79,6 +79,11 @@ Patch11: 0011-lvconvert-allow-clearing-superblocks.patch
 Patch12: 0012-test-check-raid-superblock-clearing.patch
 Patch13: 0013-man-update-raid-man.patch
 Patch14: 0014-WHATS_NEW-update.patch
+# RHEL-124926:
+Patch15: 0015-activating-raid-LV-with-partial-snapshot-is-an-error.patch
+Patch16: 0016-lv_manip-show-a-warning-during-classic-snapshot-crea.patch
+Patch17: 0017-test-add-new-test-for-snapshot-on-raid-creation-acti.patch
+Patch18: 0018-WHATS_NEW-update.patch
 
 BuildRequires: make
 BuildRequires: gcc
@@ -710,6 +715,9 @@ An extensive functional testsuite for LVM2.
 %endif
 
 %changelog
+* Mon Nov 10 2025 Marian Csontos <mcsontos@redhat.com> - 2.03.32-2.el9_7.1
+- Add message when activating RAID volumes with snapshots.
+
 * Tue Jun 03 2025 Marian Csontos <mcsontos@redhat.com> - 2.03.32-2
 - Fix vgremove hanging immediately after lockstart.
 - Add repair option for RAID volumes with too many transiently failed devices.

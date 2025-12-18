@@ -1,0 +1,25 @@
+From 34c6bcf41bd06fa8264e71026ce0008bdb0d0cea Mon Sep 17 00:00:00 2001
+From: Heinz Mauelshagen <heinzm@redhat.com>
+Date: Mon, 27 Oct 2025 19:15:06 +0100
+Subject: [PATCH 18/18] WHATS_NEW: update
+
+(cherry picked from commit b8f7635e1692fcfc5ea34e1dcaea2ebb6df94431)
+---
+ WHATS_NEW | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/WHATS_NEW b/WHATS_NEW
+index c9af7be6e..4afebb594 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,3 +1,7 @@
++Version 2.03.37 - 
++==================
++  Warn on classic snapshot on raid creation and error on activation + test.
++
+ Version 2.03.33 - 
+ ==================
+   Repair raid arrays with transiently lost devices.
+-- 
+2.51.1
+
