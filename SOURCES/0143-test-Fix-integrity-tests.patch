@@ -1,0 +1,2377 @@
+From a344f6e02a5e3e556db7935d71b4cf6556d51b2f Mon Sep 17 00:00:00 2001
+From: Marian Csontos <mcsontos@redhat.com>
+Date: Tue, 9 Dec 2025 15:44:42 +0100
+Subject: [PATCH 2/2] test: Fix integrity tests
+
+---
+ test/lib/aux.sh                      |  26 ++
+ test/shell/dmsetup-integrity-keys.sh |   2 +
+ test/shell/integrity-blocksize-2.sh  |  90 ++----
+ test/shell/integrity-blocksize-3.sh  | 203 +++++-------
+ test/shell/integrity-blocksize.sh    | 243 +++++++-------
+ test/shell/integrity-dmeventd.sh     | 114 +++----
+ test/shell/integrity-imeta-segs.sh   |  52 +--
+ test/shell/integrity-large.sh        |  51 +--
+ test/shell/integrity-misc.sh         | 110 +++----
+ test/shell/integrity.sh              | 454 +++++++++++++--------------
+ 10 files changed, 621 insertions(+), 724 deletions(-)
+
+diff --git a/test/lib/aux.sh b/test/lib/aux.sh
+index ca9406383..5a74657af 100644
+--- a/test/lib/aux.sh
++++ b/test/lib/aux.sh
+@@ -1685,6 +1685,32 @@ wait_for_sync() {
+ 	return 1
+ }
+ 
++wait_recalc() {
++	local sync
++	local checklv=$1
++
++	for i in {1..100} ; do
++		sync=$(get lv_field "$checklv" sync_percent | cut -d. -f1)
++		echo "sync_percent is $sync"
++
++		[[ "$sync" = "100" ]] && return
++
++		sleep .1
++	done
++
++	# TODO: There is some strange bug, first leg of RAID with integrity
++	# enabled never gets in sync. I saw this in BB, but not when executing
++	# the commands manually
++#	if test -z "$sync"; then
++#		echo "TEST\ WARNING: Resync of dm-integrity device '$checklv' failed"
++#                dmsetup status "$DM_DEV_DIR/mapper/${checklv/\//-}"
++#		exit
++#	fi
++	echo "Timeout waiting for recalc."
++	dmsetup status "$DM_DEV_DIR/mapper/${checklv/\//-}"
++	return 1
++}
++
+ # Check if tests are running on 64bit architecture
+ can_use_16T() {
+ 	test "$(getconf LONG_BIT)" -eq 64
+diff --git a/test/shell/dmsetup-integrity-keys.sh b/test/shell/dmsetup-integrity-keys.sh
+index cd98ead6d..a920ad8da 100644
+--- a/test/shell/dmsetup-integrity-keys.sh
++++ b/test/shell/dmsetup-integrity-keys.sh
+@@ -42,6 +42,7 @@ test "$str" = "journal_crypt:$JOURNAL_CRYPT:$HEXKEY_32"
+ str=$(dmsetup table "$PREFIX-integrity" | cut -d ' ' -f 14)
+ test "$str" = "internal_hash:$INTERNAL_HASH_NOCRYPT"
+ 
++aux udev_wait
+ dmsetup remove "$PREFIX-integrity"
+ dmsetup create "$PREFIX-integrity" --table "0 7856 integrity $DM_DEV_DIR/mapper/$PREFIX-zero 0 32 J 7 journal_sectors:88 interleave_sectors:32768 buffer_sectors:128 journal_watermark:50 commit_time:10000 internal_hash:$INTERNAL_HASH_CRYPT:$HEXKEY2_32 journal_crypt:$JOURNAL_CRYPT:$HEXKEY_32"
+ 
+@@ -54,5 +55,6 @@ test "$str" = "internal_hash:$INTERNAL_HASH_CRYPT:$HIDENKEY_32"
+ str=$(dmsetup table --showkeys "$PREFIX-integrity" | cut -d ' ' -f 14)
+ test "$str" = "internal_hash:$INTERNAL_HASH_CRYPT:$HEXKEY2_32"
+ 
++aux udev_wait
+ dmsetup remove "$PREFIX-integrity"
+ dmsetup remove "$PREFIX-zero"
+diff --git a/test/shell/integrity-blocksize-2.sh b/test/shell/integrity-blocksize-2.sh
+index ae0e72ec6..c275d743b 100644
+--- a/test/shell/integrity-blocksize-2.sh
++++ b/test/shell/integrity-blocksize-2.sh
+@@ -19,38 +19,7 @@ aux have_integrity 1 5 0 || skip
+ aux kernel_at_least  5 10 || export LVM_TEST_PREFER_BRD=0
+ 
+ mnt="mnt"
+-mkdir -p $mnt
+-
+-_sync_percent() {
+-        local checklv=$1
+-        get lv_field "$checklv" sync_percent | cut -d. -f1
+-}
+-
+-_wait_recalc() {
+-        local checklv=$1
+-
+-        for i in $(seq 1 10) ; do
+-                sync=$(_sync_percent "$checklv")
+-                echo "sync_percent is $sync"
+-
+-                if test "$sync" = "100"; then
+-                        return
+-                fi
+-
+-                sleep 1
+-        done
+-
+-        # TODO: There is some strange bug, first leg of RAID with integrity
+-        # enabled never gets in sync. I saw this in BB, but not when executing
+-        # the commands manually
+-        if test -z "$sync"; then
+-                echo "TEST\ WARNING: Resync of dm-integrity device '$checklv' failed"
+-                dmsetup status "$DM_DEV_DIR/mapper/${checklv/\//-}"
+-                exit
+-        fi
+-        echo "timeout waiting for recalc"
+-        return 1
+-}
++mkdir -p "$mnt"
+ 
+ # prepare_devs uses ramdisk backing which has 512 LBS and 4K PBS
+ # This should cause mkfs.xfs to use 4K sector size,
+@@ -67,19 +36,19 @@ blockdev --getpbsz "$dev2"
+ lvcreate --type raid1 -m1 -n $lv1 -l 8 $vg
+ lvchange -an $vg/$lv1
+ lvchange -ay $vg/$lv1
+-mkfs.xfs -f "$DM_DEV_DIR/$vg/$lv1"
+-mount "$DM_DEV_DIR/$vg/$lv1" $mnt
+-echo "hello world" > $mnt/hello
+-umount $mnt
++mkfs.ext4 "$DM_DEV_DIR/$vg/$lv1"
++mount "$DM_DEV_DIR/$vg/$lv1" "$mnt"
++echo "hello world" > "$mnt/hello"
++umount "$mnt"
+ lvchange -an $vg
+ lvconvert --raidintegrity y $vg/$lv1
+ lvchange -ay $vg
+-_wait_recalc $vg/${lv1}_rimage_0
+-_wait_recalc $vg/${lv1}_rimage_1
++aux wait_recalc $vg/${lv1}_rimage_0
++aux wait_recalc $vg/${lv1}_rimage_1
+ lvs -a -o+devices $vg
+-mount "$DM_DEV_DIR/$vg/$lv1" $mnt
+-cat $mnt/hello
+-umount $mnt
++mount "$DM_DEV_DIR/$vg/$lv1" "$mnt"
++cat "$mnt/hello"
++umount "$mnt"
+ lvchange -an $vg/$lv1
+ lvremove $vg/$lv1
+ 
+@@ -88,19 +57,19 @@ lvremove $vg/$lv1
+ lvcreate --type raid1 -m1 -n $lv1 -l 8 $vg
+ lvchange -an $vg/$lv1
+ lvchange -ay $vg/$lv1
+-mkfs.xfs -f "$DM_DEV_DIR/$vg/$lv1"
+-mount "$DM_DEV_DIR/$vg/$lv1" $mnt
+-echo "hello world" > $mnt/hello
+-umount $mnt
++mkfs.ext4 "$DM_DEV_DIR/$vg/$lv1"
++mount "$DM_DEV_DIR/$vg/$lv1" "$mnt"
++echo "hello world" > "$mnt/hello"
++umount "$mnt"
+ lvchange -an $vg
+ lvchange -ay $vg
+ lvconvert --raidintegrity y $vg/$lv1
+-_wait_recalc $vg/${lv1}_rimage_0
+-_wait_recalc $vg/${lv1}_rimage_1
++aux wait_recalc $vg/${lv1}_rimage_0
++aux wait_recalc $vg/${lv1}_rimage_1
+ lvs -a -o+devices $vg
+-mount "$DM_DEV_DIR/$vg/$lv1" $mnt
+-cat $mnt/hello | grep "hello world"
+-umount $mnt
++mount "$DM_DEV_DIR/$vg/$lv1" "$mnt"
++grep "hello world" "$mnt/hello"
++umount "$mnt"
+ lvchange -an $vg/$lv1
+ lvremove $vg/$lv1
+ 
+@@ -109,22 +78,21 @@ lvremove $vg/$lv1
+ lvcreate --type raid1 -m1 -n $lv1 -l 8 $vg
+ lvchange -an $vg/$lv1
+ lvchange -ay $vg/$lv1
+-mkfs.xfs -f "$DM_DEV_DIR/$vg/$lv1"
+-mount "$DM_DEV_DIR/$vg/$lv1" $mnt
+-echo "hello world" > $mnt/hello
++mkfs.ext4 "$DM_DEV_DIR/$vg/$lv1"
++mount "$DM_DEV_DIR/$vg/$lv1" "$mnt"
++echo "hello world" > "$mnt/hello"
+ lvconvert --raidintegrity y $vg/$lv1
+-_wait_recalc $vg/${lv1}_rimage_0
+-_wait_recalc $vg/${lv1}_rimage_1
++aux wait_recalc $vg/${lv1}_rimage_0
++aux wait_recalc $vg/${lv1}_rimage_1
+ lvs -a -o+devices $vg
+-cat $mnt/hello | grep "hello world"
+-umount $mnt
++grep "hello world" "$mnt/hello"
++umount "$mnt"
+ lvchange -an $vg/$lv1
+ lvchange -ay $vg/$lv1
+-mount "$DM_DEV_DIR/$vg/$lv1" $mnt
+-cat $mnt/hello | grep "hello world"
+-umount $mnt
++mount "$DM_DEV_DIR/$vg/$lv1" "$mnt"
++grep "hello world" "$mnt/hello"
++umount "$mnt"
+ lvchange -an $vg/$lv1
+ lvremove $vg/$lv1
+ 
+ vgremove -ff $vg
+-
+diff --git a/test/shell/integrity-blocksize-3.sh b/test/shell/integrity-blocksize-3.sh
+index 7034bc362..d436fb234 100644
+--- a/test/shell/integrity-blocksize-3.sh
++++ b/test/shell/integrity-blocksize-3.sh
+@@ -17,38 +17,7 @@ SKIP_WITH_LVMPOLLD=1
+ aux have_integrity 1 5 0 || skip
+ 
+ mnt="mnt"
+-mkdir -p $mnt
+-
+-_sync_percent() {
+-        local checklv=$1
+-        get lv_field "$checklv" sync_percent | cut -d. -f1
+-}
+-
+-_wait_recalc() {
+-        local checklv=$1
+-
+-        for i in $(seq 1 10) ; do
+-                sync=$(_sync_percent "$checklv")
+-                echo "sync_percent is $sync"
+-
+-                if test "$sync" = "100"; then
+-                        return
+-                fi
+-
+-                sleep 1
+-        done
+-
+-        # TODO: There is some strange bug, first leg of RAID with integrity
+-        # enabled never gets in sync. I saw this in BB, but not when executing
+-        # the commands manually
+-        if test -z "$sync"; then
+-                echo "TEST\ WARNING: Resync of dm-integrity device '$checklv' failed"
+-                dmsetup status "$DM_DEV_DIR/mapper/${checklv/\//-}"
+-                exit
+-        fi
+-        echo "timeout waiting for recalc"
+-        return 1
+-}
++mkdir -p "$mnt"
+ 
+ # scsi_debug devices with 512 LBS 512 PBS
+ aux prepare_scsi_debug_dev 256
+@@ -66,19 +35,19 @@ blockdev --getpbsz "$dev2"
+ lvcreate --type raid1 -m1 -n $lv1 -l 8 $vg
+ lvchange -an $vg/$lv1
+ lvchange -ay $vg/$lv1
+-mkfs.xfs -f "$DM_DEV_DIR/$vg/$lv1"
+-mount "$DM_DEV_DIR/$vg/$lv1" $mnt
+-echo "hello world" > $mnt/hello
+-umount $mnt
++mkfs.ext4 "$DM_DEV_DIR/$vg/$lv1"
++mount "$DM_DEV_DIR/$vg/$lv1" "$mnt"
++echo "hello world" > "$mnt/hello"
++umount "$mnt"
+ lvchange -an $vg
+ lvconvert --raidintegrity y $vg/$lv1
+ lvchange -ay $vg
+-_wait_recalc $vg/${lv1}_rimage_0
+-_wait_recalc $vg/${lv1}_rimage_1
++aux wait_recalc $vg/${lv1}_rimage_0
++aux wait_recalc $vg/${lv1}_rimage_1
+ lvs -a -o+devices $vg
+-mount "$DM_DEV_DIR/$vg/$lv1" $mnt
+-cat $mnt/hello
+-umount $mnt
++mount "$DM_DEV_DIR/$vg/$lv1" "$mnt"
++cat "$mnt/hello"
++umount "$mnt"
+ lvchange -an $vg/$lv1
+ lvremove $vg/$lv1
+ 
+@@ -86,19 +55,19 @@ lvremove $vg/$lv1
+ lvcreate --type raid1 -m1 -n $lv1 -l 8 $vg
+ lvchange -an $vg/$lv1
+ lvchange -ay $vg/$lv1
+-mkfs.xfs -f "$DM_DEV_DIR/$vg/$lv1"
+-mount "$DM_DEV_DIR/$vg/$lv1" $mnt
+-echo "hello world" > $mnt/hello
+-umount $mnt
++mkfs.ext4 "$DM_DEV_DIR/$vg/$lv1"
++mount "$DM_DEV_DIR/$vg/$lv1" "$mnt"
++echo "hello world" > "$mnt/hello"
++umount "$mnt"
+ lvchange -an $vg
+ lvchange -ay $vg
+ lvconvert --raidintegrity y $vg/$lv1
+-_wait_recalc $vg/${lv1}_rimage_0
+-_wait_recalc $vg/${lv1}_rimage_1
++aux wait_recalc $vg/${lv1}_rimage_0
++aux wait_recalc $vg/${lv1}_rimage_1
+ lvs -a -o+devices $vg
+-mount "$DM_DEV_DIR/$vg/$lv1" $mnt
+-cat $mnt/hello | grep "hello world"
+-umount $mnt
++mount "$DM_DEV_DIR/$vg/$lv1" "$mnt"
++grep "hello world" "$mnt/hello"
++umount "$mnt"
+ lvchange -an $vg/$lv1
+ lvremove $vg/$lv1
+ 
+@@ -106,20 +75,20 @@ lvremove $vg/$lv1
+ lvcreate --type raid1 -m1 -n $lv1 -l 8 $vg
+ lvchange -an $vg/$lv1
+ lvchange -ay $vg/$lv1
+-mkfs.xfs -f "$DM_DEV_DIR/$vg/$lv1"
+-mount "$DM_DEV_DIR/$vg/$lv1" $mnt
+-echo "hello world" > $mnt/hello
++mkfs.ext4 "$DM_DEV_DIR/$vg/$lv1"
++mount "$DM_DEV_DIR/$vg/$lv1" "$mnt"
++echo "hello world" > "$mnt/hello"
+ lvconvert --raidintegrity y $vg/$lv1
+-_wait_recalc $vg/${lv1}_rimage_0
+-_wait_recalc $vg/${lv1}_rimage_1
++aux wait_recalc $vg/${lv1}_rimage_0
++aux wait_recalc $vg/${lv1}_rimage_1
+ lvs -a -o+devices $vg
+-cat $mnt/hello | grep "hello world"
+-umount $mnt
++grep "hello world" "$mnt/hello"
++umount "$mnt"
+ lvchange -an $vg/$lv1
+ lvchange -ay $vg/$lv1
+-mount "$DM_DEV_DIR/$vg/$lv1" $mnt
+-cat $mnt/hello | grep "hello world"
+-umount $mnt
++mount "$DM_DEV_DIR/$vg/$lv1" "$mnt"
++grep "hello world" "$mnt/hello"
++umount "$mnt"
+ lvchange -an $vg/$lv1
+ lvremove $vg/$lv1
+ 
+@@ -143,19 +112,19 @@ blockdev --getpbsz "$dev2"
+ lvcreate --type raid1 -m1 -n $lv1 -l 8 $vg
+ lvchange -an $vg/$lv1
+ lvchange -ay $vg/$lv1
+-mkfs.xfs -f "$DM_DEV_DIR/$vg/$lv1"
+-mount "$DM_DEV_DIR/$vg/$lv1" $mnt
+-echo "hello world" > $mnt/hello
+-umount $mnt
++mkfs.ext4 "$DM_DEV_DIR/$vg/$lv1"
++mount "$DM_DEV_DIR/$vg/$lv1" "$mnt"
++echo "hello world" > "$mnt/hello"
++umount "$mnt"
+ lvchange -an $vg
+ lvconvert --raidintegrity y $vg/$lv1
+ lvchange -ay $vg
+-_wait_recalc $vg/${lv1}_rimage_0
+-_wait_recalc $vg/${lv1}_rimage_1
++aux wait_recalc $vg/${lv1}_rimage_0
++aux wait_recalc $vg/${lv1}_rimage_1
+ lvs -a -o+devices $vg
+-mount "$DM_DEV_DIR/$vg/$lv1" $mnt
+-cat $mnt/hello
+-umount $mnt
++mount "$DM_DEV_DIR/$vg/$lv1" "$mnt"
++cat "$mnt/hello"
++umount "$mnt"
+ lvchange -an $vg/$lv1
+ lvremove $vg/$lv1
+ 
+@@ -163,19 +132,19 @@ lvremove $vg/$lv1
+ lvcreate --type raid1 -m1 -n $lv1 -l 8 $vg
+ lvchange -an $vg/$lv1
+ lvchange -ay $vg/$lv1
+-mkfs.xfs -f "$DM_DEV_DIR/$vg/$lv1"
+-mount "$DM_DEV_DIR/$vg/$lv1" $mnt
+-echo "hello world" > $mnt/hello
+-umount $mnt
++mkfs.ext4 "$DM_DEV_DIR/$vg/$lv1"
++mount "$DM_DEV_DIR/$vg/$lv1" "$mnt"
++echo "hello world" > "$mnt/hello"
++umount "$mnt"
+ lvchange -an $vg
+ lvchange -ay $vg
+ lvconvert --raidintegrity y $vg/$lv1
+-_wait_recalc $vg/${lv1}_rimage_0
+-_wait_recalc $vg/${lv1}_rimage_1
++aux wait_recalc $vg/${lv1}_rimage_0
++aux wait_recalc $vg/${lv1}_rimage_1
+ lvs -a -o+devices $vg
+-mount "$DM_DEV_DIR/$vg/$lv1" $mnt
+-cat $mnt/hello | grep "hello world"
+-umount $mnt
++mount "$DM_DEV_DIR/$vg/$lv1" "$mnt"
++grep "hello world" "$mnt/hello"
++umount "$mnt"
+ lvchange -an $vg/$lv1
+ lvremove $vg/$lv1
+ 
+@@ -183,20 +152,20 @@ lvremove $vg/$lv1
+ lvcreate --type raid1 -m1 -n $lv1 -l 8 $vg
+ lvchange -an $vg/$lv1
+ lvchange -ay $vg/$lv1
+-mkfs.xfs -f "$DM_DEV_DIR/$vg/$lv1"
+-mount "$DM_DEV_DIR/$vg/$lv1" $mnt
+-echo "hello world" > $mnt/hello
++mkfs.ext4 "$DM_DEV_DIR/$vg/$lv1"
++mount "$DM_DEV_DIR/$vg/$lv1" "$mnt"
++echo "hello world" > "$mnt/hello"
+ lvconvert --raidintegrity y $vg/$lv1
+-_wait_recalc $vg/${lv1}_rimage_0
+-_wait_recalc $vg/${lv1}_rimage_1
++aux wait_recalc $vg/${lv1}_rimage_0
++aux wait_recalc $vg/${lv1}_rimage_1
+ lvs -a -o+devices $vg
+-cat $mnt/hello | grep "hello world"
+-umount $mnt
++grep "hello world" "$mnt/hello"
++umount "$mnt"
+ lvchange -an $vg/$lv1
+ lvchange -ay $vg/$lv1
+-mount "$DM_DEV_DIR/$vg/$lv1" $mnt
+-cat $mnt/hello | grep "hello world"
+-umount $mnt
++mount "$DM_DEV_DIR/$vg/$lv1" "$mnt"
++grep "hello world" "$mnt/hello"
++umount "$mnt"
+ lvchange -an $vg/$lv1
+ lvremove $vg/$lv1
+ 
+@@ -220,19 +189,19 @@ blockdev --getpbsz "$dev2"
+ lvcreate --type raid1 -m1 -n $lv1 -l 8 $vg
+ lvchange -an $vg/$lv1
+ lvchange -ay $vg/$lv1
+-mkfs.xfs -f "$DM_DEV_DIR/$vg/$lv1"
+-mount "$DM_DEV_DIR/$vg/$lv1" $mnt
+-echo "hello world" > $mnt/hello
+-umount $mnt
++mkfs.ext4 "$DM_DEV_DIR/$vg/$lv1"
++mount "$DM_DEV_DIR/$vg/$lv1" "$mnt"
++echo "hello world" > "$mnt/hello"
++umount "$mnt"
+ lvchange -an $vg
+ lvconvert --raidintegrity y $vg/$lv1
+ lvchange -ay $vg
+-_wait_recalc $vg/${lv1}_rimage_0
+-_wait_recalc $vg/${lv1}_rimage_1
++aux wait_recalc $vg/${lv1}_rimage_0
++aux wait_recalc $vg/${lv1}_rimage_1
+ lvs -a -o+devices $vg
+-mount "$DM_DEV_DIR/$vg/$lv1" $mnt
+-cat $mnt/hello
+-umount $mnt
++mount "$DM_DEV_DIR/$vg/$lv1" "$mnt"
++cat "$mnt/hello"
++umount "$mnt"
+ lvchange -an $vg/$lv1
+ lvremove $vg/$lv1
+ 
+@@ -241,19 +210,19 @@ lvremove $vg/$lv1
+ lvcreate --type raid1 -m1 -n $lv1 -l 8 $vg
+ lvchange -an $vg/$lv1
+ lvchange -ay $vg/$lv1
+-mkfs.xfs -f "$DM_DEV_DIR/$vg/$lv1"
+-mount "$DM_DEV_DIR/$vg/$lv1" $mnt
+-echo "hello world" > $mnt/hello
+-umount $mnt
++mkfs.ext4 "$DM_DEV_DIR/$vg/$lv1"
++mount "$DM_DEV_DIR/$vg/$lv1" "$mnt"
++echo "hello world" > "$mnt/hello"
++umount "$mnt"
+ lvchange -an $vg
+ lvchange -ay $vg
+ lvconvert --raidintegrity y $vg/$lv1
+-_wait_recalc $vg/${lv1}_rimage_0
+-_wait_recalc $vg/${lv1}_rimage_1
++aux wait_recalc $vg/${lv1}_rimage_0
++aux wait_recalc $vg/${lv1}_rimage_1
+ lvs -a -o+devices $vg
+-mount "$DM_DEV_DIR/$vg/$lv1" $mnt
+-cat $mnt/hello | grep "hello world"
+-umount $mnt
++mount "$DM_DEV_DIR/$vg/$lv1" "$mnt"
++grep "hello world" "$mnt/hello"
++umount "$mnt"
+ lvchange -an $vg/$lv1
+ lvremove $vg/$lv1
+ 
+@@ -262,24 +231,22 @@ lvremove $vg/$lv1
+ lvcreate --type raid1 -m1 -n $lv1 -l 8 $vg
+ lvchange -an $vg/$lv1
+ lvchange -ay $vg/$lv1
+-mkfs.xfs -f "$DM_DEV_DIR/$vg/$lv1"
+-mount "$DM_DEV_DIR/$vg/$lv1" $mnt
+-echo "hello world" > $mnt/hello
++mkfs.ext4 "$DM_DEV_DIR/$vg/$lv1"
++mount "$DM_DEV_DIR/$vg/$lv1" "$mnt"
++echo "hello world" > "$mnt/hello"
+ lvconvert --raidintegrity y $vg/$lv1
+-_wait_recalc $vg/${lv1}_rimage_0
+-_wait_recalc $vg/${lv1}_rimage_1
++aux wait_recalc $vg/${lv1}_rimage_0
++aux wait_recalc $vg/${lv1}_rimage_1
+ lvs -a -o+devices $vg
+-cat $mnt/hello | grep "hello world"
+-umount $mnt
++grep "hello world" "$mnt/hello"
++umount "$mnt"
+ lvchange -an $vg/$lv1
+ lvchange -ay $vg/$lv1
+-mount "$DM_DEV_DIR/$vg/$lv1" $mnt
+-cat $mnt/hello | grep "hello world"
+-umount $mnt
++mount "$DM_DEV_DIR/$vg/$lv1" "$mnt"
++grep "hello world" "$mnt/hello"
++umount "$mnt"
+ lvchange -an $vg/$lv1
+ lvremove $vg/$lv1
+ 
+ vgremove -ff $vg
+ aux cleanup_scsi_debug_dev
+-sleep 1
+-
+diff --git a/test/shell/integrity-blocksize.sh b/test/shell/integrity-blocksize.sh
+index bf8def4ac..7749fb002 100644
+--- a/test/shell/integrity-blocksize.sh
++++ b/test/shell/integrity-blocksize.sh
+@@ -16,7 +16,7 @@ SKIP_WITH_LVMPOLLD=1
+ 
+ aux have_integrity 1 5 0 || skip
+ 
+-losetup -h | grep sector-size || skip
++losetup -h | grep sector-size || skip "Loop without sector-size support"
+ 
+ 
+ cleanup_mounted_and_teardown()
+@@ -24,24 +24,24 @@ cleanup_mounted_and_teardown()
+ 	umount "$mnt" || true
+ 	vgremove -ff $vg1 $vg2 || true
+ 
+-	test -n "${LOOP1-}" && { losetup -d "$LOOP1" || true ; }
+-	test -n "${LOOP2-}" && { losetup -d "$LOOP2" || true ; }
+-	test -n "${LOOP3-}" && { losetup -d "$LOOP3" || true ; }
+-	test -n "${LOOP4-}" && { losetup -d "$LOOP4" || true ; }
++	test -n "${LOOP1-}" && should losetup -d "$LOOP1"
++	test -n "${LOOP2-}" && should losetup -d "$LOOP2"
++	test -n "${LOOP3-}" && should losetup -d "$LOOP3"
++	test -n "${LOOP4-}" && should losetup -d "$LOOP4"
+ 
+ 	rm -f loop[abcd]
+ 	aux teardown
+ }
+ 
+ mnt="mnt"
+-mkdir -p $mnt
++mkdir -p "$mnt"
+ 
+ # Tests with fs block sizes require a libblkid version that shows BLOCK_SIZE
+ aux prepare_devs 1
+ vgcreate $vg "$dev1"
+ lvcreate -n $lv1 -l8 $vg
+-mkfs.xfs -f "$DM_DEV_DIR/$vg/$lv1"
+-blkid -c /dev/null "$DM_DEV_DIR/$vg/$lv1" | grep BLOCK_SIZE || skip
++mkfs.ext4 "$DM_DEV_DIR/$vg/$lv1"
++blkid -p "$DM_DEV_DIR/$vg/$lv1" | grep BLOCK_SIZE || skip
+ lvchange -an $vg
+ vgremove -ff $vg
+ 
+@@ -53,55 +53,49 @@ trap 'cleanup_mounted_and_teardown' EXIT
+ #truncate -s 64M loopc
+ #truncate -s 64M loopd
+ 
+-dd if=/dev/zero of=loopa bs=1M count=64 oflag=sync
+-dd if=/dev/zero of=loopb bs=1M count=64 oflag=sync
+-dd if=/dev/zero of=loopc bs=1M count=64 oflag=sync
+-dd if=/dev/zero of=loopd bs=1M count=64 oflag=sync
++dd if=/dev/zero of=loopa bs=1M count=64 conv=fdatasync
++dd if=/dev/zero of=loopb bs=1M count=64 conv=fdatasync
++dd if=/dev/zero of=loopc bs=1M count=64 conv=fdatasync
++dd if=/dev/zero of=loopd bs=1M count=64 conv=fdatasync
+ 
+ LOOP1=$(losetup -f loopa --show) || skip "Cannot find free loop device"
+ LOOP2=$(losetup -f loopb --show) || skip "Cannot find free loop device"
+ LOOP3=$(losetup -f loopc --sector-size 4096 --show) || skip "Loop cannot handle --sector-size 4096"
+ LOOP4=$(losetup -f loopd --sector-size 4096 --show) || skip "Loop cannot handle --sector-size 4096"
+ 
+-echo $LOOP1
+-echo $LOOP2
+-echo $LOOP3
+-echo $LOOP4
++echo "$LOOP1"
++echo "$LOOP2"
++echo "$LOOP3"
++echo "$LOOP4"
+ 
+-aux extend_filter "a|$LOOP1|"
+-aux extend_filter "a|$LOOP2|"
+-aux extend_filter "a|$LOOP3|"
+-aux extend_filter "a|$LOOP4|"
+-aux extend_devices "$LOOP1"
+-aux extend_devices "$LOOP2"
+-aux extend_devices "$LOOP3"
+-aux extend_devices "$LOOP4"
++aux extend_filter "a|$LOOP1|" "a|$LOOP2|" "a|$LOOP3|" "a|$LOOP4|"
++aux extend_devices "$LOOP1" "$LOOP2" "$LOOP3" "$LOOP4"
+ 
+ aux lvmconf 'devices/scan = "/dev"'
+ 
+-vgcreate $vg1 $LOOP1 $LOOP2
+-vgcreate $vg2 $LOOP3 $LOOP4
++vgcreate $vg1 -s 64k "$LOOP1" "$LOOP2"
++vgcreate $vg2 -s 64k "$LOOP3" "$LOOP4"
+ 
+ # LOOP1/LOOP2 have LBS 512 and PBS 512
+ # LOOP3/LOOP4 have LBS 4K and PBS 4K
+ 
+-blockdev --getss $LOOP1
+-blockdev --getpbsz $LOOP1
+-blockdev --getss $LOOP2
+-blockdev --getpbsz $LOOP2
+-blockdev --getss $LOOP3
+-blockdev --getpbsz $LOOP3
+-blockdev --getss $LOOP4
+-blockdev --getpbsz $LOOP4
++blockdev --getss "$LOOP1"
++blockdev --getpbsz "$LOOP1"
++blockdev --getss "$LOOP2"
++blockdev --getpbsz "$LOOP2"
++blockdev --getss "$LOOP3"
++blockdev --getpbsz "$LOOP3"
++blockdev --getss "$LOOP4"
++blockdev --getpbsz "$LOOP4"
+ 
+ # lvcreate on dev512, result 512
+ lvcreate --type raid1 -m1 --raidintegrity y -l 8 -n $lv1 $vg1
+-pvck --dump metadata $LOOP1 | grep 'block_size = 512'
++pvck --dump metadata "$LOOP1" | grep 'block_size = 512'
+ lvremove -y $vg1/$lv1
+ 
+ # lvcreate on dev4k, result 4k
+ lvcreate --type raid1 -m1 --raidintegrity y -l 8 -n $lv1 $vg2
+-pvck --dump metadata $LOOP3 | grep 'block_size = 4096'
++pvck --dump metadata "$LOOP3" | grep 'block_size = 4096'
+ lvremove -y $vg2/$lv1
+ 
+ # lvcreate --bs 512 on dev4k, result fail
+@@ -110,7 +104,7 @@ not lvcreate --type raid1 -m1 --raidintegrity y --raidintegrityblocksize 512 -l
+ # lvcreate --bs 4096 on dev512, result 4k
+ lvcreate --type raid1 -m1 --raidintegrity y --raidintegrityblocksize 4096 -l 8 -n $lv1 $vg1
+ lvs -o raidintegrityblocksize $vg1/$lv1 | grep 4096
+-pvck --dump metadata $LOOP1 | grep 'block_size = 4096'
++pvck --dump metadata "$LOOP1" | grep 'block_size = 4096'
+ lvremove -y $vg1/$lv1
+ 
+ # Test an unknown fs block size by simply not creating a fs on the lv.
+@@ -118,15 +112,15 @@ lvremove -y $vg1/$lv1
+ # lvconvert on dev512, fsunknown, result 512
+ lvcreate --type raid1 -m1 -l 8 -n $lv1 $vg1
+ # clear any residual fs so that libblkid cannot find an fs block size
+-aux wipefs_a /dev/$vg1/$lv1
++aux wipefs_a "$DM_DEV_DIR/$vg1/$lv1"
+ lvconvert --raidintegrity y $vg1/$lv1
+-pvck --dump metadata $LOOP1 | grep 'block_size = 512'
++pvck --dump metadata "$LOOP1" | grep 'block_size = 512'
+ lvremove -y $vg1/$lv1
+ 
+ # lvconvert on dev4k, fsunknown, result 4k
+ lvcreate --type raid1 -m1 -l 8 -n $lv1 $vg2
+ # clear any residual fs so that libblkid cannot find an fs block size
+-aux wipefs_a /dev/$vg2/$lv1
++aux wipefs_a "$DM_DEV_DIR//$vg2/$lv1"
+ lvconvert --raidintegrity y $vg2/$lv1
+ pvck --dump metadata $LOOP3 | grep 'block_size = 4096'
+ lvremove -y $vg2/$lv1
+@@ -134,123 +128,126 @@ lvremove -y $vg2/$lv1
+ # lvconvert --bs 4k on dev512, fsunknown, result fail
+ lvcreate --type raid1 -m1 -l 8 -n $lv1 $vg1
+ # clear any residual fs so that libblkid cannot find an fs block size
+-aux wipefs_a /dev/$vg1/$lv1
++aux wipefs_a "$DM_DEV_DIR//$vg1/$lv1"
+ not lvconvert --raidintegrity y --raidintegrityblocksize 4096 $vg1/$lv1
+ lvremove -y $vg1/$lv1
+ 
+ # lvconvert --bs 512 on dev4k, fsunknown, result fail
+ lvcreate --type raid1 -m1 -l 8 -n $lv1 $vg2
+ # clear any residual fs so that libblkid cannot find an fs block size
+-aux wipefs_a /dev/$vg2/$lv1
++aux wipefs_a "$DM_DEV_DIR//$vg2/$lv1"
+ not lvconvert --raidintegrity y --raidintegrityblocksize 512 $vg2/$lv1
+ lvremove -y $vg2/$lv1
+ 
+-# lvconvert on dev512, xfs 512, result 512
++# lvconvert on dev512, ext4 1024, result 1024
+ lvcreate --type raid1 -m1 -l 8 -n $lv1 $vg1
+-aux wipefs_a /dev/$vg1/$lv1
+-mkfs.xfs -f "$DM_DEV_DIR/$vg1/$lv1"
+-blkid -c /dev/null "$DM_DEV_DIR/$vg1/$lv1" | grep BLOCK_SIZE=\"512\"
++aux wipefs_a "$DM_DEV_DIR//$vg1/$lv1"
++mkfs.ext4 "$DM_DEV_DIR/$vg1/$lv1"
++blkid -p "$DM_DEV_DIR/$vg1/$lv1" | tee out
++grep BLOCK_SIZE=\"1024\" out
+ lvconvert --raidintegrity y $vg1/$lv1
+-blkid -c /dev/null "$DM_DEV_DIR/$vg1/$lv1" | grep BLOCK_SIZE=\"512\"
+-mount "$DM_DEV_DIR/$vg1/$lv1" $mnt
+-umount $mnt
+-pvck --dump metadata $LOOP1 | grep 'block_size = 512'
++blkid -p "$DM_DEV_DIR/$vg1/$lv1" | grep BLOCK_SIZE=\"1024\"
++mount "$DM_DEV_DIR/$vg1/$lv1" "$mnt"
++umount "$mnt"
++pvck --dump metadata "$LOOP1" | grep 'block_size = 512'
+ lvremove -y $vg1/$lv1
+ 
+-# lvconvert on dev4k, xfs 4096, result 4096
++# lvconvert on dev4k, ext4 4096, result 4096
+ lvcreate --type raid1 -m1 -l 8 -n $lv1 $vg2
+-aux wipefs_a /dev/$vg2/$lv1
+-mkfs.xfs -f "$DM_DEV_DIR/$vg2/$lv1"
+-blkid -c /dev/null "$DM_DEV_DIR/$vg2/$lv1" | grep BLOCK_SIZE=\"4096\"
++aux wipefs_a "$DM_DEV_DIR/$vg2/$lv1"
++mkfs.ext4 "$DM_DEV_DIR/$vg2/$lv1"
++blkid -p "$DM_DEV_DIR/$vg2/$lv1" | grep BLOCK_SIZE=\"4096\"
+ lvconvert --raidintegrity y $vg2/$lv1
+-blkid -c /dev/null "$DM_DEV_DIR/$vg2/$lv1" | grep BLOCK_SIZE=\"4096\"
+-mount "$DM_DEV_DIR/$vg2/$lv1" $mnt
+-umount $mnt
++blkid -p "$DM_DEV_DIR/$vg2/$lv1" | grep BLOCK_SIZE=\"4096\"
++mount "$DM_DEV_DIR/$vg2/$lv1" "$mnt"
++umount "$mnt"
+ pvck --dump metadata $LOOP3 | grep 'block_size = 4096'
+ lvremove -y $vg2/$lv1
+ 
+ # lvconvert on dev512, ext4 1024, result 1024 (LV active when adding)
+ lvcreate --type raid1 -m1 -l 8 -n $lv1 $vg1
+-aux wipefs_a /dev/$vg1/$lv1
++aux wipefs_a "$DM_DEV_DIR//$vg1/$lv1"
+ mkfs.ext4 -b 1024 "$DM_DEV_DIR/$vg1/$lv1"
+-blkid -c /dev/null "$DM_DEV_DIR/$vg1/$lv1" | grep BLOCK_SIZE=\"1024\"
++blkid -p "$DM_DEV_DIR/$vg1/$lv1" | grep BLOCK_SIZE=\"1024\"
+ lvconvert --raidintegrity y $vg1/$lv1
+-blkid -c /dev/null "$DM_DEV_DIR/$vg1/$lv1" | grep BLOCK_SIZE=\"1024\"
+-mount "$DM_DEV_DIR/$vg1/$lv1" $mnt
+-umount $mnt
+-pvck --dump metadata $LOOP1 | grep 'block_size = 512'
++blkid -p "$DM_DEV_DIR/$vg1/$lv1" | grep BLOCK_SIZE=\"1024\"
++mount "$DM_DEV_DIR/$vg1/$lv1" "$mnt"
++umount "$mnt"
++pvck --dump metadata "$LOOP1" | grep 'block_size = 512'
+ lvremove -y $vg1/$lv1
+ 
+ # lvconvert on dev512, ext4 1024, result 1024 (LV inactive when adding)
+ lvcreate --type raid1 -m1 -l 8 -n $lv1 $vg1
+-aux wipefs_a /dev/$vg1/$lv1
++aux wipefs_a "$DM_DEV_DIR//$vg1/$lv1"
+ mkfs.ext4 -b 1024 "$DM_DEV_DIR/$vg1/$lv1"
+-blkid -c /dev/null "$DM_DEV_DIR/$vg1/$lv1" | grep BLOCK_SIZE=\"1024\"
++blkid -p "$DM_DEV_DIR/$vg1/$lv1" | grep BLOCK_SIZE=\"1024\"
+ lvchange -an $vg1/$lv1
+ lvconvert --raidintegrity y $vg1/$lv1
+ lvchange -ay $vg1/$lv1
+-blkid -c /dev/null "$DM_DEV_DIR/$vg1/$lv1" | grep BLOCK_SIZE=\"1024\"
+-mount "$DM_DEV_DIR/$vg1/$lv1" $mnt
+-umount $mnt
+-pvck --dump metadata $LOOP1 | grep 'block_size = 1024'
++blkid -p "$DM_DEV_DIR/$vg1/$lv1" | grep BLOCK_SIZE=\"1024\"
++mount "$DM_DEV_DIR/$vg1/$lv1" "$mnt"
++umount "$mnt"
++pvck --dump metadata "$LOOP1" | grep 'block_size = 1024'
+ lvremove -y $vg1/$lv1
+ 
+ # lvconvert on dev4k, ext4 4096, result 4096
+ lvcreate --type raid1 -m1 -l 8 -n $lv1 $vg2
+-aux wipefs_a /dev/$vg2/$lv1
++aux wipefs_a "$DM_DEV_DIR//$vg2/$lv1"
+ mkfs.ext4 "$DM_DEV_DIR/$vg2/$lv1"
+-blkid -c /dev/null "$DM_DEV_DIR/$vg2/$lv1" | grep BLOCK_SIZE=\"4096\"
++blkid -p "$DM_DEV_DIR/$vg2/$lv1" | grep BLOCK_SIZE=\"4096\"
+ lvconvert --raidintegrity y $vg2/$lv1
+-blkid -c /dev/null "$DM_DEV_DIR/$vg2/$lv1" | grep BLOCK_SIZE=\"4096\"
+-mount "$DM_DEV_DIR/$vg2/$lv1" $mnt
+-umount $mnt
+-pvck --dump metadata $LOOP3 | grep 'block_size = 4096'
++blkid -p "$DM_DEV_DIR/$vg2/$lv1" | grep BLOCK_SIZE=\"4096\"
++mount "$DM_DEV_DIR/$vg2/$lv1" "$mnt"
++umount "$mnt"
++pvck --dump metadata "$LOOP3" | grep 'block_size = 4096'
+ lvremove -y $vg2/$lv1
+ 
+-# lvconvert --bs 512 on dev512, xfs 4096, result 512
++dm_table | grep ${PREFIX}
++
++# lvconvert --bs 512 on dev512, ext4 4096, result 512
+ lvcreate --type raid1 -m1 -l 8 -n $lv1 $vg1
+-aux wipefs_a /dev/$vg1/$lv1
+-mkfs.xfs -f -s size=4096 "$DM_DEV_DIR/$vg1/$lv1"
+-blkid -c /dev/null "$DM_DEV_DIR/$vg1/$lv1" | grep BLOCK_SIZE=\"4096\"
++aux wipefs_a "$DM_DEV_DIR//$vg1/$lv1"
++mkfs.ext4 -b 4096 "$DM_DEV_DIR/$vg1/$lv1"
++blkid -p "$DM_DEV_DIR/$vg1/$lv1" | grep BLOCK_SIZE=\"4096\"
+ lvconvert --raidintegrity y --raidintegrityblocksize 512 $vg1/$lv1
+ lvs -o raidintegrityblocksize $vg1/$lv1 | grep 512
+-blkid -c /dev/null "$DM_DEV_DIR/$vg1/$lv1" | grep BLOCK_SIZE=\"4096\"
+-mount "$DM_DEV_DIR/$vg1/$lv1" $mnt
+-umount $mnt
+-pvck --dump metadata $LOOP1 | grep 'block_size = 512'
++blkid -p "$DM_DEV_DIR/$vg1/$lv1" | grep BLOCK_SIZE=\"4096\"
++mount "$DM_DEV_DIR/$vg1/$lv1" "$mnt"
++umount "$mnt"
++pvck --dump metadata "$LOOP1" | grep 'block_size = 512'
+ lvremove -y $vg1/$lv1
+ 
+-# lvconvert --bs 1024 on dev512, xfs 4096, result 1024
++# lvconvert --bs 1024 on dev512, ext4 4096, result 1024
+ lvcreate --type raid1 -m1 -l 8 -n $lv1 $vg1
+-aux wipefs_a /dev/$vg1/$lv1
+-mkfs.xfs -f -s size=4096 "$DM_DEV_DIR/$vg1/$lv1"
+-blkid -c /dev/null "$DM_DEV_DIR/$vg1/$lv1" | grep BLOCK_SIZE=\"4096\"
++aux wipefs_a "$DM_DEV_DIR//$vg1/$lv1"
++mkfs.ext4 -b 4096 "$DM_DEV_DIR/$vg1/$lv1"
++blkid -p "$DM_DEV_DIR/$vg1/$lv1" | grep BLOCK_SIZE=\"4096\"
+ lvchange -an $vg1/$lv1
+ # lv needs to be inactive to increase LBS from 512
+ lvconvert --raidintegrity y --raidintegrityblocksize 1024 $vg1/$lv1
+ lvs -o raidintegrityblocksize $vg1/$lv1 | grep 1024
+ lvchange -ay $vg1/$lv1
+-blkid -c /dev/null "$DM_DEV_DIR/$vg1/$lv1" | grep BLOCK_SIZE=\"4096\"
+-mount "$DM_DEV_DIR/$vg1/$lv1" $mnt
+-umount $mnt
+-pvck --dump metadata $LOOP1 | grep 'block_size = 1024'
++blkid -p "$DM_DEV_DIR/$vg1/$lv1" | grep BLOCK_SIZE=\"4096\"
++mount "$DM_DEV_DIR/$vg1/$lv1" "$mnt"
++umount "$mnt"
++pvck --dump metadata "$LOOP1" | grep 'block_size = 1024'
+ lvremove -y $vg1/$lv1
+ 
+ # lvconvert --bs 512 on dev512, ext4 1024, result 512
+ lvcreate --type raid1 -m1 -l 8 -n $lv1 $vg1
+-aux wipefs_a /dev/$vg1/$lv1
++aux wipefs_a "$DM_DEV_DIR//$vg1/$lv1"
+ mkfs.ext4 -b 1024 "$DM_DEV_DIR/$vg1/$lv1"
+-blkid -c /dev/null "$DM_DEV_DIR/$vg1/$lv1" | grep BLOCK_SIZE=\"1024\"
++blkid -p "$DM_DEV_DIR/$vg1/$lv1" | grep BLOCK_SIZE=\"1024\"
+ lvconvert --raidintegrity y --raidintegrityblocksize 512 $vg1/$lv1
+-blkid -c /dev/null "$DM_DEV_DIR/$vg1/$lv1" | grep BLOCK_SIZE=\"1024\"
+-mount "$DM_DEV_DIR/$vg1/$lv1" $mnt
+-umount $mnt
+-pvck --dump metadata $LOOP1 | grep 'block_size = 512'
++blkid -p "$DM_DEV_DIR/$vg1/$lv1" | grep BLOCK_SIZE=\"1024\"
++mount "$DM_DEV_DIR/$vg1/$lv1" "$mnt"
++umount "$mnt"
++pvck --dump metadata "$LOOP1" | grep 'block_size = 512'
+ lvremove -y $vg1/$lv1
+ 
+ # lvconvert --bs 512 on dev4k, ext4 4096, result fail
+ lvcreate --type raid1 -m1 -l 8 -n $lv1 $vg2
+-aux wipefs_a /dev/$vg2/$lv1
++aux wipefs_a "$DM_DEV_DIR//$vg2/$lv1"
+ mkfs.ext4 "$DM_DEV_DIR/$vg2/$lv1"
+ not lvconvert --raidintegrity y --raidintegrityblocksize 512 $vg2/$lv1
+ lvremove -y $vg2/$lv1
+@@ -260,41 +257,43 @@ lvremove -y $vg2/$lv1
+ # TODO: lvconvert --bs 512, fsunknown, LBS 512, PBS 4k: result 512
+ # TODO: lvconvert --bs 4k, fsunknown, LBS 512, PBS 4k: result 4k
+ 
+-# lvconvert on dev512, xfs 512, result 512, (detect fs with LV inactive)
++# lvconvert on dev512, ext4 1024, result 1024, (detect fs with LV inactive)
+ lvcreate --type raid1 -m1 -l 8 -n $lv1 $vg1
+-aux wipefs_a /dev/$vg1/$lv1
+-mkfs.xfs -f "$DM_DEV_DIR/$vg1/$lv1"
+-mount "$DM_DEV_DIR/$vg1/$lv1" $mnt
+-echo "test" > $mnt/test
+-umount $mnt
+-blkid -c /dev/null "$DM_DEV_DIR/$vg1/$lv1" | grep BLOCK_SIZE=\"512\"
++aux wipefs_a "$DM_DEV_DIR//$vg1/$lv1"
++mkfs.ext4 "$DM_DEV_DIR/$vg1/$lv1"
++mount "$DM_DEV_DIR/$vg1/$lv1" "$mnt"
++echo "test" > "$mnt/test"
++umount "$mnt"
++blkid -p "$DM_DEV_DIR/$vg1/$lv1" | grep BLOCK_SIZE=\"1024\"
+ lvchange -an $vg1/$lv1
+ lvconvert --raidintegrity y $vg1/$lv1
+ lvchange -ay $vg1/$lv1
+-mount "$DM_DEV_DIR/$vg1/$lv1" $mnt
+-cat $mnt/test
+-umount $mnt
+-blkid -c /dev/null "$DM_DEV_DIR/$vg1/$lv1" | grep BLOCK_SIZE=\"512\"
+-pvck --dump metadata $LOOP1 | grep 'block_size = 512'
++mount "$DM_DEV_DIR/$vg1/$lv1" "$mnt"
++cat "$mnt/test"
++umount "$mnt"
++blkid -p "$DM_DEV_DIR/$vg1/$lv1" | grep BLOCK_SIZE=\"1024\"
++pvck --dump metadata "$LOOP1" | tee out
++grep 'block_size = 1024' out
+ lvchange -an $vg1/$lv1
+ lvremove -y $vg1/$lv1
+ 
+-# lvconvert on dev4k, xfs 4096, result 4096 (detect fs with LV inactive)
++# lvconvert on dev4k, ext4 4096, result 4096 (detect fs with LV inactive)
+ lvcreate --type raid1 -m1 -l 8 -n $lv1 $vg2
+-aux wipefs_a /dev/$vg2/$lv1
+-mkfs.xfs -f "$DM_DEV_DIR/$vg2/$lv1"
+-mount "$DM_DEV_DIR/$vg2/$lv1" $mnt
+-echo "test" > $mnt/test
+-umount $mnt
+-blkid -c /dev/null "$DM_DEV_DIR/$vg2/$lv1" | grep BLOCK_SIZE=\"4096\"
++aux wipefs_a "$DM_DEV_DIR//$vg2/$lv1"
++mkfs.ext4 "$DM_DEV_DIR/$vg2/$lv1"
++mount "$DM_DEV_DIR/$vg2/$lv1" "$mnt"
++echo "test" > "$mnt/test"
++umount "$mnt"
++blkid -p "$DM_DEV_DIR/$vg2/$lv1" | grep BLOCK_SIZE=\"4096\"
+ lvchange -an $vg2/$lv1
+ lvconvert --raidintegrity y $vg2/$lv1
+ lvchange -ay $vg2/$lv1
+-mount "$DM_DEV_DIR/$vg2/$lv1" $mnt
+-cat $mnt/test
+-umount $mnt
+-blkid -c /dev/null "$DM_DEV_DIR/$vg2/$lv1" | grep BLOCK_SIZE=\"4096\"
+-pvck --dump metadata $LOOP3 | grep 'block_size = 4096'
++mount "$DM_DEV_DIR/$vg2/$lv1" "$mnt"
++cat "$mnt/test"
++umount "$mnt"
++blkid -p "$DM_DEV_DIR/$vg2/$lv1" | grep BLOCK_SIZE=\"4096\"
++pvck --dump metadata "$LOOP3" | tee out
++grep 'block_size = 4096' out
+ lvchange -an $vg2/$lv1
+ lvremove -y $vg2/$lv1
+ 
+diff --git a/test/shell/integrity-dmeventd.sh b/test/shell/integrity-dmeventd.sh
+index 9049eb0f7..3da55ca11 100644
+--- a/test/shell/integrity-dmeventd.sh
++++ b/test/shell/integrity-dmeventd.sh
+@@ -14,13 +14,17 @@ SKIP_WITH_LVMPOLLD=1
+ 
+ . lib/inittest
+ 
+-which mkfs.xfs || skip
++which mkfs.ext4 || skip
+ aux have_integrity 1 5 0 || skip
+ # Avoid 4K ramdisk devices on older kernels
+ aux kernel_at_least  5 10 || export LVM_TEST_PREFER_BRD=0
+ 
++aux lvmconf 'activation/raid_fault_policy = "allocate"'
++
++aux prepare_dmeventd
++
+ mnt="mnt"
+-mkdir -p $mnt
++mkdir -p "$mnt"
+ 
+ aux prepare_devs 6 64
+ 
+@@ -41,7 +45,7 @@ _prepare_vg() {
+ }
+ 
+ _add_new_data_to_mnt() {
+-	mkfs.xfs -f -s size=4096 "$DM_DEV_DIR/$vg/$lv1"
++	mkfs.ext4 "$DM_DEV_DIR/$vg/$lv1"
+ 
+         mount "$DM_DEV_DIR/$vg/$lv1" $mnt
+ 
+@@ -94,51 +98,34 @@ _verify_data_on_lv() {
+         lvchange -an $vg/$lv1
+ }
+ 
+-_sync_percent() {
+-	local checklv=$1
+-	get lv_field "$checklv" sync_percent | cut -d. -f1
+-}
+-
+-_wait_recalc() {
+-	local checklv=$1
+-
+-	for i in $(seq 1 10) ; do
+-		sync=$(_sync_percent "$checklv")
+-		echo "sync_percent is $sync"
+-
+-		if test "$sync" = "100"; then
+-			return
+-		fi
+-
++# Wait for dmeventd repair to complete by checking if specified devices
++# are no longer present in lvs output. Times out after 11 seconds.
++# Usage: _wait_for_repair dev1 [dev2 ...]
++_wait_for_repair() {
++	local dev
++	touch "$mnt/touch"
++	sync
++	for i in {1..13}; do
+ 		sleep 1
++		lvs -a -o+devices $vg > out 2>&1 || true
++		for dev in "$@"; do
++			grep -q "$dev" out && continue 2
++		done
++		# All devices gone, repair completed
++		return 0
+ 	done
+-
+-	# TODO: There is some strange bug, first leg of RAID with integrity
+-	# enabled never gets in sync. I saw this in BB, but not when executing
+-	# the commands manually
+-	if test -z "$sync"; then
+-		echo "TEST\ WARNING: Resync of dm-integrity device '$checklv' failed"
+-                dmsetup status "$DM_DEV_DIR/mapper/${checklv/\//-}"
+-		exit
+-	fi
+-	echo "timeout waiting for recalc"
+-	return 1
++	die "dmeventd repair timeout - expected devices removed: $*."
+ }
+ 
+-aux lvmconf \
+-        'activation/raid_fault_policy = "allocate"'
+-
+-aux prepare_dmeventd
+-
+ # raid1, one device fails, dmeventd calls repair
+ 
+ vgcreate $SHARED $vg "$dev1" "$dev2" "$dev3" "$dev4"
+ lvcreate --type raid1 -m 2 --raidintegrity y --ignoremonitoring -l 8 -n $lv1 $vg "$dev1" "$dev2" "$dev3"
+ lvchange --monitor y $vg/$lv1
+ lvs -a -o+devices $vg
+-_wait_recalc $vg/${lv1}_rimage_0
+-_wait_recalc $vg/${lv1}_rimage_1
+-_wait_recalc $vg/${lv1}_rimage_2
++aux wait_recalc $vg/${lv1}_rimage_0
++aux wait_recalc $vg/${lv1}_rimage_1
++aux wait_recalc $vg/${lv1}_rimage_2
+ aux wait_for_sync $vg $lv1
+ _add_new_data_to_mnt
+ 
+@@ -146,8 +133,7 @@ aux disable_dev "$dev2"
+ 
+ # wait for dmeventd to call lvconvert --repair which should
+ # replace dev2 with dev4
+-sync
+-sleep 5
++_wait_for_repair "$dev2"
+ 
+ lvs -a -o+devices $vg | tee out
+ not grep "$dev2" out
+@@ -164,7 +150,7 @@ grep "$dev4" out
+ grep "$dev1" out
+ grep "$dev3" out
+ 
+-umount $mnt
++umount "$mnt"
+ lvchange -an $vg/$lv1
+ _verify_data_on_lv
+ lvremove $vg/$lv1
+@@ -176,19 +162,17 @@ vgcreate $SHARED $vg "$dev1" "$dev2" "$dev3" "$dev4" "$dev5"
+ lvcreate --type raid1 -m 2 --raidintegrity y --ignoremonitoring -l 8 -n $lv1 $vg "$dev1" "$dev2" "$dev3"
+ lvchange --monitor y $vg/$lv1
+ lvs -a -o+devices $vg
+-_wait_recalc $vg/${lv1}_rimage_0
+-_wait_recalc $vg/${lv1}_rimage_1
+-_wait_recalc $vg/${lv1}_rimage_2
++aux wait_recalc $vg/${lv1}_rimage_0
++aux wait_recalc $vg/${lv1}_rimage_1
++aux wait_recalc $vg/${lv1}_rimage_2
+ aux wait_for_sync $vg $lv1
+ _add_new_data_to_mnt
+ 
+-aux disable_dev "$dev2"
+-aux disable_dev "$dev1"
++aux disable_dev "$dev1" "$dev2"
+ 
+ # wait for dmeventd to call lvconvert --repair which should
+ # replace dev1 and dev2 with dev4 and dev5
+-sync
+-sleep 5
++_wait_for_repair "$dev1" "$dev2"
+ 
+ lvs -a -o+devices $vg | tee out
+ not grep "$dev1" out
+@@ -200,8 +184,7 @@ grep "$dev3" out
+ _add_more_data_to_mnt
+ _verify_data_on_mnt
+ 
+-aux enable_dev "$dev1"
+-aux enable_dev "$dev2"
++aux enable_dev "$dev1" "$dev2"
+ 
+ lvs -a -o+devices $vg | tee out
+ not grep "$dev1" out
+@@ -210,7 +193,7 @@ grep "$dev4" out
+ grep "$dev5" out
+ grep "$dev3" out
+ 
+-umount $mnt
++umount "$mnt"
+ lvchange -an $vg/$lv1
+ _verify_data_on_lv
+ lvremove $vg/$lv1
+@@ -222,11 +205,11 @@ vgcreate $SHARED $vg "$dev1" "$dev2" "$dev3" "$dev4" "$dev5" "$dev6"
+ lvcreate --type raid6 --raidintegrity y --ignoremonitoring -l 8 -n $lv1 $vg "$dev1" "$dev2" "$dev3" "$dev4" "$dev5"
+ lvchange --monitor y $vg/$lv1
+ lvs -a -o+devices $vg
+-_wait_recalc $vg/${lv1}_rimage_0
+-_wait_recalc $vg/${lv1}_rimage_1
+-_wait_recalc $vg/${lv1}_rimage_2
+-_wait_recalc $vg/${lv1}_rimage_3
+-_wait_recalc $vg/${lv1}_rimage_4
++aux wait_recalc $vg/${lv1}_rimage_0
++aux wait_recalc $vg/${lv1}_rimage_1
++aux wait_recalc $vg/${lv1}_rimage_2
++aux wait_recalc $vg/${lv1}_rimage_3
++aux wait_recalc $vg/${lv1}_rimage_4
+ aux wait_for_sync $vg $lv1
+ _add_new_data_to_mnt
+ 
+@@ -234,8 +217,7 @@ aux disable_dev "$dev2"
+ 
+ # wait for dmeventd to call lvconvert --repair which should
+ # replace dev2 with dev6
+-sync
+-sleep 5
++_wait_for_repair "$dev2"
+ 
+ lvs -a -o+devices $vg | tee out
+ not grep "$dev2" out
+@@ -250,7 +232,7 @@ lvs -a -o+devices $vg | tee out
+ not grep "$dev2" out
+ grep "$dev6" out
+ 
+-umount $mnt
++umount "$mnt"
+ lvchange -an $vg/$lv1
+ _verify_data_on_lv
+ lvremove $vg/$lv1
+@@ -262,10 +244,10 @@ vgcreate $SHARED $vg "$dev1" "$dev2" "$dev3" "$dev4" "$dev5"
+ lvcreate --type raid10 --raidintegrity y --ignoremonitoring -l 8 -n $lv1 $vg "$dev1" "$dev2" "$dev3" "$dev4"
+ lvchange --monitor y $vg/$lv1
+ lvs -a -o+devices $vg
+-_wait_recalc $vg/${lv1}_rimage_0
+-_wait_recalc $vg/${lv1}_rimage_1
+-_wait_recalc $vg/${lv1}_rimage_2
+-_wait_recalc $vg/${lv1}_rimage_3
++aux wait_recalc $vg/${lv1}_rimage_0
++aux wait_recalc $vg/${lv1}_rimage_1
++aux wait_recalc $vg/${lv1}_rimage_2
++aux wait_recalc $vg/${lv1}_rimage_3
+ aux wait_for_sync $vg $lv1
+ _add_new_data_to_mnt
+ 
+@@ -273,8 +255,7 @@ aux disable_dev "$dev1"
+ 
+ # wait for dmeventd to call lvconvert --repair which should
+ # replace dev1 with dev5
+-sync
+-sleep 5
++_wait_for_repair "$dev1"
+ 
+ lvs -a -o+devices $vg | tee out
+ not grep "$dev1" out
+@@ -289,9 +270,8 @@ lvs -a -o+devices $vg | tee out
+ not grep "$dev1" out
+ grep "$dev5" out
+ 
+-umount $mnt
++umount "$mnt"
+ lvchange -an $vg/$lv1
+ _verify_data_on_lv
+ lvremove $vg/$lv1
+ vgremove -ff $vg
+-
+diff --git a/test/shell/integrity-imeta-segs.sh b/test/shell/integrity-imeta-segs.sh
+index 4df1a7dda..e82e8ab8d 100755
+--- a/test/shell/integrity-imeta-segs.sh
++++ b/test/shell/integrity-imeta-segs.sh
+@@ -18,9 +18,9 @@ SKIP_WITH_LOW_SPACE=256
+ 
+ aux have_integrity 1 5 0 || skip
+ 
+-which mkfs.xfs || skip
++which mkfs.ext4 || skip
+ mnt="mnt"
+-mkdir -p $mnt
++mkdir -p "$mnt"
+ 
+ # Use awk instead of anoyingly long log out from printf
+ #printf "%0.sA" {1..16384} >> fileA
+@@ -39,7 +39,7 @@ _prepare_vg() {
+ }
+ 
+ _add_data_to_lv() {
+-        mkfs.xfs -f "$DM_DEV_DIR/$vg/$lv1"
++        mkfs.ext4 "$DM_DEV_DIR/$vg/$lv1"
+ 
+         mount "$DM_DEV_DIR/$vg/$lv1" $mnt
+ 
+@@ -76,29 +76,29 @@ _verify_data_on_lv() {
+ }
+ 
+ _replace_data_on_lv() {
+-        mount "$DM_DEV_DIR/$vg/$lv1" $mnt
+-
+-        rm $mnt/randA
+-        rm $mnt/randB
+-        rm $mnt/randC
+-        rm $mnt/1/fileA
+-        rm $mnt/1/fileB
+-        rm $mnt/1/fileC
+-        rm $mnt/2/fileA
+-        rm $mnt/2/fileB
+-        rm $mnt/2/fileC
+-
+-        cp randA $mnt
+-        cp randB $mnt
+-        cp randC $mnt
+-        cp fileA $mnt/1
+-        cp fileB $mnt/1
+-        cp fileC $mnt/1
+-        cp fileA $mnt/2
+-        cp fileB $mnt/2
+-        cp fileC $mnt/2
+-
+-        umount $mnt
++        mount "$DM_DEV_DIR/$vg/$lv1" "$mnt"
++
++        rm "$mnt/randA"
++        rm "$mnt/randB"
++        rm "$mnt/randC"
++        rm "$mnt/1/fileA"
++        rm "$mnt/1/fileB"
++        rm "$mnt/1/fileC"
++        rm "$mnt/2/fileA"
++        rm "$mnt/2/fileB"
++        rm "$mnt/2/fileC"
++
++        cp randA "$mnt"
++        cp randB "$mnt"
++        cp randC "$mnt"
++        cp fileA "$mnt/1"
++        cp fileB "$mnt/1"
++        cp fileC "$mnt/1"
++        cp fileA "$mnt/2"
++        cp fileB "$mnt/2"
++        cp fileC "$mnt/2"
++
++        umount "$mnt"
+ }
+ 
+ # Create a raid LV with multi-segment images (based on an example of vg metadata)
+diff --git a/test/shell/integrity-large.sh b/test/shell/integrity-large.sh
+index 16e28fb9d..ef6a2e23f 100644
+--- a/test/shell/integrity-large.sh
++++ b/test/shell/integrity-large.sh
+@@ -21,9 +21,9 @@ aux have_integrity 1 5 0 || skip
+ which mkfs.xfs || skip
+ 
+ mnt="mnt"
+-mkdir -p $mnt
++mkdir -p "$mnt"
+ 
+-# raid1 LV needs to be extended to 512MB to test imeta being exended
++# raid1 LV needs to be extended to 512MB to test imeta being extended
+ aux prepare_devs 4 632
+ 
+ # this test may consume lot of disk space - so make sure cleaning works
+@@ -92,42 +92,11 @@ _verify_data_on_lv() {
+ 	umount $mnt
+ }
+ 
+-_sync_percent() {
+-	local checklv=$1
+-	get lv_field "$checklv" sync_percent | cut -d. -f1
+-}
+-
+-_wait_recalc() {
+-	local checklv=$1
+-
+-	for i in $(seq 1 20) ; do
+-		sync=$(_sync_percent "$checklv")
+-		echo "sync_percent is $sync"
+-
+-		if test "$sync" = "100"; then
+-			return
+-		fi
+-
+-		sleep 1
+-	done
+-
+-	# TODO: There is some strange bug, first leg of RAID with integrity
+-	# enabled never gets in sync. I saw this in BB, but not when executing
+-	# the commands manually
+-	if test -z "$sync"; then
+-		echo "TEST\ WARNING: Resync of dm-integrity device '$checklv' failed"
+-                dmsetup status "$DM_DEV_DIR/mapper/${checklv/\//-}"
+-		exit
+-	fi
+-	echo "timeout waiting for recalc"
+-	return 1
+-}
+-
+ # lvextend to 512MB is needed for the imeta LV to
+ # be extended from 4MB to 8MB.
+ 
+ _prepare_vg
+-lvcreate --type raid1 -m1 -n $lv1 -l 8 $vg
++lvcreate --type raid1 -m1 -n $lv1 -L 300 $vg
+ lvchange -an $vg/$lv1
+ lvchange -ay $vg/$lv1
+ _add_data_to_lv
+@@ -135,8 +104,8 @@ _add_data_to_lv
+ lvchange -an $vg/$lv1
+ lvconvert --raidintegrity y $vg/$lv1
+ lvchange -ay $vg/$lv1
+-_wait_recalc $vg/${lv1}_rimage_0
+-_wait_recalc $vg/${lv1}_rimage_1
++aux wait_recalc $vg/${lv1}_rimage_0
++aux wait_recalc $vg/${lv1}_rimage_1
+ lvs -a -o+devices $vg
+ _verify_data_on_lv
+ lvchange -an $vg/$lv1
+@@ -144,8 +113,8 @@ lvextend -L 512M $vg/$lv1
+ lvs -a -o+devices $vg
+ lvchange -ay $vg/$lv1
+ _verify_data_on_lv
+-_wait_recalc $vg/${lv1}_rimage_0
+-_wait_recalc $vg/${lv1}_rimage_1
++aux wait_recalc $vg/${lv1}_rimage_0
++aux wait_recalc $vg/${lv1}_rimage_1
+ lvs -a -o+devices $vg
+ check lv_field $vg/${lv1}_rimage_0_imeta size "12.00m"
+ check lv_field $vg/${lv1}_rimage_1_imeta size "12.00m"
+@@ -166,8 +135,8 @@ lvs -a -o+devices $vg
+ # adding integrity again will allocate new 12MB imeta LVs
+ # on dev3,dev4
+ lvconvert --raidintegrity y $vg/$lv1
+-_wait_recalc $vg/${lv1}_rimage_0
+-_wait_recalc $vg/${lv1}_rimage_1
++aux wait_recalc $vg/${lv1}_rimage_0
++aux wait_recalc $vg/${lv1}_rimage_1
+ lvs -a -o+devices $vg
+ check lv_field $vg/${lv1}_rimage_0_imeta size "20.00m"
+ check lv_field $vg/${lv1}_rimage_1_imeta size "20.00m"
+@@ -177,7 +146,7 @@ lvremove $vg/$lv1
+ 
+ # As the test doesn't wait for full resync
+ # delay legs so not all data need to be written.
+-aux delay_dev "$dev1" 1000 0 "$(( $(get first_extent_sector "$dev1") + 16000 )):1200000"
++aux delay_dev "$dev1" 400 0 "$(( $(get first_extent_sector "$dev1") + 16000 )):1200000"
+ aux delay_dev "$dev2" 0 10 "$(( $(get first_extent_sector "$dev2") + 16000 )):1200000"
+ 
+ 
+diff --git a/test/shell/integrity-misc.sh b/test/shell/integrity-misc.sh
+index e6c108a0f..dee1f8656 100644
+--- a/test/shell/integrity-misc.sh
++++ b/test/shell/integrity-misc.sh
+@@ -14,13 +14,13 @@ SKIP_WITH_LVMPOLLD=1
+ 
+ . lib/inittest
+ 
+-which mkfs.xfs || skip
++which mkfs.ext4 || skip
+ aux have_integrity 1 5 0 || skip
+ # Avoid 4K ramdisk devices on older kernels
+ aux kernel_at_least  5 10 || export LVM_TEST_PREFER_BRD=0
+ 
+ mnt="mnt"
+-mkdir -p $mnt
++mkdir -p "$mnt"
+ 
+ aux prepare_devs 5 64
+ 
+@@ -41,7 +41,7 @@ _prepare_vg() {
+ }
+ 
+ _add_new_data_to_mnt() {
+-        mkfs.xfs -f "$DM_DEV_DIR/$vg/$lv1"
++        mkfs.ext4 "$DM_DEV_DIR/$vg/$lv1"
+ 
+         mount "$DM_DEV_DIR/$vg/$lv1" $mnt
+ 
+@@ -94,49 +94,18 @@ _verify_data_on_lv() {
+         lvchange -an $vg/$lv1
+ }
+ 
+-_sync_percent() {
+-	local checklv=$1
+-	get lv_field "$checklv" sync_percent | cut -d. -f1
+-}
+-
+-_wait_sync() {
+-	local checklv=$1
+-
+-	for i in $(seq 1 10) ; do
+-		sync=$(_sync_percent "$checklv")
+-		echo "sync_percent is $sync"
+-
+-		if test "$sync" = "100"; then
+-			return
+-		fi
+-
+-		sleep 1
+-	done
+-
+-	# TODO: There is some strange bug, first leg of RAID with integrity
+-	# enabled never gets in sync. I saw this in BB, but not when executing
+-	# the commands manually
+-	if test -z "$sync"; then
+-		echo "TEST\ WARNING: Resync of dm-integrity device '$checklv' failed"
+-                dmsetup status "$DM_DEV_DIR/mapper/${checklv/\//-}"
+-		exit
+-	fi
+-	echo "timeout waiting for recalc"
+-	return 1
+-}
+-
+ # lvrename
+ _prepare_vg
+ lvcreate --type raid1 -m1 --raidintegrity y -n $lv1 -l 8 $vg
+-_wait_sync $vg/${lv1}_rimage_0
+-_wait_sync $vg/${lv1}_rimage_1
+-_wait_sync $vg/$lv1
++aux wait_recalc $vg/${lv1}_rimage_0
++aux wait_recalc $vg/${lv1}_rimage_1
++aux wait_recalc $vg/$lv1
+ _add_new_data_to_mnt
+-umount $mnt
++umount "$mnt"
+ lvrename $vg/$lv1 $vg/$lv2
+-mount "$DM_DEV_DIR/$vg/$lv2" $mnt
++mount "$DM_DEV_DIR/$vg/$lv2" "$mnt"
+ _verify_data_on_mnt
+-umount $mnt
++umount "$mnt"
+ lvchange -an $vg/$lv2
+ lvremove $vg/$lv2
+ vgremove -ff $vg
+@@ -146,9 +115,9 @@ vgremove -ff $vg
+ # lv must be active
+ _prepare_vg
+ lvcreate --type raid1 -m1 --raidintegrity y -n $lv1 -l 8 $vg "$dev1" "$dev2"
+-_wait_sync $vg/${lv1}_rimage_0
+-_wait_sync $vg/${lv1}_rimage_1
+-_wait_sync $vg/$lv1
++aux wait_recalc $vg/${lv1}_rimage_0
++aux wait_recalc $vg/${lv1}_rimage_1
++aux wait_recalc $vg/$lv1
+ lvs -o raidintegritymode $vg/$lv1 | grep journal
+ _add_new_data_to_mnt
+ lvconvert --replace "$dev1" $vg/$lv1 "$dev3"
+@@ -159,7 +128,7 @@ grep "$dev3" out
+ not grep "$dev1" out
+ _add_more_data_to_mnt
+ _verify_data_on_mnt
+-umount $mnt
++umount "$mnt"
+ lvchange -an $vg/$lv1
+ _verify_data_on_lv
+ lvremove $vg/$lv1
+@@ -169,9 +138,9 @@ vgremove -ff $vg
+ # same as prev but with bitmap mode
+ _prepare_vg
+ lvcreate --type raid1 -m1 --raidintegrity y --raidintegritymode bitmap -n $lv1 -l 8 $vg "$dev1" "$dev2"
+-_wait_sync $vg/${lv1}_rimage_0
+-_wait_sync $vg/${lv1}_rimage_1
+-_wait_sync $vg/$lv1
++aux wait_recalc $vg/${lv1}_rimage_0
++aux wait_recalc $vg/${lv1}_rimage_1
++aux wait_recalc $vg/$lv1
+ lvs -o raidintegritymode $vg/$lv1 | grep bitmap
+ _add_new_data_to_mnt
+ lvconvert --replace "$dev1" $vg/$lv1 "$dev3"
+@@ -182,7 +151,7 @@ grep "$dev3" out
+ not grep "$dev1" out
+ _add_more_data_to_mnt
+ _verify_data_on_mnt
+-umount $mnt
++umount "$mnt"
+ lvchange -an $vg/$lv1
+ _verify_data_on_lv
+ lvremove $vg/$lv1
+@@ -194,9 +163,9 @@ vgremove -ff $vg
+ # (like lvconvert --replace does for a dev that's not missing).
+ _prepare_vg
+ lvcreate --type raid1 -m1 --raidintegrity y -n $lv1 -l 8 $vg "$dev1" "$dev2"
+-_wait_sync $vg/${lv1}_rimage_0
+-_wait_sync $vg/${lv1}_rimage_1
+-_wait_sync $vg/$lv1
++aux wait_recalc $vg/${lv1}_rimage_0
++aux wait_recalc $vg/${lv1}_rimage_1
++aux wait_recalc $vg/$lv1
+ _add_new_data_to_mnt
+ aux disable_dev "$dev2"
+ lvs -a -o+devices $vg > out
+@@ -209,7 +178,7 @@ not grep "$dev2" out
+ not grep unknown out
+ _add_more_data_to_mnt
+ _verify_data_on_mnt
+-umount $mnt
++umount "$mnt"
+ lvchange -an $vg/$lv1
+ lvremove $vg/$lv1
+ aux enable_dev "$dev2"
+@@ -223,11 +192,11 @@ vgremove -ff $vg
+ 
+ _prepare_vg
+ lvcreate --type raid1 -m1 --raidintegrity y -n $lv1 -l 8 $vg "$dev1" "$dev2"
+-_wait_sync $vg/${lv1}_rimage_0
+-_wait_sync $vg/${lv1}_rimage_1
+-_wait_sync $vg/$lv1
++aux wait_recalc $vg/${lv1}_rimage_0
++aux wait_recalc $vg/${lv1}_rimage_1
++aux wait_recalc $vg/$lv1
+ _add_new_data_to_mnt
+-umount $mnt
++umount "$mnt"
+ lvchange -an $vg/$lv1
+ aux disable_dev "$dev2"
+ lvs -a -o+devices $vg
+@@ -236,10 +205,35 @@ not lvchange -ay --activationmode degraded $vg/$lv1
+ not lvchange -ay --activationmode partial $vg/$lv1
+ lvconvert --raidintegrity n $vg/$lv1
+ lvchange -ay --activationmode degraded $vg/$lv1
+-mount "$DM_DEV_DIR/$vg/$lv1" $mnt
++mount "$DM_DEV_DIR/$vg/$lv1" "$mnt"
++_add_more_data_to_mnt
++_verify_data_on_mnt
++umount "$mnt"
++lvchange -an $vg/$lv1
++lvremove $vg/$lv1
++aux enable_dev "$dev2"
++vgremove -ff $vg
++
++# When disks for raid images are missing, vgreduce --removemissing --force
++# should remove the missing images from the raid LV.
++_prepare_vg
++lvcreate --type raid1 -m2 --raidintegrity y -n $lv1 -l 8 $vg "$dev1" "$dev2" "$dev3"
++aux wait_recalc $vg/${lv1}_rimage_0
++aux wait_recalc $vg/${lv1}_rimage_1
++aux wait_recalc $vg/${lv1}_rimage_2
++aux wait_recalc $vg/$lv1
++_add_new_data_to_mnt
++aux disable_dev "$dev2"
++lvs -a -o+devices,segtype $vg |tee out
++# The vgreduce uses error target for missing image
++vgreduce --removemissing --force $vg
++lvs -a -o+devices,segtype $vg |tee out
++cat out
++not grep "$dev2" out
++grep error out
+ _add_more_data_to_mnt
+ _verify_data_on_mnt
+-umount $mnt
++umount "$mnt"
+ lvchange -an $vg/$lv1
+ lvremove $vg/$lv1
+ aux enable_dev "$dev2"
+diff --git a/test/shell/integrity.sh b/test/shell/integrity.sh
+index 293cde84a..608dac367 100644
+--- a/test/shell/integrity.sh
++++ b/test/shell/integrity.sh
+@@ -14,27 +14,28 @@ SKIP_WITH_LVMPOLLD=1
+ 
+ . lib/inittest
+ 
+-which mkfs.xfs || skip
+-which xfs_growfs || skip
++test "${LVM_VALGRIND:-0}" -eq 0 || skip # too slow test for valgrind
++which mkfs.ext4 || skip
++which resize2fs || skip
+ aux have_integrity 1 5 0 || skip
+ # Avoid 4K ramdisk devices on older kernels
+ aux kernel_at_least  5 10 || export LVM_TEST_PREFER_BRD=0
+ 
+ mnt="mnt"
+-mkdir -p $mnt
++mkdir -p "$mnt"
+ 
+ aux prepare_devs 5 64
+ 
+ # Use awk instead of anoyingly long log out from printf
+ #printf "%0.sA" {1..16384} >> fileA
+ awk 'BEGIN { while (z++ < 16384) printf "A" }' > fileA
+-awk 'BEGIN { while (z++ < 16384) printf "B" }' > fileB
++awk 'BEGIN { while (z++ < 4096) printf "B" ; while (z++ < 16384) printf "b" }' > fileB
+ awk 'BEGIN { while (z++ < 16384) printf "C" }' > fileC
+ 
+ # generate random data
+-dd if=/dev/urandom of=randA bs=512K count=2
+-dd if=/dev/urandom of=randB bs=512K count=3
+-dd if=/dev/urandom of=randC bs=512K count=4
++dd if=/dev/urandom of=randA bs=512K count=2 2>/dev/null
++dd if=/dev/urandom of=randB bs=512K count=3 2>/dev/null
++dd if=/dev/urandom of=randC bs=512K count=4 2>/dev/null
+ 
+ _prepare_vg() {
+ 	# zero devs so we are sure to find the correct file data
+@@ -49,18 +50,18 @@ _prepare_vg() {
+ }
+ 
+ _test_fs_with_read_repair() {
+-	mkfs.xfs -f -s size=4096 "$DM_DEV_DIR/$vg/$lv1"
++	mkfs.ext4 -b 4096 "$DM_DEV_DIR/$vg/$lv1"
+ 
+-	mount "$DM_DEV_DIR/$vg/$lv1" $mnt
++	mount "$DM_DEV_DIR/$vg/$lv1" "$mnt"
+ 
+-	cp randA $mnt
+-	cp randB $mnt
+-	cp randC $mnt
+-	cp fileA $mnt
+-	cp fileB $mnt
+-	cp fileC $mnt
++	cp randA "$mnt"
++	cp randB "$mnt"
++	cp randC "$mnt"
++	cp fileA "$mnt"
++	cp fileB "$mnt"
++	cp fileC "$mnt"
+ 
+-	umount $mnt
++	umount "$mnt"
+ 	lvchange -an $vg/$lv1
+ 
+ 	for dev in "$@"; do
+@@ -74,15 +75,15 @@ _test_fs_with_read_repair() {
+ 
+ 	lvchange -ay $vg/$lv1
+ 
+-	mount "$DM_DEV_DIR/$vg/$lv1" $mnt
+-	cmp -b $mnt/fileA fileA
+-	cmp -b $mnt/fileB fileB
+-	cmp -b $mnt/fileC fileC
+-	umount $mnt
++	mount "$DM_DEV_DIR/$vg/$lv1" "$mnt"
++	cmp -b "$mnt/fileA" fileA
++	cmp -b "$mnt/fileB" fileB
++	cmp -b "$mnt/fileC" fileC
++	umount "$mnt"
+ }
+ 
+ _add_new_data_to_mnt() {
+-	mkfs.xfs -f -s size=4096 "$DM_DEV_DIR/$vg/$lv1"
++	mkfs.ext4 -b 4096 "$DM_DEV_DIR/$vg/$lv1"
+ 
+ 	mount "$DM_DEV_DIR/$vg/$lv1" $mnt
+ 
+@@ -135,45 +136,16 @@ _verify_data_on_lv() {
+ 	lvchange -an $vg/$lv1
+ }
+ 
+-_sync_percent() {
+-	local checklv=$1
+-	get lv_field "$checklv" sync_percent | cut -d. -f1
+-}
+-
+-_wait_recalc() {
+-	local checklv=$1
+-
+-	for i in $(seq 1 10) ; do
+-		sync=$(_sync_percent "$checklv")
+-		echo "sync_percent is $sync"
+-
+-		if test "$sync" = "100"; then
+-			return
+-		fi
+-
+-		sleep 1
+-	done
+-
+-	# TODO: There is some strange bug, first leg of RAID with integrity
+-	# enabled never gets in sync. I saw this in BB, but not when executing
+-	# the commands manually
+-	if test -z "$sync"; then
+-		echo "TEST\ WARNING: Resync of dm-integrity device '$checklv' failed"
+-                dmsetup status "$DM_DEV_DIR/mapper/${checklv/\//-}"
+-		exit
+-	fi
+-	echo "timeout waiting for recalc"
+-	return 1
+-}
+-
+ # Test corrupting data on an image and verifying that
+ # it is detected by integrity and corrected by raid.
+ 
+ _prepare_vg
+ lvcreate --type raid1 -m1 --raidintegrity y -n $lv1 -l 8 $vg "$dev1" "$dev2"
+-_wait_recalc $vg/${lv1}_rimage_0
+-_wait_recalc $vg/${lv1}_rimage_1
+-_wait_recalc $vg/$lv1
++lvs -a -o name,segtype,devices,sync_percent $vg
++aux wait_recalc $vg/${lv1}_rimage_0
++aux wait_recalc $vg/${lv1}_rimage_1
++aux wait_recalc $vg/$lv1
++lvchange $vg/$lv1 --writemostly "$dev2"
+ _test_fs_with_read_repair "$dev1"
+ lvs -o integritymismatches $vg/${lv1}_rimage_0 |tee mismatch
+ not grep 0 mismatch
+@@ -186,10 +158,13 @@ vgremove -ff $vg
+ 
+ _prepare_vg
+ lvcreate --type raid1 -m2 --raidintegrity y -n $lv1 -l 8 $vg "$dev1" "$dev2" "$dev3"
+-_wait_recalc $vg/${lv1}_rimage_0
+-_wait_recalc $vg/${lv1}_rimage_1
+-_wait_recalc $vg/${lv1}_rimage_2
+-_wait_recalc $vg/$lv1
++lvs -a -o name,segtype,devices,sync_percent $vg
++aux wait_recalc $vg/${lv1}_rimage_0
++aux wait_recalc $vg/${lv1}_rimage_1
++aux wait_recalc $vg/${lv1}_rimage_2
++aux wait_recalc $vg/$lv1
++lvchange $vg/$lv1 --writemostly "$dev2"
++lvchange $vg/$lv1 --writemostly "$dev3"
+ _test_fs_with_read_repair "$dev1" "$dev2"
+ lvs -o integritymismatches $vg/${lv1}_rimage_0 |tee mismatch
+ not grep 0 mismatch
+@@ -201,11 +176,12 @@ lvremove $vg/$lv1
+ vgremove -ff $vg
+ 
+ _prepare_vg
+-lvcreate --type raid4 --raidintegrity y -n $lv1 -l 8 $vg "$dev1" "$dev2" "$dev3"
+-_wait_recalc $vg/${lv1}_rimage_0
+-_wait_recalc $vg/${lv1}_rimage_1
+-_wait_recalc $vg/${lv1}_rimage_2
+-_wait_recalc $vg/$lv1
++lvcreate --type raid4 --raidintegrity y -n $lv1 -I 4K -l 8 $vg "$dev1" "$dev2" "$dev3"
++lvs -a -o name,segtype,devices,sync_percent $vg
++aux wait_recalc $vg/${lv1}_rimage_0
++aux wait_recalc $vg/${lv1}_rimage_1
++aux wait_recalc $vg/${lv1}_rimage_2
++aux wait_recalc $vg/$lv1
+ _test_fs_with_read_repair "$dev1" "$dev2" "$dev3"
+ lvs -o integritymismatches $vg/${lv1}_rimage_0
+ lvs -o integritymismatches $vg/${lv1}_rimage_1
+@@ -218,11 +194,12 @@ lvremove $vg/$lv1
+ vgremove -ff $vg
+ 
+ _prepare_vg
+-lvcreate --type raid5 --raidintegrity y -n $lv1 -l 8 $vg "$dev1" "$dev2" "$dev3"
+-_wait_recalc $vg/${lv1}_rimage_0
+-_wait_recalc $vg/${lv1}_rimage_1
+-_wait_recalc $vg/${lv1}_rimage_2
+-_wait_recalc $vg/$lv1
++lvcreate --type raid5 --raidintegrity y -n $lv1 -I 4K -l 8 $vg "$dev1" "$dev2" "$dev3"
++lvs -a -o name,segtype,devices,sync_percent $vg
++aux wait_recalc $vg/${lv1}_rimage_0
++aux wait_recalc $vg/${lv1}_rimage_1
++aux wait_recalc $vg/${lv1}_rimage_2
++aux wait_recalc $vg/$lv1
+ _test_fs_with_read_repair "$dev1" "$dev2" "$dev3"
+ lvs -o integritymismatches $vg/${lv1}_rimage_0
+ lvs -o integritymismatches $vg/${lv1}_rimage_1
+@@ -235,13 +212,14 @@ lvremove $vg/$lv1
+ vgremove -ff $vg
+ 
+ _prepare_vg
+-lvcreate --type raid6 --raidintegrity y -n $lv1 -l 8 $vg "$dev1" "$dev2" "$dev3" "$dev4" "$dev5"
+-_wait_recalc $vg/${lv1}_rimage_0
+-_wait_recalc $vg/${lv1}_rimage_1
+-_wait_recalc $vg/${lv1}_rimage_2
+-_wait_recalc $vg/${lv1}_rimage_3
+-_wait_recalc $vg/${lv1}_rimage_4
+-_wait_recalc $vg/$lv1
++lvcreate --type raid6 --raidintegrity y -n $lv1 -I 4K -l 8 $vg "$dev1" "$dev2" "$dev3" "$dev4" "$dev5"
++lvs -a -o name,segtype,devices,sync_percent $vg
++aux wait_recalc $vg/${lv1}_rimage_0
++aux wait_recalc $vg/${lv1}_rimage_1
++aux wait_recalc $vg/${lv1}_rimage_2
++aux wait_recalc $vg/${lv1}_rimage_3
++aux wait_recalc $vg/${lv1}_rimage_4
++aux wait_recalc $vg/$lv1
+ _test_fs_with_read_repair "$dev1" "$dev2" "$dev3" "$dev4" "$dev5"
+ lvs -o integritymismatches $vg/${lv1}_rimage_0
+ lvs -o integritymismatches $vg/${lv1}_rimage_1
+@@ -257,18 +235,21 @@ vgremove -ff $vg
+ 
+ _prepare_vg
+ lvcreate --type raid10 --raidintegrity y -n $lv1 -l 8 $vg "$dev1" "$dev2" "$dev3" "$dev4"
+-_wait_recalc $vg/${lv1}_rimage_0
+-_wait_recalc $vg/${lv1}_rimage_1
+-_wait_recalc $vg/${lv1}_rimage_2
+-_wait_recalc $vg/${lv1}_rimage_3
+-_wait_recalc $vg/$lv1
++lvs -a -o name,segtype,devices,sync_percent $vg
++aux wait_recalc $vg/${lv1}_rimage_0
++aux wait_recalc $vg/${lv1}_rimage_1
++aux wait_recalc $vg/${lv1}_rimage_2
++aux wait_recalc $vg/${lv1}_rimage_3
++aux wait_recalc $vg/$lv1
+ _test_fs_with_read_repair "$dev1" "$dev3"
+ lvs -o integritymismatches $vg/${lv1}_rimage_0
+ lvs -o integritymismatches $vg/${lv1}_rimage_1
+ lvs -o integritymismatches $vg/${lv1}_rimage_2
+ lvs -o integritymismatches $vg/${lv1}_rimage_3
+-lvs -o integritymismatches $vg/$lv1 |tee mismatch
+-not grep 0 mismatch
++# raid may read from a non-corrupted image, so we can't
++# be sure that mismatches were detected.
++# lvs -o integritymismatches $vg/$lv1 |tee mismatch
++# not grep 0 mismatch
+ lvchange -an $vg/$lv1
+ lvconvert --raidintegrity n $vg/$lv1
+ lvremove $vg/$lv1
+@@ -278,14 +259,15 @@ vgremove -ff $vg
+ 
+ _prepare_vg
+ lvcreate --type raid1 -m1 --raidintegrity y -n $lv1 -l 8 $vg
+-_wait_recalc $vg/${lv1}_rimage_0
+-_wait_recalc $vg/${lv1}_rimage_1
+-_wait_recalc $vg/$lv1
++lvs -a -o name,segtype,devices,sync_percent $vg
++aux wait_recalc $vg/${lv1}_rimage_0
++aux wait_recalc $vg/${lv1}_rimage_1
++aux wait_recalc $vg/$lv1
+ _add_new_data_to_mnt
+ lvconvert --raidintegrity n $vg/$lv1
+ _add_more_data_to_mnt
+ _verify_data_on_mnt
+-umount $mnt
++umount "$mnt"
+ lvchange -an $vg/$lv1
+ _verify_data_on_lv
+ lvremove $vg/$lv1
+@@ -293,15 +275,16 @@ vgremove -ff $vg
+ 
+ _prepare_vg
+ lvcreate --type raid4 --raidintegrity y -n $lv1 -l 8 $vg
+-_wait_recalc $vg/${lv1}_rimage_0
+-_wait_recalc $vg/${lv1}_rimage_1
+-_wait_recalc $vg/${lv1}_rimage_2
+-_wait_recalc $vg/$lv1
++lvs -a -o name,segtype,devices,sync_percent $vg
++aux wait_recalc $vg/${lv1}_rimage_0
++aux wait_recalc $vg/${lv1}_rimage_1
++aux wait_recalc $vg/${lv1}_rimage_2
++aux wait_recalc $vg/$lv1
+ _add_new_data_to_mnt
+ lvconvert --raidintegrity n $vg/$lv1
+ _add_more_data_to_mnt
+ _verify_data_on_mnt
+-umount $mnt
++umount "$mnt"
+ lvchange -an $vg/$lv1
+ _verify_data_on_lv
+ lvremove $vg/$lv1
+@@ -309,15 +292,16 @@ vgremove -ff $vg
+ 
+ _prepare_vg
+ lvcreate --type raid5 --raidintegrity y -n $lv1 -l 8 $vg
+-_wait_recalc $vg/${lv1}_rimage_0
+-_wait_recalc $vg/${lv1}_rimage_1
+-_wait_recalc $vg/${lv1}_rimage_2
+-_wait_recalc $vg/$lv1
++lvs -a -o name,segtype,devices,sync_percent $vg
++aux wait_recalc $vg/${lv1}_rimage_0
++aux wait_recalc $vg/${lv1}_rimage_1
++aux wait_recalc $vg/${lv1}_rimage_2
++aux wait_recalc $vg/$lv1
+ _add_new_data_to_mnt
+ lvconvert --raidintegrity n $vg/$lv1
+ _add_more_data_to_mnt
+ _verify_data_on_mnt
+-umount $mnt
++umount "$mnt"
+ lvchange -an $vg/$lv1
+ _verify_data_on_lv
+ lvremove $vg/$lv1
+@@ -325,17 +309,18 @@ vgremove -ff $vg
+ 
+ _prepare_vg
+ lvcreate --type raid6 --raidintegrity y -n $lv1 -l 8 $vg
+-_wait_recalc $vg/${lv1}_rimage_0
+-_wait_recalc $vg/${lv1}_rimage_1
+-_wait_recalc $vg/${lv1}_rimage_2
+-_wait_recalc $vg/${lv1}_rimage_3
+-_wait_recalc $vg/${lv1}_rimage_4
+-_wait_recalc $vg/$lv1
++lvs -a -o name,segtype,devices,sync_percent $vg
++aux wait_recalc $vg/${lv1}_rimage_0
++aux wait_recalc $vg/${lv1}_rimage_1
++aux wait_recalc $vg/${lv1}_rimage_2
++aux wait_recalc $vg/${lv1}_rimage_3
++aux wait_recalc $vg/${lv1}_rimage_4
++aux wait_recalc $vg/$lv1
+ _add_new_data_to_mnt
+ lvconvert --raidintegrity n $vg/$lv1
+ _add_more_data_to_mnt
+ _verify_data_on_mnt
+-umount $mnt
++umount "$mnt"
+ lvchange -an $vg/$lv1
+ _verify_data_on_lv
+ lvremove $vg/$lv1
+@@ -343,14 +328,15 @@ vgremove -ff $vg
+ 
+ _prepare_vg
+ lvcreate --type raid10 --raidintegrity y -n $lv1 -l 8 $vg
+-_wait_recalc $vg/${lv1}_rimage_0
+-_wait_recalc $vg/${lv1}_rimage_1
+-_wait_recalc $vg/$lv1
++lvs -a -o name,segtype,devices,sync_percent $vg
++aux wait_recalc $vg/${lv1}_rimage_0
++aux wait_recalc $vg/${lv1}_rimage_1
++aux wait_recalc $vg/$lv1
+ _add_new_data_to_mnt
+ lvconvert --raidintegrity n $vg/$lv1
+ _add_more_data_to_mnt
+ _verify_data_on_mnt
+-umount $mnt
++umount "$mnt"
+ lvchange -an $vg/$lv1
+ _verify_data_on_lv
+ lvremove $vg/$lv1
+@@ -360,14 +346,15 @@ vgremove -ff $vg
+ 
+ _prepare_vg
+ lvcreate --type raid1 -m1 -n $lv1 -l 8 $vg
+-_wait_recalc $vg/$lv1
++lvs -a -o name,segtype,devices,sync_percent $vg
++aux wait_recalc $vg/$lv1
+ _add_new_data_to_mnt
+ lvconvert --raidintegrity y $vg/$lv1
+-_wait_recalc $vg/${lv1}_rimage_0
+-_wait_recalc $vg/${lv1}_rimage_1
++aux wait_recalc $vg/${lv1}_rimage_0
++aux wait_recalc $vg/${lv1}_rimage_1
+ _add_more_data_to_mnt
+ _verify_data_on_mnt
+-umount $mnt
++umount "$mnt"
+ lvchange -an $vg/$lv1
+ _verify_data_on_lv
+ lvremove $vg/$lv1
+@@ -375,14 +362,15 @@ vgremove -ff $vg
+ 
+ _prepare_vg
+ lvcreate --type raid4 -n $lv1 -l 8 $vg
+-_wait_recalc $vg/$lv1
++lvs -a -o name,segtype,devices,sync_percent $vg
++aux wait_recalc $vg/$lv1
+ _add_new_data_to_mnt
+ lvconvert --raidintegrity y $vg/$lv1
+-_wait_recalc $vg/${lv1}_rimage_0
+-_wait_recalc $vg/${lv1}_rimage_1
++aux wait_recalc $vg/${lv1}_rimage_0
++aux wait_recalc $vg/${lv1}_rimage_1
+ _add_more_data_to_mnt
+ _verify_data_on_mnt
+-umount $mnt
++umount "$mnt"
+ lvchange -an $vg/$lv1
+ _verify_data_on_lv
+ lvremove $vg/$lv1
+@@ -390,14 +378,15 @@ vgremove -ff $vg
+ 
+ _prepare_vg
+ lvcreate --type raid5 -n $lv1 -l 8 $vg
+-_wait_recalc $vg/$lv1
++lvs -a -o name,segtype,devices,sync_percent $vg
++aux wait_recalc $vg/$lv1
+ _add_new_data_to_mnt
+ lvconvert --raidintegrity y $vg/$lv1
+-_wait_recalc $vg/${lv1}_rimage_0
+-_wait_recalc $vg/${lv1}_rimage_1
++aux wait_recalc $vg/${lv1}_rimage_0
++aux wait_recalc $vg/${lv1}_rimage_1
+ _add_more_data_to_mnt
+ _verify_data_on_mnt
+-umount $mnt
++umount "$mnt"
+ lvchange -an $vg/$lv1
+ _verify_data_on_lv
+ lvremove $vg/$lv1
+@@ -405,19 +394,15 @@ vgremove -ff $vg
+ 
+ _prepare_vg
+ lvcreate --type raid6 -n $lv1 -l 8 $vg
+-_wait_recalc $vg/${lv1}_rimage_0
+-_wait_recalc $vg/${lv1}_rimage_1
+-_wait_recalc $vg/${lv1}_rimage_2
+-_wait_recalc $vg/${lv1}_rimage_3
+-_wait_recalc $vg/${lv1}_rimage_4
+-_wait_recalc $vg/$lv1
++lvs -a -o name,segtype,devices,sync_percent $vg
++aux wait_recalc $vg/$lv1
+ _add_new_data_to_mnt
+ lvconvert --raidintegrity y $vg/$lv1
+-_wait_recalc $vg/${lv1}_rimage_0
+-_wait_recalc $vg/${lv1}_rimage_1
++aux wait_recalc $vg/${lv1}_rimage_0
++aux wait_recalc $vg/${lv1}_rimage_1
+ _add_more_data_to_mnt
+ _verify_data_on_mnt
+-umount $mnt
++umount "$mnt"
+ lvchange -an $vg/$lv1
+ _verify_data_on_lv
+ lvremove $vg/$lv1
+@@ -425,14 +410,15 @@ vgremove -ff $vg
+ 
+ _prepare_vg
+ lvcreate --type raid10 -n $lv1 -l 8 $vg
+-_wait_recalc $vg/$lv1
++lvs -a -o name,segtype,devices,sync_percent $vg
++aux wait_recalc $vg/$lv1
+ _add_new_data_to_mnt
+ lvconvert --raidintegrity y $vg/$lv1
+-_wait_recalc $vg/${lv1}_rimage_0
+-_wait_recalc $vg/${lv1}_rimage_1
++aux wait_recalc $vg/${lv1}_rimage_0
++aux wait_recalc $vg/${lv1}_rimage_1
+ _add_more_data_to_mnt
+ _verify_data_on_mnt
+-umount $mnt
++umount "$mnt"
+ lvchange -an $vg/$lv1
+ _verify_data_on_lv
+ lvremove $vg/$lv1
+@@ -442,23 +428,23 @@ vgremove -ff $vg
+ 
+ _prepare_vg
+ lvcreate --type raid1 -m1 --raidintegrity y -n $lv1 -l 8 $vg
+-_wait_recalc $vg/${lv1}_rimage_0
+-_wait_recalc $vg/${lv1}_rimage_1
+-_wait_recalc $vg/$lv1
+-lvs -a -o+devices $vg
++lvs -a -o name,segtype,devices,sync_percent $vg
++aux wait_recalc $vg/${lv1}_rimage_0
++aux wait_recalc $vg/${lv1}_rimage_1
++aux wait_recalc $vg/$lv1
+ _add_new_data_to_mnt
+-umount $mnt
++umount "$mnt"
+ lvchange -an $vg/$lv1
+ lvextend -l 16 $vg/$lv1
+ lvchange -ay $vg/$lv1
+-mount "$DM_DEV_DIR/$vg/$lv1" $mnt
+-xfs_growfs $mnt
+-_wait_recalc $vg/${lv1}_rimage_0
+-_wait_recalc $vg/${lv1}_rimage_1
+-lvs -a -o+devices $vg
++mount "$DM_DEV_DIR/$vg/$lv1" "$mnt"
++resize2fs "$DM_DEV_DIR/$vg/$lv1"
++aux wait_recalc $vg/${lv1}_rimage_0
++aux wait_recalc $vg/${lv1}_rimage_1
++lvs -a -o name,segtype,devices,sync_percent $vg
+ _add_more_data_to_mnt
+ _verify_data_on_mnt
+-umount $mnt
++umount "$mnt"
+ lvchange -an $vg/$lv1
+ _verify_data_on_lv
+ lvremove $vg/$lv1
+@@ -466,26 +452,26 @@ vgremove -ff $vg
+ 
+ _prepare_vg
+ lvcreate --type raid6 --raidintegrity y -n $lv1 -l 8 $vg
+-_wait_recalc $vg/${lv1}_rimage_0
+-_wait_recalc $vg/${lv1}_rimage_1
+-_wait_recalc $vg/${lv1}_rimage_2
+-_wait_recalc $vg/${lv1}_rimage_3
+-_wait_recalc $vg/${lv1}_rimage_4
+-_wait_recalc $vg/$lv1
+-lvs -a -o+devices $vg
++lvs -a -o name,segtype,sync_percent,devices $vg
++aux wait_recalc $vg/${lv1}_rimage_0
++aux wait_recalc $vg/${lv1}_rimage_1
++aux wait_recalc $vg/${lv1}_rimage_2
++aux wait_recalc $vg/${lv1}_rimage_3
++aux wait_recalc $vg/${lv1}_rimage_4
++aux wait_recalc $vg/$lv1
+ _add_new_data_to_mnt
+-umount $mnt
++umount "$mnt"
+ lvchange -an $vg/$lv1
+ lvextend -l 16 $vg/$lv1
+ lvchange -ay $vg/$lv1
+-mount "$DM_DEV_DIR/$vg/$lv1" $mnt
+-xfs_growfs $mnt
+-_wait_recalc $vg/${lv1}_rimage_0
+-_wait_recalc $vg/${lv1}_rimage_1
+-lvs -a -o+devices $vg
++mount "$DM_DEV_DIR/$vg/$lv1" "$mnt"
++resize2fs "$DM_DEV_DIR/$vg/$lv1"
++aux wait_recalc $vg/${lv1}_rimage_0
++aux wait_recalc $vg/${lv1}_rimage_1
++lvs -a -o name,segtype,devices,sync_percent $vg
+ _add_more_data_to_mnt
+ _verify_data_on_mnt
+-umount $mnt
++umount "$mnt"
+ lvchange -an $vg/$lv1
+ _verify_data_on_lv
+ lvremove $vg/$lv1
+@@ -495,19 +481,20 @@ vgremove -ff $vg
+ 
+ _prepare_vg
+ lvcreate --type raid1 -m1 --raidintegrity y -n $lv1 -l 8 $vg
+-_wait_recalc $vg/${lv1}_rimage_0
+-_wait_recalc $vg/${lv1}_rimage_1
+-_wait_recalc $vg/$lv1
++lvs -a -o name,segtype,devices,sync_percent $vg
++aux wait_recalc $vg/${lv1}_rimage_0
++aux wait_recalc $vg/${lv1}_rimage_1
++aux wait_recalc $vg/$lv1
+ lvs -a -o+devices $vg
+ _add_new_data_to_mnt
+ lvextend -l 16 $vg/$lv1
+-xfs_growfs $mnt
+-_wait_recalc $vg/${lv1}_rimage_0
+-_wait_recalc $vg/${lv1}_rimage_1
++resize2fs "$DM_DEV_DIR/$vg/$lv1"
++aux wait_recalc $vg/${lv1}_rimage_0
++aux wait_recalc $vg/${lv1}_rimage_1
+ lvs -a -o+devices $vg
+ _add_more_data_to_mnt
+ _verify_data_on_mnt
+-umount $mnt
++umount "$mnt"
+ lvchange -an $vg/$lv1
+ _verify_data_on_lv
+ lvremove $vg/$lv1
+@@ -515,20 +502,21 @@ vgremove -ff $vg
+ 
+ _prepare_vg
+ lvcreate --type raid5 --raidintegrity y -n $lv1 -l 8 $vg
+-_wait_recalc $vg/${lv1}_rimage_0
+-_wait_recalc $vg/${lv1}_rimage_1
+-_wait_recalc $vg/${lv1}_rimage_2
+-_wait_recalc $vg/$lv1
++lvs -a -o name,segtype,devices,sync_percent $vg
++aux wait_recalc $vg/${lv1}_rimage_0
++aux wait_recalc $vg/${lv1}_rimage_1
++aux wait_recalc $vg/${lv1}_rimage_2
++aux wait_recalc $vg/$lv1
+ lvs -a -o+devices $vg
+ _add_new_data_to_mnt
+ lvextend -l 16 $vg/$lv1
+-xfs_growfs $mnt
+-_wait_recalc $vg/${lv1}_rimage_0
+-_wait_recalc $vg/${lv1}_rimage_1
++resize2fs "$DM_DEV_DIR/$vg/$lv1"
++aux wait_recalc $vg/${lv1}_rimage_0
++aux wait_recalc $vg/${lv1}_rimage_1
+ lvs -a -o+devices $vg
+ _add_more_data_to_mnt
+ _verify_data_on_mnt
+-umount $mnt
++umount "$mnt"
+ lvchange -an $vg/$lv1
+ _verify_data_on_lv
+ lvremove $vg/$lv1
+@@ -536,19 +524,20 @@ vgremove -ff $vg
+ 
+ _prepare_vg
+ lvcreate --type raid10 --raidintegrity y -n $lv1 -l 8 $vg
+-_wait_recalc $vg/${lv1}_rimage_0
+-_wait_recalc $vg/${lv1}_rimage_1
+-_wait_recalc $vg/$lv1
++lvs -a -o name,segtype,devices,sync_percent $vg
++aux wait_recalc $vg/${lv1}_rimage_0
++aux wait_recalc $vg/${lv1}_rimage_1
++aux wait_recalc $vg/$lv1
+ lvs -a -o+devices $vg
+ _add_new_data_to_mnt
+ lvextend -l 16 $vg/$lv1
+-xfs_growfs $mnt
+-_wait_recalc $vg/${lv1}_rimage_0
+-_wait_recalc $vg/${lv1}_rimage_1
++resize2fs "$DM_DEV_DIR/$vg/$lv1"
++aux wait_recalc $vg/${lv1}_rimage_0
++aux wait_recalc $vg/${lv1}_rimage_1
+ lvs -a -o+devices $vg
+ _add_more_data_to_mnt
+ _verify_data_on_mnt
+-umount $mnt
++umount "$mnt"
+ lvchange -an $vg/$lv1
+ _verify_data_on_lv
+ lvremove $vg/$lv1
+@@ -558,19 +547,20 @@ vgremove -ff $vg
+ 
+ _prepare_vg
+ lvcreate --type raid1 -m1 --raidintegrity y -n $lv1 -l 8 $vg
+-_wait_recalc $vg/${lv1}_rimage_0
+-_wait_recalc $vg/${lv1}_rimage_1
+-_wait_recalc $vg/$lv1
++lvs -a -o name,segtype,devices,sync_percent $vg
++aux wait_recalc $vg/${lv1}_rimage_0
++aux wait_recalc $vg/${lv1}_rimage_1
++aux wait_recalc $vg/$lv1
+ lvs -a -o+devices $vg
+ _add_new_data_to_mnt
+ lvconvert -y -m+1 $vg/$lv1
+-_wait_recalc $vg/${lv1}_rimage_0
+-_wait_recalc $vg/${lv1}_rimage_1
+-_wait_recalc $vg/${lv1}_rimage_2
++aux wait_recalc $vg/${lv1}_rimage_0
++aux wait_recalc $vg/${lv1}_rimage_1
++aux wait_recalc $vg/${lv1}_rimage_2
+ lvs -a -o+devices $vg
+ _add_more_data_to_mnt
+ _verify_data_on_mnt
+-umount $mnt
++umount "$mnt"
+ lvchange -an $vg/$lv1
+ _verify_data_on_lv
+ lvremove $vg/$lv1
+@@ -580,17 +570,17 @@ vgremove -ff $vg
+ 
+ _prepare_vg
+ lvcreate --type raid1 -m2 --raidintegrity y -n $lv1 -l 8 $vg
+-_wait_recalc $vg/${lv1}_rimage_0
+-_wait_recalc $vg/${lv1}_rimage_1
+-_wait_recalc $vg/${lv1}_rimage_2
+-_wait_recalc $vg/$lv1
+-lvs -a -o+devices $vg
++lvs -a -o name,segtype,devices,sync_percent $vg
++aux wait_recalc $vg/${lv1}_rimage_0
++aux wait_recalc $vg/${lv1}_rimage_1
++aux wait_recalc $vg/${lv1}_rimage_2
++aux wait_recalc $vg/$lv1
+ _add_new_data_to_mnt
+ lvconvert -y -m-1 $vg/$lv1
+ lvs -a -o+devices $vg
+ _add_more_data_to_mnt
+ _verify_data_on_mnt
+-umount $mnt
++umount "$mnt"
+ lvchange -an $vg/$lv1
+ _verify_data_on_lv
+ lvremove $vg/$lv1
+@@ -600,21 +590,20 @@ vgremove -ff $vg
+ 
+ _prepare_vg
+ lvcreate --type raid1 -m1 --raidintegrity y -n $lv1 -l 8 $vg
+-_wait_recalc $vg/${lv1}_rimage_0
+-_wait_recalc $vg/${lv1}_rimage_1
+-_wait_recalc $vg/$lv1
+-lvs -a -o+devices $vg
++lvs -a -o name,segtype,devices,sync_percent $vg
++aux wait_recalc $vg/${lv1}_rimage_0
++aux wait_recalc $vg/${lv1}_rimage_1
++aux wait_recalc $vg/$lv1
+ _add_new_data_to_mnt
+ not lvconvert -y -m-1 $vg/$lv1
+ not lvconvert --splitmirrors 1 -n tmp -y $vg/$lv1
+ not lvconvert --splitmirrors 1 --trackchanges -y $vg/$lv1
+ not lvchange --syncaction repair $vg/$lv1
+ not lvreduce -L4M $vg/$lv1
+-not lvcreate -s -n snap -L4M $vg/$lv1
+ not pvmove -n $vg/$lv1 "$dev1"
+ not pvmove "$dev1"
+ _verify_data_on_mnt
+-umount $mnt
++umount "$mnt"
+ lvchange -an $vg/$lv1
+ _verify_data_on_lv
+ lvremove $vg/$lv1
+@@ -624,9 +613,11 @@ vgremove -ff $vg
+ 
+ _prepare_vg
+ lvcreate --type raid1 -m1 --raidintegrity y --raidintegritymode bitmap -n $lv1 -l 8 $vg "$dev1" "$dev2"
+-_wait_recalc $vg/${lv1}_rimage_0
+-_wait_recalc $vg/${lv1}_rimage_1
+-_wait_recalc $vg/$lv1
++lvs -a -o name,segtype,devices,sync_percent $vg
++aux wait_recalc $vg/${lv1}_rimage_0
++aux wait_recalc $vg/${lv1}_rimage_1
++aux wait_recalc $vg/$lv1
++lvchange $vg/$lv1 --writemostly "$dev2"
+ _test_fs_with_read_repair "$dev1"
+ lvs -o integritymismatches $vg/${lv1}_rimage_0 |tee mismatch
+ not grep 0 mismatch
+@@ -638,13 +629,14 @@ lvremove $vg/$lv1
+ vgremove -ff $vg
+ 
+ _prepare_vg
+-lvcreate --type raid6 --raidintegrity y --raidintegritymode bitmap -n $lv1 -l 8 $vg "$dev1" "$dev2" "$dev3" "$dev4" "$dev5"
+-_wait_recalc $vg/${lv1}_rimage_0
+-_wait_recalc $vg/${lv1}_rimage_1
+-_wait_recalc $vg/${lv1}_rimage_2
+-_wait_recalc $vg/${lv1}_rimage_3
+-_wait_recalc $vg/${lv1}_rimage_4
+-_wait_recalc $vg/$lv1
++lvcreate --type raid6 --raidintegrity y --raidintegritymode bitmap -n $lv1 -I 4K -l 8 $vg "$dev1" "$dev2" "$dev3" "$dev4" "$dev5"
++lvs -a -o name,segtype,devices,sync_percent $vg
++aux wait_recalc $vg/${lv1}_rimage_0
++aux wait_recalc $vg/${lv1}_rimage_1
++aux wait_recalc $vg/${lv1}_rimage_2
++aux wait_recalc $vg/${lv1}_rimage_3
++aux wait_recalc $vg/${lv1}_rimage_4
++aux wait_recalc $vg/$lv1
+ _test_fs_with_read_repair "$dev1" "$dev2" "$dev3" "$dev4" "$dev5"
+ lvs -o integritymismatches $vg/${lv1}_rimage_0
+ lvs -o integritymismatches $vg/${lv1}_rimage_1
+@@ -661,13 +653,14 @@ vgremove -ff $vg
+ # remove from active lv
+ _prepare_vg
+ lvcreate --type raid1 -m1 --raidintegrity y --raidintegritymode bitmap -n $lv1 -l 8 $vg "$dev1" "$dev2"
+-_wait_recalc $vg/${lv1}_rimage_0
+-_wait_recalc $vg/${lv1}_rimage_1
++lvs -a -o name,segtype,devices,sync_percent $vg
++aux wait_recalc $vg/${lv1}_rimage_0
++aux wait_recalc $vg/${lv1}_rimage_1
+ _add_new_data_to_mnt
+ lvconvert --raidintegrity n $vg/$lv1
+ _add_more_data_to_mnt
+ _verify_data_on_mnt
+-umount $mnt
++umount "$mnt"
+ lvchange -an $vg/$lv1
+ _verify_data_on_lv
+ lvremove $vg/$lv1
+@@ -678,11 +671,11 @@ _prepare_vg
+ lvcreate --type raid1 -m1 -n $lv1 -l 8 $vg
+ _add_new_data_to_mnt
+ lvconvert --raidintegrity y --raidintegritymode bitmap $vg/$lv1
+-_wait_recalc $vg/${lv1}_rimage_0
+-_wait_recalc $vg/${lv1}_rimage_1
++aux wait_recalc $vg/${lv1}_rimage_0
++aux wait_recalc $vg/${lv1}_rimage_1
+ _add_more_data_to_mnt
+ _verify_data_on_mnt
+-umount $mnt
++umount "$mnt"
+ lvchange -an $vg/$lv1
+ _verify_data_on_lv
+ lvremove $vg/$lv1
+@@ -691,17 +684,17 @@ vgremove -ff $vg
+ # lvextend active
+ _prepare_vg
+ lvcreate --type raid1 --raidintegrity y --raidintegritymode bitmap -m1 -n $lv1 -l 8 $vg
+-_wait_recalc $vg/${lv1}_rimage_0
+-_wait_recalc $vg/${lv1}_rimage_1
+-lvs -a -o+devices $vg
++lvs -a -o name,segtype,devices,sync_percent $vg
++aux wait_recalc $vg/${lv1}_rimage_0
++aux wait_recalc $vg/${lv1}_rimage_1
+ _add_new_data_to_mnt
+ lvextend -l 16 $vg/$lv1
+-_wait_recalc $vg/${lv1}_rimage_0
+-_wait_recalc $vg/${lv1}_rimage_1
+-xfs_growfs $mnt
++aux wait_recalc $vg/${lv1}_rimage_0
++aux wait_recalc $vg/${lv1}_rimage_1
++resize2fs "$DM_DEV_DIR/$vg/$lv1"
+ _add_more_data_to_mnt
+ _verify_data_on_mnt
+-umount $mnt
++umount "$mnt"
+ lvchange -an $vg/$lv1
+ _verify_data_on_lv
+ lvremove $vg/$lv1
+@@ -710,18 +703,17 @@ vgremove -ff $vg
+ # add image to raid1
+ _prepare_vg
+ lvcreate --type raid1 -m1 --raidintegrity y --raidintegritymode bitmap -n $lv1 -l 8 $vg
+-_wait_recalc $vg/${lv1}_rimage_0
+-_wait_recalc $vg/${lv1}_rimage_1
+-lvs -a -o+devices $vg
++lvs -a -o name,segtype,devices,sync_percent $vg
++aux wait_recalc $vg/${lv1}_rimage_0
++aux wait_recalc $vg/${lv1}_rimage_1
+ _add_new_data_to_mnt
+ lvconvert -y -m+1 $vg/$lv1
+-_wait_recalc $vg/${lv1}_rimage_0
+-_wait_recalc $vg/${lv1}_rimage_1
+-_wait_recalc $vg/${lv1}_rimage_2
+-lvs -a -o+devices $vg
++aux wait_recalc $vg/${lv1}_rimage_0
++aux wait_recalc $vg/${lv1}_rimage_1
++aux wait_recalc $vg/${lv1}_rimage_2
+ _add_more_data_to_mnt
+ _verify_data_on_mnt
+-umount $mnt
++umount "$mnt"
+ lvchange -an $vg/$lv1
+ _verify_data_on_lv
+ lvremove $vg/$lv1
+-- 
+2.52.0
+

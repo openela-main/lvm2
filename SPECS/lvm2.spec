@@ -55,7 +55,7 @@
 %global commit 4dc5d4ac7e7a9457ccc46ff04796b347e58bf4da
 %global shortcommit %(c=%{commit}; echo ${c:0:7})
 %endif
-%global rel_suffix .2
+%global rel_suffix .3
 
 # Do not reset Release to 1 unless both lvm2 and device-mapper
 # versions are increased together.
@@ -241,6 +241,9 @@ Patch140: 0139-tests-check-exit_on-works.patch
 Patch141: 0140-mirror-enhance-error-path-for-pvmove-finish.patch
 # RHEL-66486:
 Patch142: 0141-lvmlockd-vgchange-systemid-doen-t-need-global-lock.patch
+# RHEL-135074:
+Patch143: 0142-integrity-allow-creating-imeta-with-more-than-one-se.patch
+Patch144: 0143-test-Fix-integrity-tests.patch
 
 BuildRequires: gcc
 %if %{enable_testsuite}
@@ -919,6 +922,9 @@ An extensive functional testsuite for LVM2.
 %endif
 
 %changelog
+* Tue Jan 06 2026 Marian Csontos <mcsontos@redhat.com> - 2.03.14-15.el8_10.3
+- Allow integrity to use multiple segments for metadata.
+
 * Mon Jun 02 2025 Marian Csontos <mcsontos@redhat.com> - 2.03.14-15.el8_10.2
 - Fix vgchange exit code when lvmlockd is not running and no change is done.
 
