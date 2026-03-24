@@ -41,7 +41,7 @@
 %global commit 4a1f6173d29a7d7ecab14a9313000aa5f81170d0
 %global shortcommit %(c=%{commit}; echo ${c:0:7})
 %endif
-%global rel_suffix .1
+%global rel_suffix .2
 
 # Do not reset Release to 1 unless both lvm2 and device-mapper
 # versions are increased together.
@@ -84,6 +84,8 @@ Patch15: 0015-activating-raid-LV-with-partial-snapshot-is-an-error.patch
 Patch16: 0016-lv_manip-show-a-warning-during-classic-snapshot-crea.patch
 Patch17: 0017-test-add-new-test-for-snapshot-on-raid-creation-acti.patch
 Patch18: 0018-WHATS_NEW-update.patch
+# RHEL-153392:
+Patch19: 0019-libdaemon-CLOEXEC-descriptors-are-not-stray-fds.patch
 
 BuildRequires: make
 BuildRequires: gcc
@@ -715,6 +717,9 @@ An extensive functional testsuite for LVM2.
 %endif
 
 %changelog
+* Fri Mar 06 2026 Marian Csontos <mcsontos@redhat.com> - 2.03.32-2.el9_7.2
+- Fix false positive warnings about stray FDs on s390x.
+
 * Mon Nov 10 2025 Marian Csontos <mcsontos@redhat.com> - 2.03.32-2.el9_7.1
 - Add message when activating RAID volumes with snapshots.
 
