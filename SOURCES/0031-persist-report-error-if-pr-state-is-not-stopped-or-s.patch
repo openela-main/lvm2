@@ -1,0 +1,141 @@
+From e92239ffc00b9b5ea5af84f4c6190f1f2eca4dfe Mon Sep 17 00:00:00 2001
+From: Marian Csontos <mcsontos@redhat.com>
+Date: Wed, 7 Jan 2026 12:04:03 +0100
+Subject: [PATCH 31/32] persist: report error if pr state is not stopped or
+ started
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+
+(cherrypicked from commit e9bdf7ce740fc575a87f21787f35627970659c08)
+---
+ lib/device/persist.c    | 22 ++++++++++++++++------
+ lib/device/persist.h    |  2 +-
+ lib/metadata/metadata.c |  2 +-
+ lib/report/report.c     |  5 +++--
+ tools/vgchange.c        |  4 ++--
+ 5 files changed, 23 insertions(+), 12 deletions(-)
+
+diff --git a/lib/device/persist.c b/lib/device/persist.c
+index 255c0b1d2..98a0b1485 100644
+--- a/lib/device/persist.c
++++ b/lib/device/persist.c
+@@ -875,18 +875,21 @@ int persist_is_started_by_other_hosts(struct cmd_context *cmd, struct volume_gro
+ 	return 1;
+ }
+ 
+-int persist_is_started(struct cmd_context *cmd, struct volume_group *vg, int may_fail)
++int persist_is_started(struct cmd_context *cmd, struct volume_group *vg, int *is_error, int may_fail)
+ {
+ 	struct pv_list *pvl;
+ 	struct device *dev;
+ 	uint64_t our_key_val = 0;
+ 	uint64_t holder;
++	int is_stopped = 0;
++	int is_started = 0;
+ 	int partial = 0;
+ 	int prtype;
+-	int ret = 0;
+ 
+-	if (!vg_is_registered(cmd, vg, &our_key_val, &partial))
++	if (!vg_is_registered(cmd, vg, &our_key_val, &partial)) {
++		is_stopped = 1;
+ 		goto out;
++	}
+ 
+ 	if (partial) {
+ 		log_debug("PR is started: partial");
+@@ -923,11 +926,18 @@ int persist_is_started(struct cmd_context *cmd, struct volume_group *vg, int may
+ 			goto out;
+ 		}
+ 	}
+-	ret = 1;
++
++	is_started = 1;
++
+ out:
+-	if (!ret && !may_fail)
++	/* if not started and not stopped, then it's some error condition */
++	if (!is_started && !is_stopped && is_error)
++		*is_error = 1;
++
++	if (!is_started && !may_fail)
+ 		log_error("persistent reservation is not started.");
+-	return ret;
++
++	return is_started;
+ }
+ 
+ static int get_our_key(struct cmd_context *cmd, struct volume_group *vg,
+diff --git a/lib/device/persist.h b/lib/device/persist.h
+index d4a988bd8..9ea4f07b7 100644
+--- a/lib/device/persist.h
++++ b/lib/device/persist.h
+@@ -66,7 +66,7 @@ int persist_vgcreate_begin(struct cmd_context *cmd, char *vg_name, char *local_k
+ 			   uint32_t set_flags, struct dm_list *devs);
+ int persist_vgcreate_update(struct cmd_context *cmd, struct volume_group *vg, uint32_t set_flags);
+ 
+-int persist_is_started(struct cmd_context *cmd, struct volume_group *vg, int may_fail);
++int persist_is_started(struct cmd_context *cmd, struct volume_group *vg, int *is_error, int may_fail);
+ int persist_is_started_by_other_hosts(struct cmd_context *cmd, struct volume_group *vg, int *is_started_other);
+ 
+ int persist_key_update(struct cmd_context *cmd, struct volume_group *vg, uint32_t prev_gen);
+diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+index 06bbc5702..c3e1f55bd 100644
+--- a/lib/metadata/metadata.c
++++ b/lib/metadata/metadata.c
+@@ -5176,7 +5176,7 @@ struct volume_group *vg_read(struct cmd_context *cmd, const char *vg_name, const
+ 	}
+ 
+ 	if ((vg->pr & VG_PR_REQUIRE) && (writing || activating) && !cmd->disable_pr_required) {
+-		if (!persist_is_started(cmd, vg, 0)) {
++		if (!persist_is_started(cmd, vg, NULL, 0)) {
+ 			failure |= FAILED_PR_REQUIRED;
+ 			goto_bad;
+ 		}
+diff --git a/lib/report/report.c b/lib/report/report.c
+index be32e1bb0..8ece9d371 100644
+--- a/lib/report/report.c
++++ b/lib/report/report.c
+@@ -3025,14 +3025,15 @@ static int _vgprstatus_disp(struct dm_report *rh, struct dm_pool *mem,
+ {
+ 	struct volume_group *vg = (struct volume_group *) data;
+ 	struct cmd_context *cmd = (struct cmd_context *) private;
++	int is_error = 0;
+ 
+ 	if (!vg->pr)
+ 		return _field_string(rh, field, "");
+ 
+-	if (persist_is_started(cmd, vg, 1))
++	if (persist_is_started(cmd, vg, &is_error, 1))
+ 		return _field_string(rh, field, "started");
+ 	else
+-		return _field_string(rh, field, "stopped");
++		return _field_string(rh, field, is_error ? "error" : "stopped");
+ }
+ 
+ static int _lvuuid_disp(struct dm_report *rh __attribute__((unused)), struct dm_pool *mem,
+diff --git a/tools/vgchange.c b/tools/vgchange.c
+index 06cc8c641..bb867b913 100644
+--- a/tools/vgchange.c
++++ b/tools/vgchange.c
+@@ -713,7 +713,7 @@ do_start:
+ 	if (!persist_start_include(cmd, vg, 0, auto_opt, NULL))
+ 		return 0;
+ 
+-	if ((vg->pr & (VG_PR_REQUIRE|VG_PR_AUTOSTART)) && !persist_is_started(cmd, vg, 0)) {
++	if ((vg->pr & (VG_PR_REQUIRE|VG_PR_AUTOSTART)) && !persist_is_started(cmd, vg, NULL, 0)) {
+ 		log_error("VG %s PR should be started before locking (vgchange --persist start)", vg->name);
+ 		return 0;
+ 	}
+@@ -1890,7 +1890,7 @@ static int _vgchange_setpersist_single(struct cmd_context *cmd, const char *vg_n
+ 	 * enabling/starting PR, otherwise enabling/starting PR will
+ 	 * cause i/o to begin failing on those other hosts.
+ 	 */
+-	if (on && vg_is_shared(vg) && !persist_is_started(cmd, vg, 1) &&
++	if (on && vg_is_shared(vg) && !persist_is_started(cmd, vg, NULL, 1) &&
+ 	    lockd_vg_is_started(cmd, vg, NULL) && lockd_vg_is_busy(cmd, vg)) {
+ 		log_error("VG lockspace should be stopped on all hosts (vgchange --lockstop) before enabling PR.");
+ 		return ECMD_FAILED;
+-- 
+2.52.0
+

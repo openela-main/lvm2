@@ -1,0 +1,61 @@
+From 3c116318f8fe788bfbae9b098d5674cc89c057c4 Mon Sep 17 00:00:00 2001
+From: David Teigland <teigland@redhat.com>
+Date: Tue, 28 Oct 2025 13:26:59 -0500
+Subject: [PATCH 14/32] lvmlockd: vgsplit is not supported
+
+The shared VG restriction was mistakenly removed in
+commit 550536474f2b.
+
+(cherry picked from commit accd28140343dc7b507db1bf7047c1d85ab5ec03)
+---
+ man/lvmlockd.8_main |  2 +-
+ tools/vgsplit.c     | 13 +++++++++++++
+ 2 files changed, 14 insertions(+), 1 deletion(-)
+
+diff --git a/man/lvmlockd.8_main b/man/lvmlockd.8_main
+index 96a033e48..87cd0b014 100644
+--- a/man/lvmlockd.8_main
++++ b/man/lvmlockd.8_main
+@@ -838,7 +838,7 @@ splitting mirrors in sanlock VGs
+ pvmove of entire PVs, or under LVs activated with shared locks
+ .
+ .IP \[bu]
+-vgmerge
++vgsplit and vgmerge (convert to a local VG to do this)
+ .
+ .SS lvmlockd changes from clvmd
+ .
+diff --git a/tools/vgsplit.c b/tools/vgsplit.c
+index 8fcfa6ec3..f42b71f10 100644
+--- a/tools/vgsplit.c
++++ b/tools/vgsplit.c
+@@ -586,6 +586,12 @@ int vgsplit(struct cmd_context *cmd, int argc, char **argv)
+ 			return ECMD_FAILED;
+ 		}
+ 		existing_vg = 1;
++
++		if (vg_is_shared(vg_to)) {
++			log_error("vgsplit is not supported with shared VGs.");
++			unlock_and_release_vg(cmd, vg_to, vg_name_to);
++			return ECMD_FAILED;
++		}
+ 	}
+ 
+ 	if (!(vg_from = vg_read_for_update(cmd, vg_name_from, NULL, 0, 0))) {
+@@ -594,6 +600,13 @@ int vgsplit(struct cmd_context *cmd, int argc, char **argv)
+ 		return ECMD_FAILED;
+ 	}
+ 
++	if (vg_is_shared(vg_from)) {
++		log_error("vgsplit is not supported with shared VGs.");
++		unlock_and_release_vg(cmd, vg_to, vg_name_to);
++		unlock_and_release_vg(cmd, vg_from, vg_name_from);
++		return ECMD_FAILED;
++	}
++
+ 	cmd->fmt = vg_from->fid->fmt;
+ 
+ 	if (existing_vg) {
+-- 
+2.52.0
+

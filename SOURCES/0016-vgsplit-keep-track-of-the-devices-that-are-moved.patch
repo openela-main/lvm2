@@ -1,0 +1,176 @@
+From 3b513b37d3a5c59ed4d5b6742de7174d56457f50 Mon Sep 17 00:00:00 2001
+From: David Teigland <teigland@redhat.com>
+Date: Mon, 3 Nov 2025 14:46:06 -0600
+Subject: [PATCH 16/32] vgsplit: keep track of the devices that are moved
+
+(cherry picked from commit 1897f4354fc14afefe3611c0626c6e5d2ae3d116)
+---
+ lib/device/dev_util.c            | 10 ++++++++++
+ lib/device/device.h              |  1 +
+ lib/metadata/metadata-exported.h |  5 +++--
+ lib/metadata/metadata.c          | 33 ++++++++++++++++++++++----------
+ tools/vgsplit.c                  |  8 ++++++--
+ 5 files changed, 43 insertions(+), 14 deletions(-)
+
+diff --git a/lib/device/dev_util.c b/lib/device/dev_util.c
+index 271e8972d..60a10fb4f 100644
+--- a/lib/device/dev_util.c
++++ b/lib/device/dev_util.c
+@@ -64,3 +64,13 @@ struct device_list *device_list_find_dev(struct dm_list *devices, struct device
+ 	return NULL;
+ }
+ 
++int device_list_add(struct dm_pool *mem, struct dm_list *devices, struct device *dev)
++{
++	struct device_list *devl;
++
++	if (!(devl = dm_pool_alloc(mem, sizeof(struct device_list))))
++		return_0;
++	devl->dev = dev;
++	dm_list_add(devices, &devl->list);
++	return 1;
++}
+diff --git a/lib/device/device.h b/lib/device/device.h
+index 8c3cb53b0..d17d86b93 100644
+--- a/lib/device/device.h
++++ b/lib/device/device.h
+@@ -250,6 +250,7 @@ int parse_vpd_serial(const unsigned char *in, char *out, size_t outsize);
+ int device_id_list_remove(struct dm_list *devices, struct device *dev);
+ struct device_id_list *device_id_list_find_dev(struct dm_list *devices, struct device *dev);
+ int device_list_remove(struct dm_list *devices, struct device *dev);
++int device_list_add(struct dm_pool *mem, struct dm_list *devices, struct device *dev);
+ struct device_list *device_list_find_dev(struct dm_list *devices, struct device *dev);
+ 
+ char *strdup_pvid(char *pvid);
+diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
+index ed3e49289..29e7ba99f 100644
+--- a/lib/metadata/metadata-exported.h
++++ b/lib/metadata/metadata-exported.h
+@@ -731,10 +731,11 @@ void lv_set_hidden(struct logical_volume *lv);
+ 
+ int pv_write(struct cmd_context *cmd, struct physical_volume *pv, int allow_non_orphan);
+ int move_pv(struct volume_group *vg_from, struct volume_group *vg_to,
+-	    const char *pv_name);
++	    const char *pv_name, struct device **dev_moved);
+ int move_pvs_used_by_lv(struct volume_group *vg_from,
+ 			struct volume_group *vg_to,
+-			const char *lv_name);
++			const char *lv_name,
++			struct dm_list *dev_list_moved);
+ int is_orphan_vg(const char *vg_name);
+ int is_real_vg(const char *vg_name);
+ int vg_missing_pv_count(const struct volume_group *vg);
+diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+index 67ade62aa..06bbc5702 100644
+--- a/lib/metadata/metadata.c
++++ b/lib/metadata/metadata.c
+@@ -430,11 +430,14 @@ int add_pv_to_vg(struct volume_group *vg, const char *pv_name,
+ }
+ 
+ static int _move_pv(struct volume_group *vg_from, struct volume_group *vg_to,
+-		    const char *pv_name, int enforce_pv_from_source)
++		    const char *pv_name, int enforce_pv_from_source,
++		    struct device **dev_moved)
+ {
+ 	struct physical_volume *pv;
+ 	struct pv_list *pvl;
+ 
++	*dev_moved = NULL;
++
+ 	/* FIXME: handle tags */
+ 	if (!(pvl = find_pv_in_vg(vg_from, pv_name))) {
+ 		if (!enforce_pv_from_source &&
+@@ -466,41 +469,51 @@ static int _move_pv(struct volume_group *vg_from, struct volume_group *vg_to,
+ 	vg_from->free_count -= pv_pe_count(pv) - pv_pe_alloc_count(pv);
+ 	vg_to->free_count += pv_pe_count(pv) - pv_pe_alloc_count(pv);
+ 
++	*dev_moved = pv->dev;
++
+ 	return 1;
+ }
+ 
+ int move_pv(struct volume_group *vg_from, struct volume_group *vg_to,
+-	    const char *pv_name)
++	    const char *pv_name, struct device **dev_moved)
+ {
+-	return _move_pv(vg_from, vg_to, pv_name, 1);
++	return _move_pv(vg_from, vg_to, pv_name, 1, dev_moved);
+ }
+ 
+ struct vg_from_to {
+ 	struct volume_group *from;
+ 	struct volume_group *to;
++	struct dm_list *dev_list;
+ };
+ 
+ static int _move_pvs_used_by_lv_cb(struct logical_volume *lv, void *data)
+ {
+ 	struct vg_from_to *v = (struct vg_from_to*) data;
+ 	struct lv_segment *lvseg;
++	struct dm_list *dev_list = v->dev_list;
++	struct device *dev_moved;
+ 	unsigned s;
+ 
+-	dm_list_iterate_items(lvseg, &lv->segments)
+-		for (s = 0; s < lvseg->area_count; s++)
+-			if (seg_type(lvseg, s) == AREA_PV)
+-				if (!_move_pv(v->from, v->to,
+-					      pv_dev_name(seg_pv(lvseg, s)), 0))
++	dm_list_iterate_items(lvseg, &lv->segments) {
++		for (s = 0; s < lvseg->area_count; s++) {
++			if (seg_type(lvseg, s) == AREA_PV) {
++				if (!_move_pv(v->from, v->to, pv_dev_name(seg_pv(lvseg, s)), 0, &dev_moved))
+ 					return_0;
++				if (dev_list && dev_moved && !device_list_add(lv->vg->cmd->mem, dev_list, dev_moved))
++					return_0;
++			}
++		}
++	}
+ 
+ 	return 1;
+ }
+ 
+ int move_pvs_used_by_lv(struct volume_group *vg_from,
+ 			struct volume_group *vg_to,
+-			const char *lv_name)
++			const char *lv_name,
++			struct dm_list *dev_list)
+ {
+-	struct vg_from_to data = { .from = vg_from, .to = vg_to };
++	struct vg_from_to data = { .from = vg_from, .to = vg_to, .dev_list = dev_list };
+ 	struct lv_list *lvl;
+ 
+ 	/* FIXME: handle tags */
+diff --git a/tools/vgsplit.c b/tools/vgsplit.c
+index f42b71f10..2d93c1935 100644
+--- a/tools/vgsplit.c
++++ b/tools/vgsplit.c
+@@ -523,6 +523,8 @@ int vgsplit(struct cmd_context *cmd, int argc, char **argv)
+ 	struct vgcreate_params vp_def;
+ 	const char *vg_name_from, *vg_name_to;
+ 	struct volume_group *vg_to, *vg_from = NULL;
++	DM_LIST_INIT(devs_moved);
++	struct device *dev_moved;
+ 	int opt;
+ 	int existing_vg = 0;
+ 	int r = ECMD_FAILED;
+@@ -648,12 +650,14 @@ int vgsplit(struct cmd_context *cmd, int argc, char **argv)
+ 	/* Move PVs across to new structure */
+ 	for (opt = 0; opt < argc; opt++) {
+ 		dm_unescape_colons_and_at_signs(argv[opt], NULL, NULL);
+-		if (!move_pv(vg_from, vg_to, argv[opt]))
++		if (!move_pv(vg_from, vg_to, argv[opt], &dev_moved))
++			goto_bad;
++		if (dev_moved && !device_list_add(cmd->mem, &devs_moved, dev_moved))
+ 			goto_bad;
+ 	}
+ 
+ 	/* If an LV given on the cmdline, move used_by PVs */
+-	if (lv_name && !move_pvs_used_by_lv(vg_from, vg_to, lv_name))
++	if (lv_name && !move_pvs_used_by_lv(vg_from, vg_to, lv_name, &devs_moved))
+ 		goto_bad;
+ 
+ 	/*
+-- 
+2.52.0
+

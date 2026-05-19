@@ -1,0 +1,28 @@
+From 01bf2b0c664cc9341ce0393ec543401846ffb07f Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Sat, 1 Nov 2025 20:49:49 +0100
+Subject: [PATCH 10/32] lvmpersist: typo in PATH
+
+As found in other scripts, cut & paste typo...
+
+(cherry picked from commit 43e32684c082d7e2ac78717d649726daa5bf8fcf)
+---
+ scripts/lvmpersist.sh | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/scripts/lvmpersist.sh b/scripts/lvmpersist.sh
+index 02c405425..6af611e07 100755
+--- a/scripts/lvmpersist.sh
++++ b/scripts/lvmpersist.sh
+@@ -1058,7 +1058,7 @@ usage() {
+ #
+ # BEGIN SCRIPT
+ #
+-PATH="/sbin:/usr/sbin:/bin:/usr/sbin:$PATH"
++PATH="/sbin:/usr/sbin:/bin:/usr/bin:$PATH"
+ SCRIPTNAME=$(basename "$0")
+ 
+ if [ $# -lt 1 ]; then
+-- 
+2.52.0
+

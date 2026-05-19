@@ -1,0 +1,40 @@
+From 04910bbfe2cd86d79221cafc92692da2716b2611 Mon Sep 17 00:00:00 2001
+From: David Teigland <teigland@redhat.com>
+Date: Tue, 4 Nov 2025 11:26:14 -0600
+Subject: [PATCH 19/32] vgimportclone: don't use PR on device being imported
+
+The PR ability/settings in the VG metadata applied to the original
+device, but may not apply to the device that the VG metadata was
+copied to, so don't use PR on the new device.
+
+(cherry picked from commit c965aa5f4e5dc324ac0c07d5961e4f82563ff325)
+---
+ tools/vgimportclone.c | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/tools/vgimportclone.c b/tools/vgimportclone.c
+index 19e5166f5..12b830724 100644
+--- a/tools/vgimportclone.c
++++ b/tools/vgimportclone.c
+@@ -117,6 +117,9 @@ static int _update_vg(struct cmd_context *cmd, struct volume_group *vg,
+ 	vg->lock_args = NULL;
+ 	vg->system_id = cmd->system_id ? dm_pool_strdup(vg->vgmem, cmd->system_id) : NULL;
+ 
++	/* The PR ability/settings of the orginal dev may not work on the cloned dev. */
++	vg->pr = 0;
++
+ 	dm_list_iterate_items(pvl, &vg->pvs) {
+ 		if (!(new_pvl = dm_pool_zalloc(vg->vgmem, sizeof(*new_pvl))))
+ 			goto_bad;
+@@ -224,6 +227,8 @@ int vgimportclone(struct cmd_context *cmd, int argc, char **argv)
+ 	vp.import_devices = arg_is_set(cmd, importdevices_ARG);
+ 	vp.import_vg = arg_is_set(cmd, import_ARG);
+ 
++	cmd->disable_pr_required = 1;
++
+ 	if (!lock_global(cmd, "ex"))
+ 		return ECMD_FAILED;
+ 
+-- 
+2.52.0
+

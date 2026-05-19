@@ -1,0 +1,50 @@
+From 3a410deb0aace9cf02fcb8030acb6a3714f5b6d1 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Wed, 29 Oct 2025 01:24:11 +0100
+Subject: [PATCH 07/32] lvmdbusd: fix deadlock on SIGINT in lvm shell mode
+
+Fix race condition where signal handler could deadlock waiting for
+shell_lock while worker thread waits for cfg.run.value to be set.
+
+The deadlock scenario:
+1. Worker thread T1 holds shell_lock, waiting in select() (0.5s timeout)
+2. Signal handler receives SIGINT, calls exit_shell()
+3. exit_shell() blocks trying to acquire shell_lock (held by T1)
+4. Signal handler never reaches cfg.run.value = 0 (blocked at step 3)
+5. T1 wakes from select(), checks cfg.run.value != 0 (still true!)
+6. T1 goes back to select(), repeating until test timeout
+
+Solution: Set cfg.run.value = 0 BEFORE calling exit_shell(). This allows
+worker threads to detect shutdown even if the signal handler blocks on
+shell_lock, breaking the deadlock.
+
+This fixes occasional test_z_sigint failures in lvm shell mode where the
+daemon fails to exit within 10 seconds after receiving SIGINT.
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+(cherry picked from commit 31c6ba34f9c6d40f77d716c8c38588796d201189)
+---
+ daemons/lvmdbusd/utils.py | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/daemons/lvmdbusd/utils.py b/daemons/lvmdbusd/utils.py
+index 3b1ac801f..7d58f73dd 100644
+--- a/daemons/lvmdbusd/utils.py
++++ b/daemons/lvmdbusd/utils.py
+@@ -406,10 +406,12 @@ def handler(signum):
+ 				cfg.ignore_sigterm = False
+ 				return True
+ 
++			# Set shutdown flag first so worker threads can detect shutdown
++			# even if exit_shell() blocks on shell_lock
++			cfg.run.value = 0
+ 			# If lvm shell is in use, tell it to exit
+ 			if cfg.SHELL_IN_USE is not None:
+ 				cfg.SHELL_IN_USE.exit_shell()
+-			cfg.run.value = 0
+ 			log_error('Exiting daemon with signal %d' % signum)
+ 			if cfg.loop is not None:
+ 				cfg.loop.quit()
+-- 
+2.52.0
+

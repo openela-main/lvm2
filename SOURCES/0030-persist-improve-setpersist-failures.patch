@@ -1,0 +1,113 @@
+From 51e512f9ccc94799cca0810368580da4b263c380 Mon Sep 17 00:00:00 2001
+From: David Teigland <teigland@redhat.com>
+Date: Thu, 11 Dec 2025 15:52:58 -0600
+Subject: [PATCH 30/32] persist: improve setpersist failures
+
+If another host has PR started on a VG, the
+vgchange --setpersist command would attempt
+to update the VG metadata and fail writing
+due to the PR.  Handle this case in a more
+use-friendly way by checking if another host
+has PR started before trying to change the VG
+settings.
+
+(cherry picked from commit c19beb55f4691123d5f9606574501f7ef77c697b)
+---
+ lib/device/persist.c | 48 ++++++++++++++++++++++++++++++++++++++++++++
+ lib/device/persist.h |  1 +
+ tools/vgchange.c     |  8 ++++++++
+ 3 files changed, 57 insertions(+)
+
+diff --git a/lib/device/persist.c b/lib/device/persist.c
+index 2b22c8f0a..255c0b1d2 100644
+--- a/lib/device/persist.c
++++ b/lib/device/persist.c
+@@ -827,6 +827,54 @@ int vg_is_registered(struct cmd_context *cmd, struct volume_group *vg, uint64_t
+ 	}
+ }
+ 
++int persist_is_started_by_other_hosts(struct cmd_context *cmd, struct volume_group *vg, int *is_started_other)
++{
++	char our_key_buf[PR_KEY_BUF_SIZE] = { 0 };
++	uint64_t our_key_val = 0;
++	char *local_key = (char *)find_config_tree_str(cmd, local_pr_key_CFG, NULL);
++	int local_host_id = find_config_tree_int(cmd, local_host_id_CFG, NULL);
++	struct pv_list *pvl;
++	struct device *dev;
++	uint64_t *found_keys;
++	int found_local, found_count;
++	int errors = 0;
++
++	if (!get_our_key(cmd, vg, local_key, local_host_id, our_key_buf, &our_key_val))
++		return_0;
++
++	dm_list_iterate_items(pvl, &vg->pvs) {
++		if (!(dev = pvl->pv->dev))
++			continue;
++		if (dm_list_empty(&dev->aliases))
++			continue;
++
++		found_local = 0;
++		found_count = 0;
++		found_keys = NULL;
++
++		if (!dev_find_key(cmd, dev, 1, our_key_val, &found_local, 0, NULL, 1, &found_count, &found_keys)) {
++			log_error("Failed to read persistent reservation key on %s", dev_name(dev));
++			errors++;
++			continue;
++		}
++
++		if (found_keys)
++			dm_pool_free(cmd->mem, found_keys);
++
++		if (found_local && (found_count > 1))
++			*is_started_other = 1;
++
++		if (!found_local && found_count)
++			*is_started_other = 1;
++
++		if (*is_started_other)
++			break;
++	}
++	if (errors)
++		return 0;
++	return 1;
++}
++
+ int persist_is_started(struct cmd_context *cmd, struct volume_group *vg, int may_fail)
+ {
+ 	struct pv_list *pvl;
+diff --git a/lib/device/persist.h b/lib/device/persist.h
+index 3792ee580..d4a988bd8 100644
+--- a/lib/device/persist.h
++++ b/lib/device/persist.h
+@@ -67,6 +67,7 @@ int persist_vgcreate_begin(struct cmd_context *cmd, char *vg_name, char *local_k
+ int persist_vgcreate_update(struct cmd_context *cmd, struct volume_group *vg, uint32_t set_flags);
+ 
+ int persist_is_started(struct cmd_context *cmd, struct volume_group *vg, int may_fail);
++int persist_is_started_by_other_hosts(struct cmd_context *cmd, struct volume_group *vg, int *is_started_other);
+ 
+ int persist_key_update(struct cmd_context *cmd, struct volume_group *vg, uint32_t prev_gen);
+ 
+diff --git a/tools/vgchange.c b/tools/vgchange.c
+index b701bc54a..06cc8c641 100644
+--- a/tools/vgchange.c
++++ b/tools/vgchange.c
+@@ -1908,6 +1908,14 @@ static int _vgchange_setpersist_single(struct cmd_context *cmd, const char *vg_n
+ 		start_done = 1;
+ 	}
+ 
++	if (!vg_is_shared(vg) && !start_done) {
++		int yes = 0;
++		if (!persist_is_started_by_other_hosts(cmd, vg, &yes) || yes) {
++			log_error("Cannot change settings while other hosts have PR started.");
++			return ECMD_FAILED;
++		}
++	}
++
+ 	if (set_flags & SETPR_Y)
+ 		vg->pr = VG_PR_AUTOSTART | VG_PR_REQUIRE;
+ 	else if (set_flags & SETPR_N)
+-- 
+2.52.0
+

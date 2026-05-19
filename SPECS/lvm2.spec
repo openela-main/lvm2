@@ -1,14 +1,14 @@
 ## START: Set by rpmautospec
-## (rpmautospec version 0.6.5)
+## (rpmautospec version 0.8.3)
 ## RPMAUTOSPEC: autorelease
 %define autorelease(e:s:pb:n) %{?-p:0.}%{lua:
-    release_number = 3;
+    release_number = 2;
     base_release_number = tonumber(rpm.expand("%{?-b*}%{!?-b:1}"));
     print(release_number + base_release_number - 1);
 }%{?-e:.%{-e*}}%{?-s:.%{-s*}}%{!?-n:%{?dist}}
 ## END: Set by rpmautospec
 
-%global device_mapper_version 1.02.206
+%global device_mapper_version 1.02.210
 
 %global enable_cache 1
 %global enable_lvmdbusd 1
@@ -51,21 +51,43 @@ Name: lvm2
 %if 0%{?rhel}
 Epoch: %{rhel}
 %endif
-Version: 2.03.32
+Version: 2.03.36
 Release: %autorelease
 License: GPL-2.0-only
 URL: https://sourceware.org/lvm2
 Source0: https://sourceware.org/pub/lvm2/releases/LVM2.%{version}.tgz
 Patch1: 0001-RHEL10.patch
-# RHEL-90129:
-Patch2: 0002-lvmlockd-fix-hosts-check-for-vgremove.patch
-Patch3: 0003-lvmlockd-fix-sanlock_release-for-vgremove.patch
-# RHEL-89832:
-Patch4: 0004-raid-count-or-clear-transiently-failed-devices.patch
-Patch5: 0005-lvconvert-allow-clearing-superblocks.patch
-Patch6: 0006-test-check-raid-superblock-clearing.patch
-Patch7: 0007-man-update-raid-man.patch
-Patch8: 0008-WHATS_NEW-update.patch
+Patch2: 0002-lvmdbusd-check-DEVLINKS-when-detecting-udev-events.patch
+Patch3: 0003-activating-raid-LV-with-partial-snapshot-is-an-error.patch
+Patch4: 0004-lv_manip-show-a-warning-during-classic-snapshot-crea.patch
+Patch5: 0005-WHATS_NEW-update.patch
+Patch6: 0006-cachevol-add-missing-synchronization-with-udev.patch
+Patch7: 0007-lvmdbusd-fix-deadlock-on-SIGINT-in-lvm-shell-mode.patch
+Patch8: 0008-vdo-add-missing-synchronization.patch
+Patch9: 0009-man-update-pvmove-for-pvmove_max_segment_size_mb.patch
+Patch10: 0010-lvmpersist-typo-in-PATH.patch
+Patch11: 0011-lvmpersist-remove-unregister-error-message.patch
+Patch12: 0012-man-keep-page-ascii.patch
+Patch13: 0013-man-remove-spaces-at-eol.patch
+Patch14: 0014-lvmlockd-vgsplit-is-not-supported.patch
+Patch15: 0015-persist-changing-lock-type-should-stop-PR.patch
+Patch16: 0016-vgsplit-keep-track-of-the-devices-that-are-moved.patch
+Patch17: 0017-vgsplit-update-PR-on-devs-to-match-destination-VG.patch
+Patch18: 0018-vgmerge-require-VGs-to-have-the-same-PR-settings.patch
+Patch19: 0019-vgimportclone-don-t-use-PR-on-device-being-imported.patch
+Patch20: 0020-vgs-add-reporting-field-pr.patch
+Patch21: 0021-vgchange-limit-persist-stop-in-lockstop.patch
+Patch22: 0022-device_id-prevent-incorrect-dm-uuid-idtype.patch
+Patch23: 0023-cache-adding-sync-points.patch
+Patch24: 0024-lvmdevices-update-force-option.patch
+Patch25: 0025-lvresize-fix-xfs-size-checks.patch
+Patch26: 0026-configure-check-for-xfs-header-file.patch
+Patch27: 0027-filesystem-refactor-code-working-with-xfs.patch
+Patch28: 0028-filesystem-add-internal-xfs-struct-copy.patch
+Patch29: 0029-autoreconf-reconfigure.patch
+Patch30: 0030-persist-improve-setpersist-failures.patch
+Patch31: 0031-persist-report-error-if-pr-state-is-not-stopped-or-s.patch
+Patch32: 0032-log-add-string.h.patch
 
 BuildRequires: make
 BuildRequires: gcc
@@ -239,6 +261,7 @@ systemctl start lvm2-lvmpolld.socket >/dev/null 2>&1 || :
 %{_sbindir}/lvmconfig
 %{_sbindir}/lvmdevices
 %{_sbindir}/lvmdump
+%{_sbindir}/lvmpersist
 %if %{enable_lvmpolld}
 %{_sbindir}/lvmpolld
 %endif
@@ -305,12 +328,13 @@ systemctl start lvm2-lvmpolld.socket >/dev/null 2>&1 || :
 %{_mandir}/man8/lvextend.8.gz
 %{_mandir}/man8/lvm.8.gz
 %{_mandir}/man8/lvm-config.8.gz
+%{_mandir}/man8/lvm-dumpconfig.8.gz
+%{_mandir}/man8/lvm-fullreport.8.gz
 %{_mandir}/man8/lvmconfig.8.gz
 %{_mandir}/man8/lvmdevices.8.gz
-%{_mandir}/man8/lvm-dumpconfig.8.gz
 %{_mandir}/man8/lvmdiskscan.8.gz
 %{_mandir}/man8/lvmdump.8.gz
-%{_mandir}/man8/lvm-fullreport.8.gz
+%{_mandir}/man8/lvmpersist.8.gz
 %{_mandir}/man8/lvmsadc.8.gz
 %{_mandir}/man8/lvmsar.8.gz
 %{_mandir}/man8/lvreduce.8.gz
@@ -386,6 +410,7 @@ systemctl start lvm2-lvmpolld.socket >/dev/null 2>&1 || :
 %endif
 %{_unitdir}/lvm-devices-import.service
 %{_unitdir}/lvm-devices-import.path
+%dir %{_sharedstatedir}/lvm
 
 ##############################################################################
 # Library and Development subpackages
@@ -667,6 +692,17 @@ An extensive functional testsuite for LVM2.
 %endif
 
 %changelog
+* Wed Jan 07 2026 Marian Csontos <mcsontos@redhat.com> - 2.03.36-2
+- Additional fixes up to 2.03.38.
+
+* Fri Oct 24 2025 Marian Csontos <mcsontos@redhat.com> - 2.03.36-1
+- Update to upstream version 2.03.36.
+- See WHATS_NEW and WHATS_NEW_DM for more information.
+
+* Wed Sep 10 2025 Marian Csontos <mcsontos@redhat.com> - 2.03.35-1
+- Update to upstream version 2.03.35.
+- See WHATS_NEW and WHATS_NEW_DM for more information.
+
 * Thu Jun 05 2025 Marian Csontos <mcsontos@redhat.com> - 2.03.32-3
 - Respin.
 

@@ -1,0 +1,80 @@
+From 5f0a602d4e37a536ff17566e2ef4d422ce6a3976 Mon Sep 17 00:00:00 2001
+From: David Teigland <teigland@redhat.com>
+Date: Tue, 21 Oct 2025 14:56:13 -0500
+Subject: [PATCH 20/32] vgs: add reporting field pr
+
+vgs -o pr
+shows persistent reservation status, e.g. stopped or started.
+
+(cherry picked from commit 257ba9b97e671c206b069330d9b44e4697b7f724)
+---
+ lib/report/columns.h    |  3 ++-
+ lib/report/properties.c |  2 ++
+ lib/report/report.c     | 17 +++++++++++++++++
+ 3 files changed, 21 insertions(+), 1 deletion(-)
+
+diff --git a/lib/report/columns.h b/lib/report/columns.h
+index 7dbe14515..22c784171 100644
+--- a/lib/report/columns.h
++++ b/lib/report/columns.h
+@@ -237,7 +237,8 @@ FIELD(VGS, vg, STR, "SYS ID", cmd, 0, vgsystemid, vg_sysid, "System ID of the VG
+ FIELD(VGS, vg, STR, "System ID", cmd, 0, vgsystemid, vg_systemid, "System ID of the VG indicating which host owns it.", 0)
+ FIELD(VGS, vg, STR, "LockType", cmd, 0, vglocktype, vg_lock_type, "Lock type of the VG used by lvmlockd.", 0)
+ FIELD(VGS, vg, STR, "VLockArgs", cmd, 0, vglockargs, vg_lock_args, "Lock args of the VG used by lvmlockd.", 0)
+-FIELD(VGS, vg, STR, "PR", cmd, 0, vgpersist, vg_persist, "Persistent Reservation.", 0)
++FIELD(VGS, vg, STR, "PRSet", cmd, 0, vgpersist, vg_persist, "Persistent Reservation setting.", 0)
++FIELD(VGS, vg, STR, "PR", cmd, 0, vgprstatus, vg_pr, "Persistent Reservation status.", 0)
+ FIELD(VGS, vg, SIZ, "Ext", extent_size, 0, size32, vg_extent_size, "Size of Physical Extents in current units.", 0)
+ FIELD(VGS, vg, NUM, "#Ext", extent_count, 0, uint32, vg_extent_count, "Total number of Physical Extents.", 0)
+ FIELD(VGS, vg, NUM, "Free", free_count, 0, uint32, vg_free_count, "Total number of unallocated Physical Extents.", 0)
+diff --git a/lib/report/properties.c b/lib/report/properties.c
+index 46ea8dd2e..27139646c 100644
+--- a/lib/report/properties.c
++++ b/lib/report/properties.c
+@@ -548,6 +548,8 @@ GET_VG_STR_PROPERTY_FN(vg_lock_args, vg_lock_args_dup(vg))
+ #define _vg_lock_args_set prop_not_implemented_set
+ #define _vg_persist_set prop_not_implemented_set
+ #define _vg_persist_get prop_not_implemented_get
++#define _vg_pr_set prop_not_implemented_set
++#define _vg_pr_get prop_not_implemented_get
+ GET_VG_NUM_PROPERTY_FN(vg_extent_size, (SECTOR_SIZE * vg->extent_size))
+ #define _vg_extent_size_set prop_not_implemented_set
+ GET_VG_NUM_PROPERTY_FN(vg_extent_count, vg->extent_count)
+diff --git a/lib/report/report.c b/lib/report/report.c
+index 5237aedd9..be32e1bb0 100644
+--- a/lib/report/report.c
++++ b/lib/report/report.c
+@@ -24,6 +24,7 @@
+ #include "lib/cache/lvmcache.h"
+ #include "lib/device/device-types.h"
+ #include "lib/device/device_id.h"
++#include "lib/device/persist.h"
+ #include "lib/datastruct/str_list.h"
+ #include "lib/locking/lvmlockd.h"
+ 
+@@ -3018,6 +3019,22 @@ static int _vgpersist_disp(struct dm_report *rh, struct dm_pool *mem,
+ 	return _field_string(rh, field, "");
+ }
+ 
++static int _vgprstatus_disp(struct dm_report *rh, struct dm_pool *mem,
++			    struct dm_report_field *field,
++			    const void *data, void *private)
++{
++	struct volume_group *vg = (struct volume_group *) data;
++	struct cmd_context *cmd = (struct cmd_context *) private;
++
++	if (!vg->pr)
++		return _field_string(rh, field, "");
++
++	if (persist_is_started(cmd, vg, 1))
++		return _field_string(rh, field, "started");
++	else
++		return _field_string(rh, field, "stopped");
++}
++
+ static int _lvuuid_disp(struct dm_report *rh __attribute__((unused)), struct dm_pool *mem,
+ 			struct dm_report_field *field,
+ 			const void *data, void *private __attribute__((unused)))
+-- 
+2.52.0
+

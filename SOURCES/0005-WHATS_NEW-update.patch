@@ -1,0 +1,26 @@
+From 5f376364ffddf84ac83220a856ad627ddef96973 Mon Sep 17 00:00:00 2001
+From: Heinz Mauelshagen <heinzm@redhat.com>
+Date: Mon, 27 Oct 2025 19:15:06 +0100
+Subject: [PATCH 05/32] WHATS_NEW: update
+
+(cherry picked from commit b8f7635e1692fcfc5ea34e1dcaea2ebb6df94431)
+---
+ WHATS_NEW | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 2ca93637d..1841f8db8 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,3 +1,8 @@
++Version 2.03.37 - 
++==================
++  Warn on classic snapshot on raid creation and error on activation + test.
++  Improve lvmdbusd matching of udevd reported device paths.
++
+ Version 2.03.36 - 24th October 2025
+ ===================================
+   Fix uninitialized chunk_size_calc_policy in pool parameter functions.
+-- 
+2.52.0
+

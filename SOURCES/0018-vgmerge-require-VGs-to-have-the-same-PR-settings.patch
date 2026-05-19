@@ -1,0 +1,31 @@
+From 804931949482cbf7b0bbdaae31beefeb0a5eed12 Mon Sep 17 00:00:00 2001
+From: David Teigland <teigland@redhat.com>
+Date: Tue, 4 Nov 2025 10:37:43 -0600
+Subject: [PATCH 18/32] vgmerge: require VGs to have the same PR settings
+
+(cherry picked from commit 2a9a1f01d1b48f97008d9e858dbc3f6b052f76d9)
+---
+ tools/vgmerge.c | 7 +++++++
+ 1 file changed, 7 insertions(+)
+
+diff --git a/tools/vgmerge.c b/tools/vgmerge.c
+index 710dfef35..29a4b8577 100644
+--- a/tools/vgmerge.c
++++ b/tools/vgmerge.c
+@@ -109,6 +109,13 @@ static int _vgmerge_single(struct cmd_context *cmd, const char *vg_name_to,
+ 				return_ECMD_FAILED;
+ 	}
+ 
++	if (vg_from->pr != vg_to->pr) {
++		log_error("VGs must have the same PR settings to merge.");
++		unlock_and_release_vg(cmd, vg_from, vg_name_from);
++		unlock_and_release_vg(cmd, vg_to, vg_name_to);
++		return ECMD_FAILED;
++	}
++
+ 	if (!vgs_are_compatible(cmd, vg_from, vg_to))
+ 		goto_bad;
+ 
+-- 
+2.52.0
+

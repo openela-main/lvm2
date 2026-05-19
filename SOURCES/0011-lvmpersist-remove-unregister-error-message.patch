@@ -1,0 +1,44 @@
+From 7c9f76c763e9ebebf2affa4c3ef4b510a747c520 Mon Sep 17 00:00:00 2001
+From: David Teigland <teigland@redhat.com>
+Date: Thu, 20 Nov 2025 15:24:50 -0600
+Subject: [PATCH 11/32] lvmpersist: remove unregister error message
+
+If PR was already stopped, stopping PR again would
+generate an "sg_persist unregiser error" message
+when each sg_persist command returned an error.
+The actual result of the lvmpersist stop command
+is determined by checking that the key is removed,
+not by the sg_persist exit code.  If the key is not
+removed from any device, then the command fails with
+another higher level error message.
+
+(cherry picked from commit ea2ab6b7b720fddb445d3adc897df0b41eb9cfcb)
+---
+ scripts/lvmpersist.sh | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/scripts/lvmpersist.sh b/scripts/lvmpersist.sh
+index 6af611e07..9cee385ed 100755
+--- a/scripts/lvmpersist.sh
++++ b/scripts/lvmpersist.sh
+@@ -595,7 +595,7 @@ undo_register() {
+ 		else
+ 			$cmd $cmdopts --out --register --param-rk="$OURKEY" "$dev" >/dev/null 2>&1
+ 		fi
+-		test $? -eq 0 || logmsg "$cmd unregister error on $dev"
++		# test $? -eq 0 || logmsg "$cmd unregister error on $dev"
+ 	done
+ }
+ 
+@@ -797,7 +797,7 @@ do_stop() {
+ 			$cmd $cmdopts --out --register --param-rk="$OURKEY" "$dev" >/dev/null 2>&1
+ 		fi
+ 
+-		test $? -eq 0 || logmsg "$cmd unregister error on $dev"
++		# test $? -eq 0 || logmsg "$cmd unregister error on $dev"
+ 
+ 		if key_is_on_device "$dev" "$OURKEY" ; then
+ 			logmsg "stop $GROUP failed to unregister our key $OURKEY from $dev."
+-- 
+2.52.0
+

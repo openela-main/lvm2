@@ -1,0 +1,32 @@
+From 607a1ec37d58519f3ae015ac5f2cf7b87d4afd70 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Sat, 1 Nov 2025 22:43:05 +0100
+Subject: [PATCH 06/32] cachevol: add missing synchronization with udev
+
+When converting an LV to cachevol, we need to add a synchronization
+wait after deactivating the converted and zeroed LV. The same DM
+device could be reused for the newly activated volume, and we need
+to ensure we do not mix add & remove operations in a single udev
+transaction for the same DM device, as that may lead to leaked
+symlinks in /dev directory (some udev versions have faulty DB updates).
+
+(cherry picked from commit 17bcac3e353f0a26ef984f068f927332bd06f5a2)
+---
+ lib/metadata/cache_manip.c | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/lib/metadata/cache_manip.c b/lib/metadata/cache_manip.c
+index 06edf0958..7f0adf837 100644
+--- a/lib/metadata/cache_manip.c
++++ b/lib/metadata/cache_manip.c
+@@ -1298,5 +1298,7 @@ int wipe_cache_pool(struct logical_volume *cache_pool_lv)
+ 		r = 0;
+ 	}
+ 
++	sync_local_dev_names(cache_pool_lv->vg->cmd);
++
+ 	return r;
+ }
+-- 
+2.52.0
+

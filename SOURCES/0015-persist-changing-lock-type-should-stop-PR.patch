@@ -1,0 +1,111 @@
+From 4bd5b6a09d3004ae64cb2e1187eeda88bd8d63c1 Mon Sep 17 00:00:00 2001
+From: David Teigland <teigland@redhat.com>
+Date: Wed, 29 Oct 2025 14:57:39 -0500
+Subject: [PATCH 15/32] persist: changing lock type should stop PR
+
+Different lock types may use different PR keys, e.g.
+sanlock includes a generation number in the PR.
+So, stop PR after changing the lock type so it can
+be restarted with the new lock type and different key.
+
+(cherry picked from commit cd7c07632bfd738ddfc813dd4ae2db6f480d0e96)
+---
+ lib/device/persist.c |  4 ++--
+ lib/device/persist.h |  4 ++--
+ tools/vgchange.c     | 11 +++++++++++
+ tools/vgremove.c     |  4 ++--
+ 4 files changed, 17 insertions(+), 6 deletions(-)
+
+diff --git a/lib/device/persist.c b/lib/device/persist.c
+index dd4a5bb3a..21ab839d0 100644
+--- a/lib/device/persist.c
++++ b/lib/device/persist.c
+@@ -1616,7 +1616,7 @@ static int _run_stop(struct cmd_context *cmd, struct volume_group *vg, struct dm
+  * normal usage pattern, but is still possible.)
+  */
+ 
+-int persist_vgremove_before(struct cmd_context *cmd, struct volume_group *vg, struct dm_list *devs, char **key)
++int persist_finish_before(struct cmd_context *cmd, struct volume_group *vg, struct dm_list *devs, char **key)
+ {
+ 	char *local_key = (char *)find_config_tree_str(cmd, local_pr_key_CFG, NULL);
+ 	int local_host_id = find_config_tree_int(cmd, local_host_id_CFG, NULL);
+@@ -1674,7 +1674,7 @@ int persist_vgremove_before(struct cmd_context *cmd, struct volume_group *vg, st
+ 	return 1;
+ }
+ 
+-void persist_vgremove_after(struct cmd_context *cmd, struct volume_group *vg, struct dm_list *devs, char *key)
++void persist_finish_after(struct cmd_context *cmd, struct volume_group *vg, struct dm_list *devs, char *key)
+ {
+ 	if (!_run_stop(cmd, vg, devs, key, 0))
+ 		stack;
+diff --git a/lib/device/persist.h b/lib/device/persist.h
+index ed410e4b6..d94fd1edd 100644
+--- a/lib/device/persist.h
++++ b/lib/device/persist.h
+@@ -50,8 +50,8 @@ int persist_start(struct cmd_context *cmd, struct volume_group *vg,
+ 
+ int persist_stop(struct cmd_context *cmd, struct volume_group *vg);
+ 
+-int persist_vgremove_before(struct cmd_context *cmd, struct volume_group *vg, struct dm_list *devs, char **key);
+-void persist_vgremove_after(struct cmd_context *cmd, struct volume_group *vg, struct dm_list *devs, char *key);
++int persist_finish_before(struct cmd_context *cmd, struct volume_group *vg, struct dm_list *devs, char **key);
++void persist_finish_after(struct cmd_context *cmd, struct volume_group *vg, struct dm_list *devs, char *key);
+ 
+ int persist_remove(struct cmd_context *cmd, struct volume_group *vg,
+                    char *local_key, int local_host_id, const char *remkey);
+diff --git a/tools/vgchange.c b/tools/vgchange.c
+index b13ffab7b..eb24597a2 100644
+--- a/tools/vgchange.c
++++ b/tools/vgchange.c
+@@ -1400,8 +1400,16 @@ static int _vgchange_locktype_single(struct cmd_context *cmd, const char *vg_nam
+ 			             struct volume_group *vg,
+ 			             struct processing_handle *handle)
+ {
++	char *pr_key = NULL;
++	DM_LIST_INIT(pr_devs);
+ 	int no_change = 0;
+ 
++	/* New lock type may use different PR key, save current key to stop PR below. */
++	if (vg->pr & VG_PR_REQUIRE) {
++		if (!persist_finish_before(cmd, vg, &pr_devs, &pr_key))
++			return_ECMD_FAILED;
++	}
++
+ 	if (!_vgchange_locktype(cmd, vg, &no_change))
+ 		return_ECMD_FAILED;
+ 
+@@ -1428,6 +1436,9 @@ static int _vgchange_locktype_single(struct cmd_context *cmd, const char *vg_nam
+ 		}
+ 	}
+ 
++	if (pr_key)
++		persist_finish_after(cmd, vg, &pr_devs, pr_key);
++
+ 	log_print_unless_silent("Volume group \"%s\" successfully changed.", vg->name);
+ 
+ 	return ECMD_PROCESSED;
+diff --git a/tools/vgremove.c b/tools/vgremove.c
+index 74dfbfb1b..1e45699f5 100644
+--- a/tools/vgremove.c
++++ b/tools/vgremove.c
+@@ -74,7 +74,7 @@ static int _vgremove_single(struct cmd_context *cmd, const char *vg_name,
+ 	    !lvremove_single(cmd, vg->pool_metadata_spare_lv, &void_handle))
+ 		return_ECMD_FAILED;
+ 
+-	if (pr_stop && !persist_vgremove_before(cmd, vg, &pr_devs, &pr_key))
++	if (pr_stop && !persist_finish_before(cmd, vg, &pr_devs, &pr_key))
+ 		return_ECMD_FAILED;
+ 
+ 	if (!lockd_free_vg_before(cmd, vg, 0, arg_count(cmd, yes_ARG)))
+@@ -93,7 +93,7 @@ static int _vgremove_single(struct cmd_context *cmd, const char *vg_name,
+ 	lockd_free_vg_final(cmd, vg);
+ 
+ 	if (pr_stop)
+-		persist_vgremove_after(cmd, vg, &pr_devs, pr_key);
++		persist_finish_after(cmd, vg, &pr_devs, pr_key);
+ 
+ 	return ECMD_PROCESSED;
+ }
+-- 
+2.52.0
+

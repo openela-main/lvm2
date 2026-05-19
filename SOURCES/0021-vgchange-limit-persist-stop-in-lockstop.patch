@@ -1,0 +1,31 @@
+From b43651bdbc50e4d3f4837d040dd8e943b98277eb Mon Sep 17 00:00:00 2001
+From: David Teigland <teigland@redhat.com>
+Date: Thu, 13 Nov 2025 13:55:08 -0600
+Subject: [PATCH 21/32] vgchange: limit persist stop in lockstop
+
+"vgchange --lockstop --persist stop" should skip the
+persist_stop() on a VG without PR required, otherwise
+it hits errors attempting to stop PR on VGs where it's
+not used.
+
+(cherry picked from commit 4b9cd637d6b23c599f987f44c86035260ee21f2c)
+---
+ tools/vgchange.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/tools/vgchange.c b/tools/vgchange.c
+index eb24597a2..b701bc54a 100644
+--- a/tools/vgchange.c
++++ b/tools/vgchange.c
+@@ -736,7 +736,7 @@ static int _vgchange_lock_stop(struct cmd_context *cmd, struct volume_group *vg)
+ 		return_0;
+ 
+ 	/* stop is the only --persist value that's accepted */
+-	if (arg_is_set(cmd, persist_ARG) && !persist_stop(cmd, vg))
++	if (arg_is_set(cmd, persist_ARG) && (vg->pr & VG_PR_REQUIRE) && !persist_stop(cmd, vg))
+ 		log_warn("WARNING: PR stop failed, see lvmpersist stop.");
+ 
+ 	return 1;
+-- 
+2.52.0
+

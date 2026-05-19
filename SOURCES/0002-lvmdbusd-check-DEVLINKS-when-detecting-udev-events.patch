@@ -1,0 +1,62 @@
+From decf5ca52a522a2cdd93b87762523f22a1a5762d Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Sun, 26 Oct 2025 22:04:03 +0100
+Subject: [PATCH 02/32] lvmdbusd: check DEVLINKS when detecting udev events
+
+When a PV is wiped with 'wipefs -a', lvmdbusd needs to detect the
+udev change event and refresh its state to remove the wiped PV from
+its object database.
+
+The daemon was failing to detect wipefs events because of a device
+name mismatch. When a PV is created on a device-mapper device, it
+is typically tracked using a path like /dev/mapper/xxx, but the udev
+event after wipefs reports DEVNAME as the kernel device name like
+/dev/dm-N.
+
+The existing code only checked the DEVNAME property, so it couldn't
+find the PV object and never triggered a refresh. This caused the
+test_wipefs test case to fail with "Daemon failed to update, missing
+udev change event?" after timing out for 5 seconds.
+
+Fix this by also checking the DEVLINKS property when DEVNAME lookup
+fails. DEVLINKS contains all symlinks to the device, including the
+/dev/mapper path that the daemon uses to track the PV.
+
+This matches how device lookup already works in objectmanager.py,
+which uses os.path.realpath() to resolve symlinks when looking up
+devices by path.
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+(cherry picked from commit 2e46593f74b8118bd97be5d8570e754a3c1a3647)
+---
+ daemons/lvmdbusd/udevwatch.py | 14 +++++++++++++-
+ 1 file changed, 13 insertions(+), 1 deletion(-)
+
+diff --git a/daemons/lvmdbusd/udevwatch.py b/daemons/lvmdbusd/udevwatch.py
+index 7ee7c9d1c..2cd03b414 100644
+--- a/daemons/lvmdbusd/udevwatch.py
++++ b/daemons/lvmdbusd/udevwatch.py
+@@ -74,7 +74,19 @@ def filter_event(action, device):
+ 	else:
+ 		# This handles the wipefs -a path
+ 		if not refresh and 'DEVNAME' in device:
+-			if cfg.om.get_object_by_lvm_id(device['DEVNAME']):
++			devname = device['DEVNAME']
++			found_obj = cfg.om.get_object_by_lvm_id(devname)
++
++			# Also check device symlinks - udev might report /dev/dm-X but
++			# the PV is tracked under a different name
++			if not found_obj and 'DEVLINKS' in device:
++				devlinks = device['DEVLINKS'].split()
++				for link in devlinks:
++					found_obj = cfg.om.get_object_by_lvm_id(link)
++					if found_obj:
++						break
++
++			if found_obj:
+ 				refresh = True
+ 
+ 	if refresh:
+-- 
+2.52.0
+

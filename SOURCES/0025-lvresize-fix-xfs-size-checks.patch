@@ -1,0 +1,350 @@
+From 60bd34f01ed4c708fc40421a71a44313c85d8afc Mon Sep 17 00:00:00 2001
+From: David Teigland <teigland@redhat.com>
+Date: Thu, 11 Dec 2025 14:48:42 -0600
+Subject: [PATCH 25/32] lvresize: fix xfs size checks
+
+After lvextend with xfs_growfs on a mounted xfs file system,
+libblkid FSLASTBLOCK continues to return the original value,
+and does not reflect the grown size of the fs.
+
+If that was followed by lvreduce back to the original LV size,
+lvm saw the original fs size in FSLASTBLOCK, and allowed the LV
+to shrink back to the original size, even though xfs had grown
+and was now using the space.
+
+Fix this by using the XFS_IOC_FSGEOMETRY ioctl to get the
+correct size value for mounted xfs.
+
+(cherry picked from commit 0b231e3f4e3e60b8ec7bb7e4443583a06f42614e)
+---
+ lib/device/filesystem.c         | 53 +++++++++++++++++++++++---
+ lib/device/filesystem.h         |  3 +-
+ lib/metadata/lv_manip.c         |  6 +--
+ test/shell/lvresize-fs-crypt.sh | 18 +++++++++
+ test/shell/lvresize-fs.sh       | 67 +++++++++++++++++++++++++++++++++
+ test/shell/lvresize-xfs.sh      | 67 ++++++++++++++++++++++++++++++++-
+ 6 files changed, 203 insertions(+), 11 deletions(-)
+
+diff --git a/lib/device/filesystem.c b/lib/device/filesystem.c
+index 45895b87b..1e92bae52 100644
+--- a/lib/device/filesystem.c
++++ b/lib/device/filesystem.c
+@@ -22,7 +22,21 @@
+ 
+ #include <dirent.h>
+ #include <mntent.h>
++#include <uuid/uuid.h>
+ #include <sys/ioctl.h>
++#include <linux/types.h>
++/* including xfs/linux.h causes uuid_t conflicts, so define some types that are needed */
++/* #include <xfs/linux.h> */
++typedef off_t xfs_off_t;
++typedef uint64_t xfs_ino_t;
++typedef uint32_t xfs_dev_t;
++typedef int64_t xfs_daddr_t;
++typedef __u32 xfs_nlink_t;
++#include <xfs/xfs_types.h>
++#ifndef __user
++#define __user
++#endif
++#include <xfs/xfs_fs.h>
+ 
+ static const char *_get_lvresize_fs_helper_path(struct cmd_context *cmd)
+ {
+@@ -251,8 +265,36 @@ static int _btrfs_get_mnt(struct fs_info *fsi, dev_t lv_devt)
+ 	return ret;
+ }
+ 
+-int fs_get_info(struct cmd_context *cmd, struct logical_volume *lv,
+-		struct fs_info *fsi, int include_mount)
++static int _xfs_update_size_mounted(struct cmd_context *cmd, struct logical_volume *lv,
++				    char *lv_path, struct fs_info *fsi)
++{
++	struct xfs_fsop_geom geo = { 0 }; 
++	int fd;
++	int ret = 0;
++
++	if ((fd = open(fsi->mount_dir, O_RDONLY)) < 0) {
++		log_error("XFS geometry open error %d for %s %s", errno, lv_path, fsi->mount_dir);
++		return 0;
++	}
++
++	if (ioctl(fd, XFS_IOC_FSGEOMETRY, &geo)) {
++		log_error("XFS geometry ioctl error %d for %s %s", errno, lv_path, fsi->mount_dir);
++		goto out;
++	}
++
++	/* replace the potentially wrong value from blkid_probe_lookup_value FSLASTBLOCK */
++	fsi->fs_last_byte = geo.blocksize * geo.datablocks;
++	ret = 1;
++
++	log_debug("xfs geometry blocksize %llu datablocks %llu fs_last_byte %llu from %s %s",
++		  (unsigned long long)geo.blocksize, (unsigned long long)geo.datablocks,
++		  (unsigned long long)fsi->fs_last_byte, lv_path, fsi->mount_dir);
++out:
++	(void)close(fd);
++	return ret;
++}
++
++int fs_get_info(struct cmd_context *cmd, struct logical_volume *lv, struct fs_info *fsi)
+ {
+ 	char lv_path[PATH_MAX];
+ 	char crypt_path[PATH_MAX] = { 0 };
+@@ -338,14 +380,15 @@ int fs_get_info(struct cmd_context *cmd, struct logical_volume *lv,
+ 		st_top = st_lv;
+ 	}
+ 
+-	if (!include_mount)
+-		return 1;
+-
+ 	if (!strcmp(fsi->fstype, "btrfs"))
+ 		ret = _btrfs_get_mnt(fsi, st_lv.st_rdev);
+ 	else
+ 		ret = _fs_get_mnt(fsi, st_top.st_rdev);
+ 
++	/* blkid FSLASTBLOCK may be incorrect for mounted xfs */
++	if (fsi->mounted && !strcmp(fsi->fstype, "xfs"))
++		ret = _xfs_update_size_mounted(cmd, lv, lv_path, fsi);
++
+ 	fsi->unmounted = !fsi->mounted;
+ 	return ret;
+ }
+diff --git a/lib/device/filesystem.h b/lib/device/filesystem.h
+index 4ba6f0db9..bb43f9a96 100644
+--- a/lib/device/filesystem.h
++++ b/lib/device/filesystem.h
+@@ -45,8 +45,7 @@ struct fs_info {
+ 	unsigned needs_crypt:1;
+ };
+ 
+-int fs_get_info(struct cmd_context *cmd, struct logical_volume *lv,
+-                struct fs_info *fsi, int include_mount);
++int fs_get_info(struct cmd_context *cmd, struct logical_volume *lv, struct fs_info *fsi);
+ 
+ int fs_extend_script(struct cmd_context *cmd, struct logical_volume *lv, struct fs_info *fsi, char *fsmode);
+ int fs_reduce_script(struct cmd_context *cmd, struct logical_volume *lv, struct fs_info *fsi, char *fsmode);
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index fb2ed53a4..0ef3a8991 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -6472,7 +6472,7 @@ static int _fs_reduce(struct cmd_context *cmd, struct logical_volume *lv,
+ 	memset(&fsinfo, 0, sizeof(fsinfo));
+ 	memset(&fsinfo2, 0, sizeof(fsinfo));
+ 
+-	if (!fs_get_info(cmd, lv, &fsinfo, 1))
++	if (!fs_get_info(cmd, lv, &fsinfo))
+ 		goto_out;
+ 
+ 	if (fsinfo.nofs) {
+@@ -6591,7 +6591,7 @@ static int _fs_reduce(struct cmd_context *cmd, struct logical_volume *lv,
+ 	 * Re-check the fs last block which should now be less than the
+ 	 * requested (reduced) LV size.
+ 	 */
+-	if (!fs_get_info(cmd, lv, &fsinfo2, 0))
++	if (!fs_get_info(cmd, lv, &fsinfo2))
+ 		goto_out;
+ 
+ 	if (fsinfo.fs_last_byte && (fsinfo2.fs_last_byte > fsinfo.new_size_bytes)) {
+@@ -6613,7 +6613,7 @@ static int _fs_extend_check_fsinfo(struct cmd_context *cmd, struct logical_volum
+ 
+ 	memset(fsinfo, 0, sizeof(*fsinfo));
+ 
+-	if (!fs_get_info(cmd, lv, fsinfo, 1))
++	if (!fs_get_info(cmd, lv, fsinfo))
+ 		return 0;
+ 
+ 	if (fsinfo->nofs)
+diff --git a/test/shell/lvresize-fs-crypt.sh b/test/shell/lvresize-fs-crypt.sh
+index a76eda099..c601267f0 100644
+--- a/test/shell/lvresize-fs-crypt.sh
++++ b/test/shell/lvresize-fs-crypt.sh
+@@ -107,6 +107,24 @@ umount "$mount_dir"
+ cryptsetup close $cr
+ lvremove -f $vg/$lv
+ 
++# lvextend+lvreduce xfs on LUKS1
++lvcreate -n $lv -L 320M $vg
++echo 93R4P4pIqAH8 | cryptsetup luksFormat -i1 --type luks1 "$DM_DEV_DIR/$vg/$lv"
++echo 93R4P4pIqAH8 | cryptsetup luksOpen "$DM_DEV_DIR/$vg/$lv" $cr
++mkfs.xfs /dev/mapper/$cr
++mount /dev/mapper/$cr "$mount_dir"
++dd if=/dev/zero of="$mount_dir/zeros1" bs=1M count=20 oflag=direct
++df --output=size "$mount_dir" |tee df1
++lvextend -L+136M --fs resize $vg/$lv
++check lv_field $vg/$lv lv_size "456.00m"
++df --output=size "$mount_dir" |tee df2
++not diff df1 df2
++not lvresize -L 320M $vg/$lv
++not lvresize -r -L 320M $vg/$lv
++umount "$mount_dir"
++cryptsetup close $cr
++lvremove -f $vg/$lv
++
+ # lvextend ext4 on plain crypt (no header)
+ lvcreate -n $lv -L 256M $vg
+ echo 93R4P4pIqAH8 | cryptsetup create $cr "$DM_DEV_DIR/$vg/$lv"
+diff --git a/test/shell/lvresize-fs.sh b/test/shell/lvresize-fs.sh
+index 153304962..e54790f19 100644
+--- a/test/shell/lvresize-fs.sh
++++ b/test/shell/lvresize-fs.sh
+@@ -700,5 +700,72 @@ blkid -p "$DM_DEV_DIR/$vg/$lv" | grep FSSIZE && {
+ 	lvreduce -L16m $vg/$lv
+ 	check lv_field $vg/$lv lv_size "16.00m"
+ }
++lvremove -y $vg/$lv
++
++###############################
++#
++# lvextend followed by lvreduce
++#
++###############################
++
++# mounted, fs resized
++lvcreate -n $lv -L 40M $vg
++mkfs.ext4 "$DM_DEV_DIR/$vg/$lv"
++mount "$DM_DEV_DIR/$vg/$lv" "$mount_dir"
++dd if=/dev/zero of="$mount_dir/zeros1" bs=1M count=10 oflag=direct
++lvresize --yes -r -L 50M $vg/$lv
++not lvresize --yes -L 40M $vg/$lv
++lvresize --yes -r -L 40M $vg/$lv
++umount "$mount_dir"
++lvchange -an $vg/$lv
++lvremove $vg/$lv
++
++# unmounted, fs resized
++lvcreate -n $lv -L 40M $vg
++mkfs.ext4 "$DM_DEV_DIR/$vg/$lv"
++mount "$DM_DEV_DIR/$vg/$lv" "$mount_dir"
++dd if=/dev/zero of="$mount_dir/zeros1" bs=1M count=10 oflag=direct
++umount "$mount_dir"
++lvresize --yes -r -L 50M $vg/$lv
++not lvresize --yes -L 40M $vg/$lv
++lvresize --yes -r -L 40M $vg/$lv
++lvchange -an $vg/$lv
++lvremove $vg/$lv
++
++# mounted, fs not resized
++lvcreate -n $lv -L 40M $vg
++mkfs.ext4 "$DM_DEV_DIR/$vg/$lv"
++mount "$DM_DEV_DIR/$vg/$lv" "$mount_dir"
++dd if=/dev/zero of="$mount_dir/zeros1" bs=1M count=10 oflag=direct
++df --output=size "$mount_dir" |tee df1
++lvresize --yes -L 50M $vg/$lv
++check lv_field $vg/$lv lv_size "50.00m"
++lvresize --yes -L 40M $vg/$lv
++check lv_field $vg/$lv lv_size "40.00m"
++df --output=size "$mount_dir" |tee df2
++# fs size unchanged
++diff df1 df2
++umount "$mount_dir"
++lvchange -an $vg/$lv
++lvremove $vg/$lv
++
++# unmounted, fs not resized
++lvcreate -n $lv -L 40M $vg
++mkfs.ext4 "$DM_DEV_DIR/$vg/$lv"
++mount "$DM_DEV_DIR/$vg/$lv" "$mount_dir"
++dd if=/dev/zero of="$mount_dir/zeros1" bs=1M count=10 oflag=direct
++df --output=size "$mount_dir" |tee df1
++umount "$mount_dir"
++lvresize --yes -L 50M $vg/$lv
++check lv_field $vg/$lv lv_size "50.00m"
++lvresize --yes -L 40M $vg/$lv
++check lv_field $vg/$lv lv_size "40.00m"
++# fs size unchanged
++mount "$DM_DEV_DIR/$vg/$lv" "$mount_dir"
++df --output=size "$mount_dir" |tee df2
++diff df1 df2
++umount "$mount_dir"
++lvchange -an $vg/$lv
++lvremove $vg/$lv
+ 
+ vgremove -ff $vg
+diff --git a/test/shell/lvresize-xfs.sh b/test/shell/lvresize-xfs.sh
+index 6fe467950..91374a10a 100644
+--- a/test/shell/lvresize-xfs.sh
++++ b/test/shell/lvresize-xfs.sh
+@@ -19,7 +19,7 @@ which xfs_growfs || skip
+ 
+ aux have_fsinfo || skip "Test needs --fs checksize support"
+ 
+-aux prepare_vg 1 500
++aux prepare_vg 1 600
+ 
+ mount_dir="mnt_lvresize_fs"
+ mkdir -p "$mount_dir"
+@@ -254,6 +254,71 @@ umount "$mount_dir"
+ 
+ lvremove -f $vg/$lv
+ 
++###############################
++#
++# lvextend followed by lvreduce
++#
++###############################
++
++# mounted, fs resized
++lvcreate -n $lv -L 400M $vg
++mkfs.xfs "$DM_DEV_DIR/$vg/$lv"
++mount "$DM_DEV_DIR/$vg/$lv" "$mount_dir"
++dd if=/dev/zero of="$mount_dir/zeros1" bs=1M count=20 oflag=direct
++lvresize --yes -r -L 500M $vg/$lv
++not lvresize --yes -r -L 400M $vg/$lv
++not lvresize --yes -L 400M $vg/$lv
++umount "$mount_dir"
++lvchange -an $vg/$lv
++lvremove $vg/$lv
++
++# unmounted, fs resized
++lvcreate -n $lv -L 400M $vg
++mkfs.xfs "$DM_DEV_DIR/$vg/$lv"
++mount "$DM_DEV_DIR/$vg/$lv" "$mount_dir"
++dd if=/dev/zero of="$mount_dir/zeros1" bs=1M count=20 oflag=direct
++umount "$mount_dir"
++lvresize --yes -r -L 500M $vg/$lv
++not lvresize --yes -r -L 400M $vg/$lv
++not lvresize --yes -L 400M $vg/$lv
++lvchange -an $vg/$lv
++lvremove $vg/$lv
++
++# mounted, fs not resized
++lvcreate -n $lv -L 400M $vg
++mkfs.xfs "$DM_DEV_DIR/$vg/$lv"
++mount "$DM_DEV_DIR/$vg/$lv" "$mount_dir"
++dd if=/dev/zero of="$mount_dir/zeros1" bs=1M count=20 oflag=direct
++df --output=size "$mount_dir" |tee df1
++lvresize --yes -L 500M $vg/$lv
++check lv_field $vg/$lv lv_size "500.00m"
++lvresize --yes -L 400M $vg/$lv
++check lv_field $vg/$lv lv_size "400.00m"
++df --output=size "$mount_dir" |tee df2
++# fs size unchanged
++diff df1 df2
++umount "$mount_dir"
++lvchange -an $vg/$lv
++lvremove $vg/$lv
++
++# unmounted, fs not resized
++lvcreate -n $lv -L 400M $vg
++mkfs.xfs "$DM_DEV_DIR/$vg/$lv"
++mount "$DM_DEV_DIR/$vg/$lv" "$mount_dir"
++dd if=/dev/zero of="$mount_dir/zeros1" bs=1M count=20 oflag=direct
++df --output=size "$mount_dir" |tee df1
++umount "$mount_dir"
++lvresize --yes -L 500M $vg/$lv
++check lv_field $vg/$lv lv_size "500.00m"
++lvresize --yes -L 400M $vg/$lv
++check lv_field $vg/$lv lv_size "400.00m"
++# fs size unchanged
++mount "$DM_DEV_DIR/$vg/$lv" "$mount_dir"
++df --output=size "$mount_dir" |tee df2
++diff df1 df2
++umount "$mount_dir"
++lvchange -an $vg/$lv
++lvremove $vg/$lv
+ 
+ ##########################################################
+ #
+-- 
+2.52.0
+

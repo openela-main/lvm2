@@ -1,0 +1,84 @@
+From 70c87a5623825c47908b80d14915b33d6f32f6b2 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Mon, 15 Dec 2025 22:13:12 +0100
+Subject: [PATCH 23/32] cache: adding sync points
+
+(cherry picked from commit 1eec0a1b6bc06fa6733c5de3875d0bd03880927f)
+---
+ lib/metadata/cache_manip.c      | 18 +++++++++++-------
+ lib/metadata/writecache_manip.c |  3 ++-
+ 2 files changed, 13 insertions(+), 8 deletions(-)
+
+diff --git a/lib/metadata/cache_manip.c b/lib/metadata/cache_manip.c
+index 7f0adf837..6a02964a7 100644
+--- a/lib/metadata/cache_manip.c
++++ b/lib/metadata/cache_manip.c
+@@ -555,6 +555,7 @@ int lv_cache_wait_for_clean(struct logical_volume *cache_lv, int *is_clean)
+  */
+ int lv_cache_remove(struct logical_volume *cache_lv)
+ {
++	struct cmd_context *cmd = cache_lv->vg->cmd;
+ 	struct lv_segment *cache_seg = first_seg(cache_lv);
+ 	struct logical_volume *corigin_lv;
+ 	struct logical_volume *cache_pool_lv;
+@@ -562,7 +563,7 @@ int lv_cache_remove(struct logical_volume *cache_lv)
+ 	uint64_t data_len, metadata_len;
+ 	cache_mode_t cache_mode;
+ 	int temp_activated = 0;
+-	int is_clear;
++	int r, is_clear;
+ 
+ 	if (!lv_is_cache(cache_lv)) {
+ 		log_error(INTERNAL_ERROR "LV %s is not cache volume.",
+@@ -625,14 +626,16 @@ int lv_cache_remove(struct logical_volume *cache_lv)
+ 	 * remove the cache_pool then without waiting for the flush to
+ 	 * complete.
+ 	 */
+-	if (!lv_cache_wait_for_clean(cache_lv, &is_clear)) {
+-		if (temp_activated && !deactivate_lv(cache_lv->vg->cmd, cache_lv))
+-			stack;
+-		return_0;
++	r = lv_cache_wait_for_clean(cache_lv, &is_clear);
++	if (temp_activated) {
++		sync_local_dev_names(cmd);
++		if (!deactivate_lv(cmd, cache_lv))
++			log_warn("Failed to deactivate after cleaning cache.");
++		sync_local_dev_names(cmd);
+ 	}
+ 
+-	if (temp_activated && !deactivate_lv(cache_lv->vg->cmd, cache_lv))
+-		log_warn("Failed to deactivate after cleaning cache.");
++	if (!r)
++		return_0;
+ 
+ 	cache_pool_lv = cache_seg->pool_lv;
+ 	if (!detach_pool_lv(cache_seg))
+@@ -697,6 +700,7 @@ int lv_cache_remove(struct logical_volume *cache_lv)
+ 	if (!lv_update_and_reload(cache_lv))
+ 		return_0;
+ 	cache_lv = corigin_lv;
++	sync_local_dev_names(cmd);
+ remove:
+ 	if (!detach_pool_lv(cache_seg))
+ 		return_0;
+diff --git a/lib/metadata/writecache_manip.c b/lib/metadata/writecache_manip.c
+index ab7fc2c8c..8c8caa6cb 100644
+--- a/lib/metadata/writecache_manip.c
++++ b/lib/metadata/writecache_manip.c
+@@ -376,6 +376,8 @@ static int _lv_detach_writecache_cachevol_active(struct logical_volume *lv, int
+ 		return 0;
+ 	}
+ 
++	sync_local_dev_names(cmd);
++
+ 	log_debug("Deactivating previous cachevol %s", display_lvname(lv_fast));
+ 
+ 	if (!deactivate_lv(cmd, lv_fast))
+@@ -506,4 +508,3 @@ int writecache_settings_to_str_list(struct writecache_settings *settings, struct
+ 
+ 	return 1;
+ }
+-
+-- 
+2.52.0
+

@@ -1,7 +1,7 @@
-From 9da868bf98ca97adde7f5345fd25cd38f83c7b0d Mon Sep 17 00:00:00 2001
+From 0802fe7f20de14c5bdb2fc0b3366de52244ec324 Mon Sep 17 00:00:00 2001
 From: Marian Csontos <mcsontos@redhat.com>
-Date: Thu, 16 May 2024 12:12:06 +0200
-Subject: [PATCH] RHEL10
+Date: Fri, 24 Oct 2025 18:34:44 +0200
+Subject: [PATCH 01/32] RHEL10
 
 ---
  VERSION    | 2 +-
@@ -9,19 +9,19 @@ Subject: [PATCH] RHEL10
  2 files changed, 2 insertions(+), 2 deletions(-)
 
 diff --git a/VERSION b/VERSION
-index e1934c88c..0c8e679fe 100644
+index 2f2c0e816..b59be49ca 100644
 --- a/VERSION
 +++ b/VERSION
 @@ -1 +1 @@
--2.03.32(2) (2025-05-05)
-+2.03.32(2-RHEL10) (2025-05-05)
+-2.03.36(2) (2025-10-24)
++2.03.36(2)-RHEL10 (2025-10-24)
 diff --git a/VERSION_DM b/VERSION_DM
-index 9016990a1..47af7522d 100644
+index cad6e0219..ec9725808 100644
 --- a/VERSION_DM
 +++ b/VERSION_DM
 @@ -1 +1 @@
--1.02.206 (2025-05-05)
-+1.02.206-RHEL10 (2025-05-05)
+-1.02.210 (2025-10-24)
++1.02.210-RHEL10 (2025-10-24)
 -- 
-2.49.0
+2.52.0
 

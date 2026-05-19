@@ -1,0 +1,27 @@
+From 8121cf583513b0536a2e70c91dfbdcc451bebc88 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Sun, 14 Dec 2025 21:54:29 +0100
+Subject: [PATCH 32/32] log: add string.h
+
+Header file is using  strerror() from <string.h>.
+
+(cherry picked from commit e8d744e8bdb8386ab5754015e6511d0431d76f04)
+---
+ lib/log/log.h | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/lib/log/log.h b/lib/log/log.h
+index 6efe5a66b..287db00e5 100644
+--- a/lib/log/log.h
++++ b/lib/log/log.h
+@@ -38,6 +38,7 @@
+  */
+ 
+ #include <errno.h>
++#include <string.h>
+ 
+ #define EUNCLASSIFIED -1	/* Generic error code */
+ 
+-- 
+2.52.0
+

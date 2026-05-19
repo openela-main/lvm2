@@ -1,0 +1,44 @@
+From fe0326283e7d6fb2171e316440b8a632f93c3545 Mon Sep 17 00:00:00 2001
+From: David Teigland <teigland@redhat.com>
+Date: Thu, 6 Nov 2025 19:28:25 -0600
+Subject: [PATCH 24/32] lvmdevices: update force option
+
+When lvmdevices --update doesn't see any reason to update
+system.devices, it doesn't update.  Let the user force an
+update in case they see a reason to do it.
+
+(cherry picked from commit c65ec4ebc66ae1fc57cd750fa45ff1aea0014457)
+---
+ tools/command-lines.in | 2 +-
+ tools/lvmdevices.c     | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/tools/command-lines.in b/tools/command-lines.in
+index 778187e44..f599a440c 100644
+--- a/tools/command-lines.in
++++ b/tools/command-lines.in
+@@ -1477,7 +1477,7 @@ OO: --refresh
+ DESC: Check the devices file and report incorrect values.
+ 
+ lvmdevices --update
+-OO: --delnotfound, --refresh
++OO: --delnotfound, --refresh, --force
+ ID: lvmdevices_update
+ DESC: Update the devices file to fix incorrect values.
+ 
+diff --git a/tools/lvmdevices.c b/tools/lvmdevices.c
+index 54e33d00c..647098662 100644
+--- a/tools/lvmdevices.c
++++ b/tools/lvmdevices.c
+@@ -756,7 +756,7 @@ int lvmdevices(struct cmd_context *cmd, int argc, char **argv)
+ 		}
+ 
+ 		if (arg_is_set(cmd, update_ARG)) {
+-			if (update_needed || !dm_list_empty(&found_devs) || cmd->devices_file_hash_mismatch) {
++			if (update_needed || !dm_list_empty(&found_devs) || cmd->devices_file_hash_mismatch || arg_is_set(cmd, force_ARG)) {
+ 				if (!device_ids_write(cmd)) {
+ 					log_error(failed_to_write_devices_file_msg);
+ 					goto_bad;
+-- 
+2.52.0
+
