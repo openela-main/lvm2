@@ -1,4 +1,4 @@
-%global device_mapper_version 1.02.206
+%global device_mapper_version 1.02.207
 
 %global enable_cache 1
 %global enable_lvmdbusd 1
@@ -41,7 +41,7 @@
 %global commit 4a1f6173d29a7d7ecab14a9313000aa5f81170d0
 %global shortcommit %(c=%{commit}; echo ${c:0:7})
 %endif
-%global rel_suffix .2
+#%%global rel_suffix .bz2141837
 
 # Do not reset Release to 1 unless both lvm2 and device-mapper
 # versions are increased together.
@@ -50,11 +50,11 @@ Name: lvm2
 %if 0%{?rhel}
 Epoch: %{rhel}
 %endif
-Version: 2.03.32
+Version: 2.03.33
 %if 0%{?from_snapshot}
 Release: 0.1.20211115git%{shortcommit}%{?dist}%{?rel_suffix}
 %else
-Release: 2%{?dist}%{?rel_suffix}
+Release: 4%{?dist}%{?rel_suffix}
 %endif
 License: GPL-2.0-only
 URL: https://sourceware.org/lvm2
@@ -70,22 +70,59 @@ Patch4: 0004-Revert-dm-udev-rules-don-t-export-and-save-DM_SUSPEN.patch
 Patch5: 0005-Revert-11-dm-lvm.rules-don-t-restore-DM_UDEV_DISABLE.patch
 Patch6: 0006-Revert-10-dm-rules-don-t-restore-DM_UDEV_DISABLE_OTH.patch
 Patch7: 0007-WHATS_NEW_DM-update.patch
-# RHEL-94577:
-Patch8: 0008-lvmlockd-fix-hosts-check-for-vgremove.patch
-Patch9: 0009-lvmlockd-fix-sanlock_release-for-vgremove.patch
-# RHEL-67039:
-Patch10: 0010-raid-count-or-clear-transiently-failed-devices.patch
-Patch11: 0011-lvconvert-allow-clearing-superblocks.patch
-Patch12: 0012-test-check-raid-superblock-clearing.patch
-Patch13: 0013-man-update-raid-man.patch
+Patch8: 0008-lvmlockd-fix-missing-free-in-vg_status.patch
+Patch9: 0009-lvmlockd-add-repair-option-to-reinitialize-sanlock-l.patch
+Patch10: 0010-udev-fix-autoactivation-on-top-of-loop-dev-PVs.patch
+Patch11: 0011-lv_manip.c-fix-lvresize-corruption-in-LV-crypt-FS-st.patch
+Patch12: 0012-device_id-always-log_error-on-device-ids-write-error.patch
+Patch13: 0013-lvmdevices-return-error-if-writing-device-ids-fail-f.patch
 Patch14: 0014-WHATS_NEW-update.patch
-# RHEL-124926:
-Patch15: 0015-activating-raid-LV-with-partial-snapshot-is-an-error.patch
-Patch16: 0016-lv_manip-show-a-warning-during-classic-snapshot-crea.patch
-Patch17: 0017-test-add-new-test-for-snapshot-on-raid-creation-acti.patch
-Patch18: 0018-WHATS_NEW-update.patch
-# RHEL-153392:
-Patch19: 0019-libdaemon-CLOEXEC-descriptors-are-not-stray-fds.patch
+Patch15: 0015-device_id-log_warn-instead-of-log_error-in-device_id.patch
+Patch16: 0016-lvmdevices-log_error-when-writing-devices-file-fails.patch
+Patch17: 0017-lvmlockd-lockopt-was-mistakenly-ignored-when-nolocki.patch
+Patch18: 0018-sanlock-match-lm_lock_sanlock-prototype.patch
+Patch19: 0019-lvmlockd-sanlock-fix-struct-pointer-in-release_renam.patch
+Patch20: 0020-lvmlockd-free-structs-in-adopt-error-path.patch
+Patch21: 0021-lvmlockd-sanlock-check-lock_lv_offset_from_args-resu.patch
+Patch22: 0022-lvmlockd-always-free-ls-struct-after-ls-thread-exits.patch
+Patch23: 0023-man-lvmlockd-updates.patch
+Patch24: 0024-lvmlockd-allow-1-more-extra-character.patch
+Patch25: 0025-libdm-stats-fix-type-mismatch-in-bit-operations.patch
+Patch26: 0026-cov-prevent-potential-negative-array-index.patch
+Patch27: 0027-cov-fix-integer-underflow-in-_count-handling.patch
+Patch28: 0028-cov-fix-va_end-resource-leak-in-szscanf.patch
+Patch29: 0029-cov-add-explicit-check-for-0-size.patch
+Patch30: 0030-cov-explicitly-zero-allocated-mem-for-array.patch
+Patch31: 0031-cov-check-for-potential-empty-registry-list.patch
+Patch32: 0032-cov-check-for-potential-empty-row-list.patch
+Patch33: 0033-gcc-for-C90-don-t-mix-declaration-and-code.patch
+Patch34: 0034-sanlock-fix-struct-copy-to-avoid-aliasing-issues.patch
+Patch35: 0035-sanlock-fix-file-descriptor-leak-in-error-path.patch
+Patch36: 0036-command-lines-fix-typo-in-configurable-name.patch
+Patch37: 0037-tools-simplify-LVM_DID_EXEC-environment-variable.patch
+Patch38: 0038-gcc-ensure-pointer-is-properly-initialized.patch
+Patch39: 0039-dmeventd-check-device-exists.patch
+Patch40: 0040-dmeventd-add-device-existence-check.patch
+Patch41: 0041-dmeventd-_get_status-returns-success-for-non-monitor.patch
+Patch42: 0042-vgsplit-fix-check-for-not-splitting-an-LV-between-tw.patch
+Patch43: 0043-vgsplit-fix-check-for-not-splitting-an-LV-between-tw.patch
+Patch44: 0044-lvmdevices-do-not-create-system.devices-when-deletin.patch
+Patch45: 0045-tools-pvchange-unlock-devices-file-at-the-end-of-cmd.patch
+Patch46: 0046-tools-pvchange-unlock-devices-file-at-the-end-of-cmd.patch
+Patch47: 0047-make-generate.patch
+Patch48: 0048-activating-raid-LV-with-partial-snapshot-is-an-error.patch
+Patch49: 0049-lv_manip-show-a-warning-during-classic-snapshot-crea.patch
+Patch50: 0050-test-add-new-test-for-snapshot-on-raid-creation-acti.patch
+Patch51: 0051-WHATS_NEW-update.patch
+# RHEL-135072:
+Patch52: 0052-integrity-allow-creating-imeta-with-more-than-one-se.patch
+# RHEL-116883:
+Patch53: 0053-lvresize-fix-xfs-size-checks.patch
+Patch54: 0054-configure-check-for-xfs-header-file.patch
+Patch55: 0055-log-add-string.h.patch
+Patch56: 0056-filesystem-refactor-code-working-with-xfs.patch
+Patch57: 0057-lib-rename-uuid.c-to-id.c.patch
+Patch58: 0058-autoreconf-reconfigure.patch
 
 BuildRequires: make
 BuildRequires: gcc
@@ -98,6 +135,8 @@ BuildRequires: ncurses-devel
 BuildRequires: libedit-devel
 BuildRequires: libaio-devel
 BuildRequires: libnvme-devel
+BuildRequires: xfsprogs-devel
+#BuildRequires: libuuid-devel
 %if %{enable_lockd_dlm}
 BuildRequires: dlm-devel >= %{dlm_version}
 %endif
@@ -717,11 +756,18 @@ An extensive functional testsuite for LVM2.
 %endif
 
 %changelog
-* Fri Mar 06 2026 Marian Csontos <mcsontos@redhat.com> - 2.03.32-2.el9_7.2
-- Fix false positive warnings about stray FDs on s390x.
+* Thu Jan 15 2026 Marian Csontos <mcsontos@redhat.com> - 2.03.33-4
+- Handle wrong XFS reported size when shrinking LV immediately after growing.
 
-* Mon Nov 10 2025 Marian Csontos <mcsontos@redhat.com> - 2.03.32-2.el9_7.1
+* Tue Jan 06 2026 Marian Csontos <mcsontos@redhat.com> - 2.03.33-3
+- Allow integrity to use multiple segments for metadata.
+
+* Mon Nov 10 2025 Marian Csontos <mcsontos@redhat.com> - 2.03.33-2
 - Add message when activating RAID volumes with snapshots.
+
+* Mon Sep 29 2025 Marian Csontos <mcsontos@redhat.com> - 2.03.33-1
+- Update to upstream version 2.03.33.
+- See WHATS_NEW and WHATS_NEW_DM for more information.
 
 * Tue Jun 03 2025 Marian Csontos <mcsontos@redhat.com> - 2.03.32-2
 - Fix vgremove hanging immediately after lockstart.

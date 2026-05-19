@@ -1,0 +1,27 @@
+From d4406030d3fcaa9286fa9ef86fe4ebed04303bbf Mon Sep 17 00:00:00 2001
+From: David Teigland <teigland@redhat.com>
+Date: Tue, 1 Jul 2025 11:23:16 -0500
+Subject: [PATCH 21/47] lvmlockd-sanlock: check lock_lv_offset_from_args result
+
+(cherry picked from commit f35f074afdaa52b0db098911d97202b478a33085)
+---
+ daemons/lvmlockd/lvmlockd-sanlock.c | 3 +--
+ 1 file changed, 1 insertion(+), 2 deletions(-)
+
+diff --git a/daemons/lvmlockd/lvmlockd-sanlock.c b/daemons/lvmlockd/lvmlockd-sanlock.c
+index 80def0449..89df4ec44 100644
+--- a/daemons/lvmlockd/lvmlockd-sanlock.c
++++ b/daemons/lvmlockd/lvmlockd-sanlock.c
+@@ -1212,8 +1212,7 @@ int lm_free_lv_sanlock(struct lockspace *ls, struct resource *r)
+ 
+ 	strcpy_name_len(rs->name, "#unused", SANLK_NAME_LEN);
+ 
+-	if (!offset) {
+-		lock_lv_offset_from_args(r->lv_args, &offset);
++	if (!offset && !lock_lv_offset_from_args(r->lv_args, &offset)) {
+ 		rds->rs.disks[0].offset = offset;
+ 		log_debug("%s:%s free_lv_san lock_args offset %llu", ls->name, r->name, (unsigned long long)offset);
+ 	}
+-- 
+2.51.0
+

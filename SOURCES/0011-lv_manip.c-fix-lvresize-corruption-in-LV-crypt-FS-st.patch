@@ -1,0 +1,81 @@
+From 6ca7cd60fd6afcc0f95dfe20d33044a319621b6d Mon Sep 17 00:00:00 2001
+From: Peter Rajnoha <prajnoha@redhat.com>
+Date: Fri, 18 Jul 2025 15:06:36 +0200
+Subject: [PATCH 11/47] lv_manip.c: fix lvresize corruption in LV->crypt->FS
+ stack if near crypt min size limit
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+If we have LV->crypt->FS stack, check that the adjustment for the crypt
+data offset will left space for the crypt data itself. Fix possible underflow.
+
+Example:
+
+❯  lvs -o name,size vg/lvol0
+  lv_name lv_size
+  lvol0   124.00m
+
+❯  lsblk /dev/vg/lvol0
+NAME     MAJ:MIN RM  SIZE RO TYPE  MOUNTPOINTS
+vg-lvol0 252:2    0  124M  0 lvm
+└─a      252:4    0  108M  0 crypt
+
+Before this patch (the incorrect resulting underflowed file system size after adjustment
+for crypt data offset, crypt data then severed by the LV resize without proper
+crypt resize beforehand):
+
+❯  lvreduce --yes --resizefs -L -123M  vg/lvol0
+  Rounding size to boundary between physical extents: 120.00 MiB.
+  Checking crypt device /dev/dm-4 on LV vg/lvol0.
+  File system size 18446744073696968704b is adjusted for crypt data offset 16777216b.
+  File system ext4+crypto_LUKS found on vg/lvol0.
+  File system size (108.00 MiB) is smaller than the requested size (<16.00 EiB).
+  File system reduce is not needed, skipping.
+  crypt device is already reduced to 113246208 bytes.
+  Size of logical volume vg/lvol0 changed from 124.00 MiB (31 extents) to 4.00 MiB (1 extents).
+  Logical volume vg/lvol0 successfully resized.
+
+With this patch applied:
+
+❯  lvreduce --yes --resizefs -L -123M  vg/lvol0
+  Rounding size to boundary between physical extents: 120.00 MiB.
+  Checking crypt device /dev/dm-4 on LV vg/lvol0.
+  Crypt header requires 16.00 MiB, not enough space left for crypt data.
+
+(cherry picked from commit 5da3676ff3901fd099dcdd2bd7478fa9ea4f54dc)
+---
+ WHATS_NEW               | 1 +
+ lib/metadata/lv_manip.c | 5 +++++
+ 2 files changed, 6 insertions(+)
+
+diff --git a/WHATS_NEW b/WHATS_NEW
+index e8db60d53..723638042 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,6 @@
+ Version 2.03.34 - 
+ ==================
++  Fix lvresize corruption in LV->crypt->FS stack if near crypt min size limit.
+   Fix autoactivation on top of loop dev PVs to trigger once for change uevents.
+ 
+ Version 2.03.33 - 27th June 2025
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index 193b1f403..577ffd0b3 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -6478,6 +6478,11 @@ static int _fs_reduce(struct cmd_context *cmd, struct logical_volume *lv,
+ 	 * 2MB for LUKS1 and 16MB for LUKS2.)
+ 	 */
+ 	if (fsinfo.needs_crypt) {
++		if (fsinfo.crypt_offset_bytes >= fsinfo.new_size_bytes) {
++			log_error("Crypt header requires %s, not enough space left for crypt data.",
++				  display_size(cmd, fsinfo.crypt_offset_bytes >> SECTOR_SHIFT));
++			goto out;
++		}
+ 		fsinfo.new_size_bytes -= fsinfo.crypt_offset_bytes;
+ 		log_print_unless_silent("File system size %llub is adjusted for crypt data offset %ub.",
+ 					(unsigned long long)fsinfo.new_size_bytes, fsinfo.crypt_offset_bytes);
+-- 
+2.51.0
+

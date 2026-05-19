@@ -1,0 +1,58 @@
+From 5af9f7beca2c30815707c412dcbe31a109fd0d62 Mon Sep 17 00:00:00 2001
+From: Peter Rajnoha <prajnoha@redhat.com>
+Date: Fri, 25 Jul 2025 10:45:07 +0200
+Subject: [PATCH 42/47] vgsplit: fix check for not splitting an LV between two
+ VGs
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Fix check for not splitting an LV between two VGs in case
+where the LVs contains an internal layer.
+
+For example, integrity layer for RAIDs and splitting a PV that
+is not part of the RAID LV at all (sdc here):
+
+❯  vgcreate vg /dev/sda /dev/sdb /dev/sdc
+  Volume group "vg" successfully created
+
+❯  lvcreate -l1 -m1 --type raid1 --raidintegrity y vg /dev/sda /dev/sdb
+  Logical volume "lvol0" created.
+
+Before this patch:
+
+❯  vgsplit vg vg2 /dev/sdc
+  Logical volume vg/lvol0_rimage_0 (part of lvol0) must be inactive.
+
+❯  vgchange -an vg
+  0 logical volume(s) in volume group "vg" now active
+
+❯  vgsplit vg vg2 /dev/sdc
+  Can't split LV lvol0_rimage_0 between two Volume Groups
+
+With this patch applied:
+
+❯  vgsplit vg vg2 /dev/sdc
+  New volume group "vg2" successfully split from "vg"
+
+(cherry picked from commit 185455659347722a5eab26f1cc9f189076847e45)
+---
+ tools/vgsplit.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/tools/vgsplit.c b/tools/vgsplit.c
+index e79195019..aa89835d3 100644
+--- a/tools/vgsplit.c
++++ b/tools/vgsplit.c
+@@ -170,7 +170,7 @@ static int _move_lvs(struct volume_group *vg_from, struct volume_group *vg_to)
+ 
+ 		}
+ 
+-		if (vg_with == vg_from)
++		if (!vg_with || vg_with == vg_from)
+ 			continue;
+ 
+ 		/* Move this LV */
+-- 
+2.51.0
+

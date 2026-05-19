@@ -1,0 +1,48 @@
+From f697518550298ec4a571b72f0f6395b42e6fc85d Mon Sep 17 00:00:00 2001
+From: Peter Rajnoha <prajnoha@redhat.com>
+Date: Mon, 21 Jul 2025 13:41:32 +0200
+Subject: [PATCH 13/47] lvmdevices: return error if writing device ids fail for
+ --delldev
+
+(cherry picked from commit 1cd2f35655e79d880d28914998b738baa0be5c07)
+---
+ tools/lvmdevices.c | 9 ++++++---
+ 1 file changed, 6 insertions(+), 3 deletions(-)
+
+diff --git a/tools/lvmdevices.c b/tools/lvmdevices.c
+index fd766e102..d7d3af59b 100644
+--- a/tools/lvmdevices.c
++++ b/tools/lvmdevices.c
+@@ -925,7 +925,8 @@ int lvmdevices(struct cmd_context *cmd, int argc, char **argv)
+  dev_del:
+ 		dm_list_del(&du->list);
+ 		free_du(du);
+-		device_ids_write(cmd);
++		if (!device_ids_write(cmd))
++			goto_bad;
+ 		goto out;
+ 	}
+ 
+@@ -967,7 +968,8 @@ int lvmdevices(struct cmd_context *cmd, int argc, char **argv)
+ 
+ 		dm_list_del(&du->list);
+ 		free_du(du);
+-		device_ids_write(cmd);
++		if (!device_ids_write(cmd))
++			goto_bad;
+ 		goto out;
+ 	}
+ 
+@@ -1008,7 +1010,8 @@ int lvmdevices(struct cmd_context *cmd, int argc, char **argv)
+ 		}
+ 
+ 		free_du(du);
+-		device_ids_write(cmd);
++		if (!device_ids_write(cmd))
++			goto_bad;
+ 		goto out;
+ 	}
+ 
+-- 
+2.51.0
+

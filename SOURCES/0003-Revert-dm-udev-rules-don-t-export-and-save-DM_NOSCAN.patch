@@ -1,9 +1,11 @@
-From 6a15577cb02603512afce0f13a591183105c8f73 Mon Sep 17 00:00:00 2001
+From e7afa38ae6a12cb0ac0d4c7b923ec46c254df553 Mon Sep 17 00:00:00 2001
 From: Marian Csontos <mcsontos@redhat.com>
 Date: Thu, 16 May 2024 15:30:15 +0200
-Subject: [PATCH 3/7] Revert "dm udev rules: don't export and save DM_NOSCAN"
+Subject: [PATCH 03/47] Revert "dm udev rules: don't export and save DM_NOSCAN"
 
 This reverts commit a196752969320cfc34a97cc97afa1978fa57da73.
+
+(cherry picked from commit 6a15577cb02603512afce0f13a591183105c8f73)
 ---
  udev/11-dm-lvm.rules.in  | 2 +-
  udev/13-dm-disk.rules.in | 4 ++--
@@ -39,5 +41,5 @@ index 9bfeebe13..a9ad67e9f 100644
  (BLKID_RULE)
  GOTO="dm_link"
 -- 
-2.49.0
+2.51.0
 

@@ -1,0 +1,36 @@
+From 8af5d6dda5a1e29e0fa9e573ca6f6cf69d07aa9b Mon Sep 17 00:00:00 2001
+From: Heinz Mauelshagen <heinzm@redhat.com>
+Date: Mon, 27 Oct 2025 19:15:06 +0100
+Subject: [PATCH 51/51] WHATS_NEW: update
+
+---
+ WHATS_NEW | 11 +++++++++++
+ 1 file changed, 11 insertions(+)
+
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 41fea1a7a..19442f8c5 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,8 +1,19 @@
++Version 2.03.37 - 
++==================
++  Warn on classic snapshot on raid creation and error on activation + test.
++
++Version 2.03.35 - 
++==================
++  Fix unlocking devices file only after all PVs are processed.
++  Avoid creating system.devices when deleting entries.
++  Fix --lockopt handling in lvmlockd when --nolocking is used.
++
+ Version 2.03.34 - 
+ ==================
+   Fix lvmdevices --deldev/--delpvid to error out if devices file not writeable.
+   Fix lvresize corruption in LV->crypt->FS stack if near crypt min size limit.
+   Fix autoactivation on top of loop dev PVs to trigger once for change uevents.
++  Add lvmlockd --lockopt repair to reinitialize corrupted sanlock leases.
+ 
+ Version 2.03.33 - 27th June 2025
+ ================================
+-- 
+2.51.1
+

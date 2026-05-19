@@ -1,0 +1,44 @@
+From b2814746de3fac6809c07dbd74ca606388a57aa8 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Mon, 30 Jun 2025 13:55:11 +0200
+Subject: [PATCH 29/47] cov: add explicit check for 0 size
+
+(cherry picked from commit ae407d2f3cb1d607463d6d5964e44f11857cdb1f)
+---
+ device_mapper/libdm-report.c | 4 +++-
+ libdm/libdm-report.c         | 4 +++-
+ 2 files changed, 6 insertions(+), 2 deletions(-)
+
+diff --git a/device_mapper/libdm-report.c b/device_mapper/libdm-report.c
+index b2dc1b70c..1521708ed 100644
+--- a/device_mapper/libdm-report.c
++++ b/device_mapper/libdm-report.c
+@@ -3832,7 +3832,9 @@ static struct field_selection *_create_field_selection(struct dm_report *rh,
+ 					goto bad;
+ 				fs->value->v.l = *((struct selection_str_list **) custom);
+ 
+-				s_arr_size = dm_list_size(&fs->value->v.l->str_list.list);
++				if (!(s_arr_size = dm_list_size(&fs->value->v.l->str_list.list)))
++					break;
++
+ 				if (!(s_arr = malloc(sizeof(char *) * s_arr_size))) {
+ 					log_error("dm_report: malloc failed for regex array "
+ 						  "for selection field %s", field_id);
+diff --git a/libdm/libdm-report.c b/libdm/libdm-report.c
+index 18f7b6eb8..b8686901f 100644
+--- a/libdm/libdm-report.c
++++ b/libdm/libdm-report.c
+@@ -3829,7 +3829,9 @@ static struct field_selection *_create_field_selection(struct dm_report *rh,
+ 					goto bad;
+ 				fs->value->v.l = *((struct selection_str_list **) custom);
+ 
+-				s_arr_size = dm_list_size(&fs->value->v.l->str_list.list);
++				if (!(s_arr_size = dm_list_size(&fs->value->v.l->str_list.list)))
++					break;
++
+ 				if (!(s_arr = malloc(sizeof(char *) * s_arr_size))) {
+ 					log_error("dm_report: malloc failed for regex array "
+ 						  "for selection field %s", field_id);
+-- 
+2.51.0
+

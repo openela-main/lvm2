@@ -1,0 +1,28 @@
+From de5bc8c70577b3d7483c43ce373d233d9089a990 Mon Sep 17 00:00:00 2001
+From: David Teigland <teigland@redhat.com>
+Date: Tue, 1 Jul 2025 10:22:50 -0500
+Subject: [PATCH 19/47] lvmlockd-sanlock: fix struct pointer in release_rename
+
+(cherry picked from commit 03a343dc9e49b164fe0d153b0b0dc815f18edd6e)
+---
+ daemons/lvmlockd/lvmlockd-sanlock.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/daemons/lvmlockd/lvmlockd-sanlock.c b/daemons/lvmlockd/lvmlockd-sanlock.c
+index ce5953faf..80def0449 100644
+--- a/daemons/lvmlockd/lvmlockd-sanlock.c
++++ b/daemons/lvmlockd/lvmlockd-sanlock.c
+@@ -2424,8 +2424,8 @@ static int release_rename(struct lockspace *ls, struct resource *r)
+ 	memcpy(&rd1, &rds->rs, sizeof(struct rd_sanlock));
+ 	memcpy(&rd2, &rds->rs, sizeof(struct rd_sanlock));
+ 
+-	res1 = (struct sanlk_resource *)&rd1;
+-	res2 = (struct sanlk_resource *)&rd2;
++	res1 = &rd1.rs;
++	res2 = &rd2.rs;
+ 
+ 	if (memcmp(res1->name, r->name, SANLK_NAME_LEN))
+ 		log_error("%s:%s unlock_san release rename bad name %.48s", ls->name, r->name, res1->name);
+-- 
+2.51.0
+

@@ -1,0 +1,65 @@
+From fa4c75d8e20019a11c722d1cc7f3923b3e4b5324 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Fri, 27 Jun 2025 13:46:01 +0200
+Subject: [PATCH 27/47] cov: fix integer underflow in _count handling
+
+The _count variable was declared as uint64_t but used in arithmetic operations
+that could result in underflow when subtracting from smaller values. This
+could cause issues when calculating interval numbers or handling count-based
+reporting.
+
+Changes:
+- Change _count variable type from uint64_t to int64_t
+- Update _interval_num() to use proper casting for arithmetic
+- Change UINT64_MAX to INT64_MAX for default count value
+- Remove unnecessary casting in count assignment
+
+This prevents potential underflow issues when _count is decremented or used
+in subtraction operations, ensuring proper behavior for interval-based
+reporting and count tracking in dmsetup commands.
+
+The fix maintains compatibility while providing safer integer arithmetic
+for the reporting loop logic.
+
+(cherry picked from commit 8873599b66612852136b3dbcb4ebefe0164271dd)
+---
+ libdm/dm-tools/dmsetup.c | 8 ++++----
+ 1 file changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/libdm/dm-tools/dmsetup.c b/libdm/dm-tools/dmsetup.c
+index bf8449e35..2d6ed0a71 100644
+--- a/libdm/dm-tools/dmsetup.c
++++ b/libdm/dm-tools/dmsetup.c
+@@ -268,7 +268,7 @@ static struct dm_tree *_dtree;
+ static struct dm_report *_report;
+ static report_type_t _report_type;
+ static dev_name_t _dev_name_type;
+-static uint64_t _count = 1; /* count of repeating reports */
++static int64_t _count = 1; /* count of repeating reports */
+ static struct dm_timestamp *_initial_timestamp = NULL;
+ static uint64_t _disp_factor = 512; /* display sizes in sectors */
+ static char _disp_units = 's';
+@@ -593,7 +593,7 @@ static struct dm_split_name *_get_split_name(const char *uuid, const char *name,
+ static uint64_t _interval_num(void)
+ {
+ 	uint64_t count_arg = _int_args[COUNT_ARG];
+-	return ((uint64_t) _int_args[COUNT_ARG] - _count) + !!count_arg;
++	return (uint64_t)(_int_args[COUNT_ARG] - _count) + !!count_arg;
+ }
+ 
+ #ifdef HAVE_SYS_TIMERFD_H
+@@ -7342,9 +7342,9 @@ unknown:
+ 	}
+ 
+ 	if (_switches[COUNT_ARG] && _int_args[COUNT_ARG])
+-		_count = (uint64_t)_int_args[COUNT_ARG];
++		_count = _int_args[COUNT_ARG];
+ 	else if (_switches[COUNT_ARG] || _switches[INTERVAL_ARG])
+-		_count = UINT64_MAX;
++		_count = INT64_MAX;
+ 
+ 	if (_switches[UNITS_ARG]) {
+ 		_disp_factor = _factor_from_units(_string_args[UNITS_ARG],
+-- 
+2.51.0
+

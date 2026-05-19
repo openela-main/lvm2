@@ -1,0 +1,41 @@
+From c25e62f4e0532dfb55e2c81a6e236edfeffa8c11 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Sun, 29 Jun 2025 20:47:13 +0200
+Subject: [PATCH 26/47] cov: prevent potential negative array index
+
+The _stats_map_extents() function processes file extents returned
+by FIEMAP ioctl calls. When handling the case where a file has
+only a single extent, the code accesses fm_ext[i - 1] to check
+if the logical offset is 0.
+
+However, when i is 0 (no extents processed yet), this results in a negative
+array index access which can cause undefined behavior or crashes.
+
+So check early whether there are fm_mapped_extents to process.
+This avoids using negative index array.
+
+Existing code already checks fm_mapped_extents == 0 before calling
+this function so the patch is not fixing any real bug.
+
+(cherry picked from commit 2a2ad7317f19f15982045d847aacd74922a28572)
+---
+ libdm/libdm-stats.c | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/libdm/libdm-stats.c b/libdm/libdm-stats.c
+index cbcbb6754..53c3c5480 100644
+--- a/libdm/libdm-stats.c
++++ b/libdm/libdm-stats.c
+@@ -4411,6 +4411,9 @@ static uint64_t _stats_map_extents(int fd, struct dm_pool *mem,
+ 	uint64_t expected = 0, nr_extents = next_extent;
+ 	unsigned int i;
+ 
++	if (!fiemap->fm_mapped_extents)
++		return 0;
++
+ 	/*
+ 	 * Loop over the returned extents adding the fm_pending extent
+ 	 * to the table of extents each time a discontinuity (or eof)
+-- 
+2.51.0
+

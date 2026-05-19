@@ -1,0 +1,51 @@
+From 85a712e95a5c0127d27ca3bbbe7019d54393cc33 Mon Sep 17 00:00:00 2001
+From: Peter Rajnoha <prajnoha@redhat.com>
+Date: Fri, 29 Aug 2025 13:43:20 +0200
+Subject: [PATCH 45/47] tools: pvchange: unlock devices file at the end of cmd
+ processing
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Unlock devices file at the end of cmd processing, after all the PVs are
+processed, not after the first processed PV.
+
+Before this patch:
+
+❯  pvchange -u /dev/sda /dev/sdb
+  Physical volume "/dev/sda" changed
+  WARNING: Devices file unlock no fd.
+  Physical volume "/dev/sdb" changed
+  2 physical volumes changed / 0 physical volumes not changed
+
+With this patch applied:
+
+❯  pvchange -u /dev/sda /dev/sdb
+  Physical volume "/dev/sda" changed
+  Physical volume "/dev/sdb" changed
+  2 physical volumes changed / 0 physical volumes not changed
+
+The lvm_run_command/devices_file_exit/unlock_devices_file will
+do the unlock at the very end of cmd processing.
+
+(cherry picked from commit 16d3195a69fbe15d9fad4a16cceec468ea542e5a)
+---
+ tools/pvchange.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/tools/pvchange.c b/tools/pvchange.c
+index 339d990ca..d7376c499 100644
+--- a/tools/pvchange.c
++++ b/tools/pvchange.c
+@@ -194,7 +194,7 @@ static int _pvchange_single(struct cmd_context *cmd, struct volume_group *vg,
+ 			log_error("Failed to set pvid for devices file.");
+ 		if (!device_ids_write(cmd))
+ 			log_warn("Failed to update devices file.");
+-		unlock_devices_file(cmd);
++		//unlock_devices_file(cmd);
+ 	}
+ 
+ 	log_print_unless_silent("Physical volume \"%s\" changed", pv_name);
+-- 
+2.51.0
+

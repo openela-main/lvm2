@@ -1,0 +1,33 @@
+From 20b81f31c29f416a9c397e41d6998b10fc379228 Mon Sep 17 00:00:00 2001
+From: David Teigland <teigland@redhat.com>
+Date: Tue, 1 Jul 2025 10:53:33 -0500
+Subject: [PATCH 20/47] lvmlockd: free structs in adopt error path
+
+(cherry picked from commit fcca60fda61b5a545c936e61380e047deb887779)
+---
+ daemons/lvmlockd/lvmlockd-core.c | 9 +++++++++
+ 1 file changed, 9 insertions(+)
+
+diff --git a/daemons/lvmlockd/lvmlockd-core.c b/daemons/lvmlockd/lvmlockd-core.c
+index 0cb10369a..369755ac7 100644
+--- a/daemons/lvmlockd/lvmlockd-core.c
++++ b/daemons/lvmlockd/lvmlockd-core.c
+@@ -6331,6 +6331,15 @@ static void adopt_locks(void)
+ 	return;
+ 
+ fail:
++	list_for_each_entry_safe(ls, lsafe, &vg_lockd, list) {
++		list_for_each_entry_safe(r, rsafe, &ls->resources, list) {
++			list_del(&r->list);
++			free_resource(r);
++		}
++		list_del(&ls->list);
++		free(ls);
++	}
++
+ 	(void) unlink(adopt_file);
+ 	log_error("adopt_locks failed, reset host");
+ }
+-- 
+2.51.0
+

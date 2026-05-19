@@ -1,0 +1,210 @@
+From 86812cc39d76f615af43d165c0117cae0c844129 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Sun, 14 Dec 2025 17:13:54 +0100
+Subject: [PATCH 1/2] lib: rename uuid.c to id.c
+
+Use id.c to better match function naming in id.h.
+uuid/uuid.h is public header file, so using lib/id/id.c
+avoids potential naming collision with system uuid.h file.
+
+(cherry picked from commit fe90043412f010957b6c09352a64e56a64c9b2c5)
+---
+ lib/Makefile.in                  | 2 +-
+ lib/cache/lvmcache.h             | 2 +-
+ lib/device/device.h              | 2 +-
+ lib/format_text/format-text.c    | 2 +-
+ lib/format_text/layout.h         | 2 +-
+ lib/{uuid/uuid.c => id/id.c}     | 2 +-
+ lib/{uuid/uuid.h => id/id.h}     | 6 +++---
+ lib/label/label.h                | 2 +-
+ lib/locking/locking.h            | 2 +-
+ lib/metadata/metadata-exported.h | 2 +-
+ lib/metadata/pv.h                | 2 +-
+ lib/metadata/vg.h                | 2 +-
+ 12 files changed, 14 insertions(+), 14 deletions(-)
+ rename lib/{uuid/uuid.c => id/id.c} (99%)
+ rename lib/{uuid/uuid.h => id/id.h} (93%)
+
+diff --git a/lib/Makefile.in b/lib/Makefile.in
+index 8620eaaff..002a9ec46 100644
+--- a/lib/Makefile.in
++++ b/lib/Makefile.in
+@@ -70,6 +70,7 @@ SOURCES =\
+ 	format_text/import_vsn1.c \
+ 	format_text/text_label.c \
+ 	freeseg/freeseg.c \
++	id/id.c \
+ 	label/label.c \
+ 	label/hints.c \
+ 	locking/file_locking.c \
+@@ -115,7 +116,6 @@ SOURCES =\
+ 	snapshot/snapshot.c \
+ 	striped/striped.c \
+ 	thin/thin.c \
+-	uuid/uuid.c \
+ 	zero/zero.c
+ 
+ ifeq ("@DEVMAPPER@", "yes")
+diff --git a/lib/cache/lvmcache.h b/lib/cache/lvmcache.h
+index 9db5268dd..0468a6318 100644
+--- a/lib/cache/lvmcache.h
++++ b/lib/cache/lvmcache.h
+@@ -18,7 +18,7 @@
+ 
+ #include "lib/device/dev-cache.h"
+ #include "lib/device/dev-type.h"
+-#include "lib/uuid/uuid.h"
++#include "lib/id/id.h"
+ #include "lib/label/label.h"
+ #include "lib/locking/locking.h"
+ 
+diff --git a/lib/device/device.h b/lib/device/device.h
+index 8c3cb53b0..35ec3712c 100644
+--- a/lib/device/device.h
++++ b/lib/device/device.h
+@@ -17,7 +17,7 @@
+ #define _LVM_DEVICE_H
+ 
+ #include "base/data-struct/list.h"
+-#include "lib/uuid/uuid.h"
++#include "lib/id/id.h"
+ 
+ #include <stdint.h>
+ #include <fcntl.h>
+diff --git a/lib/format_text/format-text.c b/lib/format_text/format-text.c
+index d2c99f6bb..615b92df9 100644
+--- a/lib/format_text/format-text.c
++++ b/lib/format_text/format-text.c
+@@ -23,7 +23,7 @@
+ #include "lib/display/display.h"
+ #include "lib/commands/toolcontext.h"
+ #include "lib/misc/lvm-string.h"
+-#include "lib/uuid/uuid.h"
++#include "lib/id/id.h"
+ #include "lib/misc/crc.h"
+ #include "lib/mm/xlate.h"
+ #include "lib/label/label.h"
+diff --git a/lib/format_text/layout.h b/lib/format_text/layout.h
+index 2ef35b3af..2858f39c2 100644
+--- a/lib/format_text/layout.h
++++ b/lib/format_text/layout.h
+@@ -20,7 +20,7 @@
+ #include "lib/metadata/metadata.h"
+ #include "lib/format_text/format-text.h"
+ #include "lib/cache/lvmcache.h"
+-#include "lib/uuid/uuid.h"
++#include "lib/id/id.h"
+ 
+ /*
+  * PV header extension versions:
+diff --git a/lib/uuid/uuid.c b/lib/id/id.c
+similarity index 99%
+rename from lib/uuid/uuid.c
+rename to lib/id/id.c
+index 6f7acd2bd..b52121cd9 100644
+--- a/lib/uuid/uuid.c
++++ b/lib/id/id.c
+@@ -13,8 +13,8 @@
+  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+  */
+ 
++#include "lib/id/id.h"
+ #include "lib/misc/lib.h"
+-#include "lib/uuid/uuid.h"
+ #include "lib/misc/lvm-wrappers.h"
+ 
+ #include <assert.h>
+diff --git a/lib/uuid/uuid.h b/lib/id/id.h
+similarity index 93%
+rename from lib/uuid/uuid.h
+rename to lib/id/id.h
+index 5dad2548a..8e19dff0f 100644
+--- a/lib/uuid/uuid.h
++++ b/lib/id/id.h
+@@ -1,6 +1,6 @@
+ /*
+  * Copyright (C) 2001-2004 Sistina Software, Inc. All rights reserved.  
+- * Copyright (C) 2004-2006 Red Hat, Inc. All rights reserved.
++ * Copyright (C) 2004-2025 Red Hat, Inc. All rights reserved.
+  *
+  * This file is part of LVM2.
+  *
+@@ -13,8 +13,8 @@
+  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+  */
+ 
+-#ifndef _LVM_UUID_H
+-#define _LVM_UUID_H
++#ifndef _LVM_ID_H
++#define _LVM_ID_H
+ 
+ #define ID_LEN 32
+ 
+diff --git a/lib/label/label.h b/lib/label/label.h
+index 4c224dc50..e17f8c8ed 100644
+--- a/lib/label/label.h
++++ b/lib/label/label.h
+@@ -16,7 +16,7 @@
+ #ifndef _LVM_LABEL_H
+ #define _LVM_LABEL_H
+ 
+-#include "lib/uuid/uuid.h"
++#include "lib/id/id.h"
+ #include "lib/device/device.h"
+ #include "lib/device/bcache.h"
+ 
+diff --git a/lib/locking/locking.h b/lib/locking/locking.h
+index a60935d52..487139a06 100644
+--- a/lib/locking/locking.h
++++ b/lib/locking/locking.h
+@@ -16,7 +16,7 @@
+ #ifndef _LVM_LOCKING_H
+ #define _LVM_LOCKING_H
+ 
+-#include "lib/uuid/uuid.h"
++#include "lib/id/id.h"
+ #include "lib/config/config.h"
+ 
+ struct logical_volume;
+diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
+index 3752caf1e..7ec81f27d 100644
+--- a/lib/metadata/metadata-exported.h
++++ b/lib/metadata/metadata-exported.h
+@@ -21,7 +21,7 @@
+ #ifndef _LVM_METADATA_EXPORTED_H
+ #define _LVM_METADATA_EXPORTED_H
+ 
+-#include "lib/uuid/uuid.h"
++#include "lib/id/id.h"
+ #include "lib/metadata/pv.h"
+ #include "lib/metadata/vg.h"
+ #include "lib/metadata/lv.h"
+diff --git a/lib/metadata/pv.h b/lib/metadata/pv.h
+index ee2bd853b..7195f9a2d 100644
+--- a/lib/metadata/pv.h
++++ b/lib/metadata/pv.h
+@@ -15,7 +15,7 @@
+ #ifndef _LVM_PV_H
+ #define _LVM_PV_H
+ 
+-#include "lib/uuid/uuid.h"
++#include "lib/id/id.h"
+ #include "device_mapper/all.h"
+ 
+ struct device;
+diff --git a/lib/metadata/vg.h b/lib/metadata/vg.h
+index 92a15ef2f..0f5adb6ee 100644
+--- a/lib/metadata/vg.h
++++ b/lib/metadata/vg.h
+@@ -15,7 +15,7 @@
+ #ifndef _LVM_VG_H
+ #define _LVM_VG_H
+ 
+-#include "lib/uuid/uuid.h"
++#include "lib/id/id.h"
+ #include "device_mapper/all.h"
+ 
+ struct cmd_context;
+-- 
+2.52.0
+

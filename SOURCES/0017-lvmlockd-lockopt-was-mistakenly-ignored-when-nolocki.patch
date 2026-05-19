@@ -1,0 +1,56 @@
+From 5653b3e38962d81264dd45db1aad356f6f59dd6c Mon Sep 17 00:00:00 2001
+From: David Teigland <teigland@redhat.com>
+Date: Fri, 8 Aug 2025 14:06:24 -0500
+Subject: [PATCH 17/47] lvmlockd: --lockopt was mistakenly ignored when
+ --nolocking was set
+
+(cherry picked from commit 3dc5c3fc9e1dcbca8f74fa5e7df3e0750d66975a)
+---
+ tools/lvmcmdline.c | 24 +++++++++++++-----------
+ 1 file changed, 13 insertions(+), 11 deletions(-)
+
+diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
+index 22ae1e3bb..ebb1b87c9 100644
+--- a/tools/lvmcmdline.c
++++ b/tools/lvmcmdline.c
+@@ -2969,6 +2969,19 @@ static int _init_lvmlockd(struct cmd_context *cmd)
+ 	if (use_lvmlockd)
+ 		cmd->enable_hints = 0;
+ 
++	if (arg_is_set(cmd, lockopt_ARG)) {
++		lockd_lockopt_get_flags(arg_str_value(cmd, lockopt_ARG, ""), &cmd->lockopt);
++
++		if (use_lvmlockd) {
++			if (cmd->lockopt & LOCKOPT_SKIPLV)
++				cmd->lockd_lv_disable = 1;
++			if (cmd->lockopt & LOCKOPT_SKIPVG)
++				cmd->lockd_vg_disable = 1;
++			if (cmd->lockopt & LOCKOPT_SKIPGL)
++				cmd->lockd_gl_disable = 1;
++		}
++	}
++
+ 	if (use_lvmlockd && arg_is_set(cmd, nolocking_ARG)) {
+ 		/* --nolocking is only allowed with vgs/lvs/pvs commands */
+ 		cmd->lockd_gl_disable = 1;
+@@ -2977,17 +2990,6 @@ static int _init_lvmlockd(struct cmd_context *cmd)
+ 		return 1;
+ 	}
+ 
+-	if (use_lvmlockd && arg_is_set(cmd, lockopt_ARG)) {
+-		lockd_lockopt_get_flags(arg_str_value(cmd, lockopt_ARG, ""), &cmd->lockopt);
+-
+-		if (cmd->lockopt & LOCKOPT_SKIPLV)
+-			cmd->lockd_lv_disable = 1;
+-		if (cmd->lockopt & LOCKOPT_SKIPVG)
+-			cmd->lockd_vg_disable = 1;
+-		if (cmd->lockopt & LOCKOPT_SKIPGL)
+-			cmd->lockd_gl_disable = 1;
+-	}
+-
+ 	lvmlockd_disconnect(); /* start over when tool context is refreshed */
+ 	lvmlockd_socket = getenv("LVM_LVMLOCKD_SOCKET");
+ 	if (!lvmlockd_socket)
+-- 
+2.51.0
+

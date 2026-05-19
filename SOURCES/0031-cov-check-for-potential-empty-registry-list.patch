@@ -1,0 +1,34 @@
+From 940d475e612a8ae2e3fe48213e7ed2a5c2a40705 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Mon, 30 Jun 2025 14:11:16 +0200
+Subject: [PATCH 31/47] cov: check for potential empty registry list
+
+Check early for empty thread_registry list and return EINVAL
+instead of doing zero length allocation.
+
+(cherry picked from commit bf580fcc2f17a0c7c732b929ed08acaf9dd831d7)
+---
+ daemons/dmeventd/dmeventd.c | 7 ++++++-
+ 1 file changed, 6 insertions(+), 1 deletion(-)
+
+diff --git a/daemons/dmeventd/dmeventd.c b/daemons/dmeventd/dmeventd.c
+index b823a0476..2224ba23e 100644
+--- a/daemons/dmeventd/dmeventd.c
++++ b/daemons/dmeventd/dmeventd.c
+@@ -680,7 +680,12 @@ static int _get_status(struct message_data *message_data)
+ 		return -EINVAL;
+ 
+ 	_lock_mutex();
+-	count = dm_list_size(&_thread_registry);
++	if (!(count = dm_list_size(&_thread_registry))) {
++		_unlock_mutex();
++		ret = -EINVAL;
++		goto out;
++	}
++
+ 	buffers = alloca(sizeof(char*) * count);
+ 	dm_list_iterate_items(thread, &_thread_registry) {
+ 		if ((current = dm_asprintf(buffers + i, "0:%d %s %s %u %" PRIu32 ";",
+-- 
+2.51.0
+

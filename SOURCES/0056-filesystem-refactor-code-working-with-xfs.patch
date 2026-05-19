@@ -1,0 +1,208 @@
+From 077eaef48b2d257e94feb1caa3825fa5a5da14e6 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Sun, 14 Dec 2025 17:14:08 +0100
+Subject: [PATCH 56/57] filesystem: refactor code working with xfs
+
+Move XFS ioctl code to separate filesystem_xfs.c file.
+Remove hackish way of including xfs headers.
+
+When xfs/xfs.h is missing, continue running without checking
+mounted filesystem size.
+
+(cherry picked from commit 1e9efc72cfed277e6885e201affbc47a2edbf576)
+---
+ lib/Makefile.in             |  1 +
+ lib/device/filesystem.c     | 48 +++--------------------------
+ lib/device/filesystem.h     | 10 +++++-
+ lib/device/filesystem_xfs.c | 61 +++++++++++++++++++++++++++++++++++++
+ 4 files changed, 76 insertions(+), 44 deletions(-)
+ create mode 100644 lib/device/filesystem_xfs.c
+
+diff --git a/lib/Makefile.in b/lib/Makefile.in
+index 8424ac952..8620eaaff 100644
+--- a/lib/Makefile.in
++++ b/lib/Makefile.in
+@@ -40,6 +40,7 @@ SOURCES =\
+ 	device/dev-luks.c \
+ 	device/dev-dasd.c \
+ 	device/dev-lvm1-pool.c \
++	device/filesystem_xfs.c \
+ 	device/filesystem.c \
+ 	device/online.c \
+ 	device/parse_vpd.c \
+diff --git a/lib/device/filesystem.c b/lib/device/filesystem.c
+index 64e1d9422..f1add62f9 100644
+--- a/lib/device/filesystem.c
++++ b/lib/device/filesystem.c
+@@ -19,24 +19,12 @@
+ #include "lib/display/display.h"
+ #include "lib/misc/lvm-exec.h"
+ #include "lib/activate/dev_manager.h"
++#include "lib/commands/toolcontext.h"
+ 
+ #include <dirent.h>
+ #include <mntent.h>
+-#include <uuid/uuid.h>
+ #include <sys/ioctl.h>
+ #include <linux/types.h>
+-/* including xfs/linux.h causes uuid_t conflicts, so define some types that are needed */
+-/* #include <xfs/linux.h> */
+-typedef off_t xfs_off_t;
+-typedef uint64_t xfs_ino_t;
+-typedef uint32_t xfs_dev_t;
+-typedef int64_t xfs_daddr_t;
+-typedef __u32 xfs_nlink_t;
+-#include <xfs/xfs_types.h>
+-#ifndef __user
+-#define __user
+-#endif
+-#include <xfs/xfs_fs.h>
+ 
+ static const char *_lvresize_fs_helper_path;
+ 
+@@ -267,34 +255,6 @@ static int _btrfs_get_mnt(struct fs_info *fsi, dev_t lv_devt)
+ 	return ret;
+ }
+ 
+-static int _xfs_update_size_mounted(struct cmd_context *cmd, struct logical_volume *lv,
+-				    char *lv_path, struct fs_info *fsi)
+-{
+-	struct xfs_fsop_geom geo = { 0 }; 
+-	int fd;
+-	int ret = 0;
+-
+-	if ((fd = open(fsi->mount_dir, O_RDONLY)) < 0) {
+-		log_error("XFS geometry open error %d for %s %s", errno, lv_path, fsi->mount_dir);
+-		return 0;
+-	}
+-
+-	if (ioctl(fd, XFS_IOC_FSGEOMETRY, &geo)) {
+-		log_error("XFS geometry ioctl error %d for %s %s", errno, lv_path, fsi->mount_dir);
+-		goto out;
+-	}
+-
+-	/* replace the potentially wrong value from blkid_probe_lookup_value FSLASTBLOCK */
+-	fsi->fs_last_byte = geo.blocksize * geo.datablocks;
+-	ret = 1;
+-
+-	log_debug("xfs geometry blocksize %llu datablocks %llu fs_last_byte %llu from %s %s",
+-		  (unsigned long long)geo.blocksize, (unsigned long long)geo.datablocks,
+-		  (unsigned long long)fsi->fs_last_byte, lv_path, fsi->mount_dir);
+-out:
+-	(void)close(fd);
+-	return ret;
+-}
+ 
+ int fs_get_info(struct cmd_context *cmd, struct logical_volume *lv, struct fs_info *fsi)
+ {
+@@ -388,8 +348,10 @@ int fs_get_info(struct cmd_context *cmd, struct logical_volume *lv, struct fs_in
+ 		ret = _fs_get_mnt(fsi, st_top.st_rdev);
+ 
+ 	/* blkid FSLASTBLOCK may be incorrect for mounted xfs */
+-	if (fsi->mounted && !strcmp(fsi->fstype, "xfs"))
+-		ret = _xfs_update_size_mounted(cmd, lv, lv_path, fsi);
++	if (fsi->mounted && !strcmp(fsi->fstype, "xfs")) {
++		if (!(ret = fs_xfs_update_size_mounted(cmd, lv, lv_path, fsi)))
++			stack;
++	}
+ 
+ 	fsi->unmounted = !fsi->mounted;
+ 	return ret;
+diff --git a/lib/device/filesystem.h b/lib/device/filesystem.h
+index bb43f9a96..c66b47995 100644
+--- a/lib/device/filesystem.h
++++ b/lib/device/filesystem.h
+@@ -15,9 +15,13 @@
+ #ifndef _FILESYSTEM_H
+ #define _FILESYSTEM_H
+ 
+-#include "lib/commands/toolcontext.h"
+ #include "lib/device/device.h"
+ 
++#include <linux/limits.h> /* PATH_MAX */
++
++struct cmd_context;
++struct logical_volume;
++
+ #define FSTYPE_MAX 16
+ #define UUID_LEN 37
+ 
+@@ -54,4 +58,8 @@ int crypt_resize_script(struct cmd_context *cmd, struct logical_volume *lv, stru
+ int fs_mount_state_is_misnamed(struct cmd_context *cmd, struct logical_volume *lv, char *lv_path, char *fstype);
+ int lv_crypt_is_active(struct cmd_context *cmd, char *lv_path);
+ 
++/* filesystem_xfs.c */
++int fs_xfs_update_size_mounted(struct cmd_context *cmd, struct logical_volume *lv,
++			       char *lv_path, struct fs_info *fsi);
++
+ #endif
+diff --git a/lib/device/filesystem_xfs.c b/lib/device/filesystem_xfs.c
+new file mode 100644
+index 000000000..61252fe16
+--- /dev/null
++++ b/lib/device/filesystem_xfs.c
+@@ -0,0 +1,61 @@
++/*
++ * Copyright (C) 2025 Red Hat, Inc. All rights reserved.
++ *
++ * This file is part of LVM2.
++ *
++ * This copyrighted material is made available to anyone wishing to use,
++ * modify, copy, or redistribute it subject to the terms and conditions
++ * of the GNU Lesser General Public License v.2.1.
++ *
++ * You should have received a copy of the GNU Lesser General Public License
++ * along with this program; if not, write to the Free Software Foundation,
++ * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
++ */
++
++#include "filesystem.h"
++#include "lib/log/lvm-logging.h"
++
++#ifdef HAVE_XFS_XFS_H
++
++#include <xfs/xfs.h>
++
++int fs_xfs_update_size_mounted(struct cmd_context *cmd, struct logical_volume *lv,
++			       char *lv_path, struct fs_info *fsi)
++{
++	struct xfs_fsop_geom geo = { 0 };
++	int ret = 0;
++	int fd;
++
++	if ((fd = open(fsi->mount_dir, O_RDONLY)) < 0) {
++		log_sys_error("XFS geometry open", fsi->mount_dir);
++		return 0;
++	}
++
++	if (ioctl(fd, XFS_IOC_FSGEOMETRY, &geo)) {
++		log_sys_error("XFS geometry ioctl", fsi->mount_dir);
++		goto out;
++	}
++
++	/* replace the potentially wrong value from blkid_probe_lookup_value FSLASTBLOCK */
++	fsi->fs_last_byte = geo.blocksize * geo.datablocks;
++	ret = 1;
++
++	log_debug("xfs geometry blocksize %llu datablocks %llu fs_last_byte %llu from %s %s",
++		  (unsigned long long)geo.blocksize, (unsigned long long)geo.datablocks,
++		  (unsigned long long)fsi->fs_last_byte, lv_path, fsi->mount_dir);
++out:
++	(void)close(fd);
++
++	return ret;
++}
++
++#else /* !HAVE_XFS_XFS_H */
++
++int fs_xfs_update_size_mounted(struct cmd_context *cmd, struct logical_volume *lv,
++			       char *lv_path, struct fs_info *fsi)
++{
++	log_debug("No XFS support, continuing WITHOUT reading XFS geometry.");
++	return 1;
++}
++
++#endif
+-- 
+2.52.0
+

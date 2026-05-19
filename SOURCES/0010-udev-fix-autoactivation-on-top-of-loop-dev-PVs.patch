@@ -1,0 +1,54 @@
+From 4659eb9d2a7b58a9b199d7cf2ccaaf32d6605a76 Mon Sep 17 00:00:00 2001
+From: Peter Rajnoha <prajnoha@redhat.com>
+Date: Wed, 9 Jul 2025 12:48:48 +0200
+Subject: [PATCH 10/47] udev: fix autoactivation on top of loop dev PVs
+
+We already check loop devices for LVM_LOOP_PV_ACTIVATED="1" in udev
+rules to see if have executed pvscan before. If that is the case, we
+don't want to execute it again to avoid VG reactivation.
+
+However, the rules missed the IMPORT{db}="LVM_LOOP_PV_ACTIVATED" rule
+to actually get the value already stored in udev db from previous event.
+As a result, the pvscan executed on each CHANGE udev event, hence the
+VG autoactivation triggered each time as well.
+
+Fix this by adding the missing IMPORT{db}="LVM_LOOP_PV_ACTIVATED" rule
+(just like we already do for MD devices).
+
+Note: Keep the behavior for ADD events. That is, we still want the
+autoactivation to trigger each time, otherwise coldplug will not work
+(again, we have the same principle used for MD devices).
+
+(cherry picked from commit bd26e768efa534ba95f801c411a2a9581992a993)
+---
+ WHATS_NEW               | 4 ++++
+ udev/69-dm-lvm.rules.in | 1 +
+ 2 files changed, 5 insertions(+)
+
+diff --git a/WHATS_NEW b/WHATS_NEW
+index 635651863..e8db60d53 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,3 +1,7 @@
++Version 2.03.34 - 
++==================
++  Fix autoactivation on top of loop dev PVs to trigger once for change uevents.
++
+ Version 2.03.33 - 27th June 2025
+ ================================
+   Various spelling, grammar, formatting, test, and build script improvements.
+diff --git a/udev/69-dm-lvm.rules.in b/udev/69-dm-lvm.rules.in
+index f7a6eef8f..adcf63453 100644
+--- a/udev/69-dm-lvm.rules.in
++++ b/udev/69-dm-lvm.rules.in
+@@ -52,6 +52,7 @@ GOTO="lvm_end"
+ # Loop device:
+ LABEL="next"
+ KERNEL!="loop[0-9]*", GOTO="next"
++IMPORT{db}="LVM_LOOP_PV_ACTIVATED"
+ ACTION=="add", ENV{LVM_LOOP_PV_ACTIVATED}=="1", GOTO="lvm_scan"
+ ACTION=="change", ENV{LVM_LOOP_PV_ACTIVATED}!="1", TEST=="loop/backing_file", ENV{LVM_LOOP_PV_ACTIVATED}="1", GOTO="lvm_scan"
+ GOTO="lvm_end"
+-- 
+2.51.0
+

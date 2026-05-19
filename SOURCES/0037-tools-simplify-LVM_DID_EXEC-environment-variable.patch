@@ -1,0 +1,30 @@
+From 7f5a4a9de4aab40f2c243f0f657008da839cb75f Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Thu, 10 Jul 2025 21:40:14 +0200
+Subject: [PATCH 37/47] tools: simplify LVM_DID_EXEC environment variable
+
+Set LVM_DID_EXEC to "1" instead of using the command name string,
+avoiding potential issues with unusual command names and improving
+consistency in environment variable handling.
+
+(cherry picked from commit 5d16b1d7348aad816424b2a8e95fd31a59c3e2e2)
+---
+ tools/lvmcmdline.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
+index ebb1b87c9..2ecdbd164 100644
+--- a/tools/lvmcmdline.c
++++ b/tools/lvmcmdline.c
+@@ -3608,7 +3608,7 @@ int lvm2_main(int argc, char **argv)
+ 	if (is_static() && strcmp(base, "lvm.static") &&
+ 	    path_exists(LVM_PATH) &&
+ 	    !getenv("LVM_DID_EXEC")) {
+-		if (setenv("LVM_DID_EXEC", base, 1))
++		if (setenv("LVM_DID_EXEC", "1", 1))
+ 			log_sys_error("setenv", "LVM_DID_EXEC");
+ 		if (execvp(LVM_PATH, argv) == -1)
+ 			log_sys_error("execvp", LVM_PATH);
+-- 
+2.51.0
+

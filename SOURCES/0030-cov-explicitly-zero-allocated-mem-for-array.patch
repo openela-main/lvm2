@@ -1,0 +1,47 @@
+From 51f6e02a458f763d4066782549f0b3873317119d Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Mon, 30 Jun 2025 14:32:10 +0200
+Subject: [PATCH 30/47] cov: explicitly zero allocated mem for array
+
+Replace malloc() with calloc() when allocating the string pointer array
+for regex pattern matching in _create_field_selection(). This ensures
+all array elements are initialized to NULL pointers, preventing potential
+use of uninitialized memory objected by Coverity.
+
+Existing code sets all elements in the follow up loop.
+
+(cherry picked from commit 2c5489dd13045624e9597d11a85a29c8408cc0e8)
+---
+ device_mapper/libdm-report.c | 2 +-
+ libdm/libdm-report.c         | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/device_mapper/libdm-report.c b/device_mapper/libdm-report.c
+index 1521708ed..4c3f3266a 100644
+--- a/device_mapper/libdm-report.c
++++ b/device_mapper/libdm-report.c
+@@ -3835,7 +3835,7 @@ static struct field_selection *_create_field_selection(struct dm_report *rh,
+ 				if (!(s_arr_size = dm_list_size(&fs->value->v.l->str_list.list)))
+ 					break;
+ 
+-				if (!(s_arr = malloc(sizeof(char *) * s_arr_size))) {
++				if (!(s_arr = calloc(s_arr_size, sizeof(char *)))) {
+ 					log_error("dm_report: malloc failed for regex array "
+ 						  "for selection field %s", field_id);
+ 					goto error;
+diff --git a/libdm/libdm-report.c b/libdm/libdm-report.c
+index b8686901f..36d99f7d7 100644
+--- a/libdm/libdm-report.c
++++ b/libdm/libdm-report.c
+@@ -3832,7 +3832,7 @@ static struct field_selection *_create_field_selection(struct dm_report *rh,
+ 				if (!(s_arr_size = dm_list_size(&fs->value->v.l->str_list.list)))
+ 					break;
+ 
+-				if (!(s_arr = malloc(sizeof(char *) * s_arr_size))) {
++				if (!(s_arr = calloc(s_arr_size, sizeof(char *)))) {
+ 					log_error("dm_report: malloc failed for regex array "
+ 						  "for selection field %s", field_id);
+ 					goto error;
+-- 
+2.51.0
+

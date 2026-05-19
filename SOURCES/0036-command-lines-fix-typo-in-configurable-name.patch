@@ -1,0 +1,30 @@
+From bf48c1541291aeda537520b664f59249fc85f95b Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Fri, 11 Jul 2025 14:29:41 +0200
+Subject: [PATCH 36/47] command-lines: fix typo in configurable name
+
+Fix type in lvm.conf option name used for lvcreate
+and replace global/mirror_segfault_default with correct
+name global/mirror_segtype_default.
+
+(cherry picked from commit 0b7b6ccd79929611131549a70bcb339f0c67530e)
+---
+ tools/command-lines.in | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/tools/command-lines.in b/tools/command-lines.in
+index d85df7bbd..3d38b1ce7 100644
+--- a/tools/command-lines.in
++++ b/tools/command-lines.in
+@@ -973,7 +973,7 @@ OP: PV ...
+ IO: --stripes 1
+ ID: lvcreate_mirror_or_raid1
+ DESC: Create a raid1 or mirror LV.
+-DESC: Implicit type is defined by lvm.conf global/mirror_segfault_default.
++DESC: Implicit type is defined by lvm.conf global/mirror_segtype_default.
+ AUTOTYPE: raid1
+ AUTOTYPE: mirror
+ 
+-- 
+2.51.0
+

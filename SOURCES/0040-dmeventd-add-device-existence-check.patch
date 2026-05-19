@@ -1,0 +1,53 @@
+From a7c707334f3b2d571f8fa80db75e631b11e4b09b Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Tue, 22 Jul 2025 20:35:24 +0200
+Subject: [PATCH 40/47] dmeventd: add device existence check
+
+Add device existence check after successful wait ioctl to prevent
+processing events on removed devices.
+
+When dm_task_run() succeeds on a WAITEVENT ioctl, the success might
+actually indicate that the device was removed rather than a genuine
+device event. Without this check, dmeventd would attempt to process
+ERROR events on non-existent devices, leading to unnecessary error
+commands and log noise.
+
+This fix adds a _fill_device_data() call immediately after successful
+wait completion to verify the device still exists. If the device is
+gone, execution jumps to the existing ENXIO error path which properly
+handles device disappearance.
+
+Note: Future kernel versions may return ENXIO directly from the wait
+ioctl when devices are removed, making this workaround unnecessary.
+Until then, this extra INFO ioctl provides the needed verification.
+
+(cherry picked from commit fa2ec32c4eaab7f6c7e85dd71fba455a0022dc38)
+---
+ daemons/dmeventd/dmeventd.c | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/daemons/dmeventd/dmeventd.c b/daemons/dmeventd/dmeventd.c
+index 93dfb9bc0..b696cc77a 100644
+--- a/daemons/dmeventd/dmeventd.c
++++ b/daemons/dmeventd/dmeventd.c
+@@ -902,6 +902,9 @@ static int _event_wait(struct thread_status *thread)
+ 	}
+ 
+ 	if (dm_task_run(thread->wait_task)) {
++		/* Recheck device info whether is still exists */
++		if (!_fill_device_data(thread))
++			goto disappeared; /* device is gone... */
+ 		thread->current_events |= DM_EVENT_DEVICE_ERROR;
+ 		ret = DM_WAIT_INTR;
+ 		/* Update event_nr */
+@@ -910,6 +913,7 @@ static int _event_wait(struct thread_status *thread)
+ 	} else {
+ 		switch (dm_task_get_errno(thread->wait_task)) {
+ 		case ENXIO:
++disappeared:
+ 			log_error("%s disappeared, detaching.",
+ 				  thread->device.name);
+ 			ret = DM_WAIT_FATAL;
+-- 
+2.51.0
+

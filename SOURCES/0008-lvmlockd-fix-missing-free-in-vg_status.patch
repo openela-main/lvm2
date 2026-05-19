@@ -1,0 +1,50 @@
+From 8920f236abae6a9e7b15a0b11c1b9d5bad370aae Mon Sep 17 00:00:00 2001
+From: David Teigland <teigland@redhat.com>
+Date: Thu, 26 Jun 2025 13:42:38 -0500
+Subject: [PATCH 08/47] lvmlockd: fix missing free in vg_status
+
+and add more checking of get_hosts result.
+
+used by lockd_vg_is_started() for the PR feature.
+
+(cherry picked from commit 5f0ddd0fd891e769577f6cd3546326f18dbc3bca)
+---
+ daemons/lvmlockd/lvmlockd-sanlock.c | 8 +++++++-
+ 1 file changed, 7 insertions(+), 1 deletion(-)
+
+diff --git a/daemons/lvmlockd/lvmlockd-sanlock.c b/daemons/lvmlockd/lvmlockd-sanlock.c
+index 1af3c368f..97f06d115 100644
+--- a/daemons/lvmlockd/lvmlockd-sanlock.c
++++ b/daemons/lvmlockd/lvmlockd-sanlock.c
+@@ -2352,7 +2352,7 @@ int lm_unlock_sanlock(struct lockspace *ls, struct resource *r,
+ 
+ int lm_vg_status_sanlock(struct lockspace *ls, struct action *act)
+ {
+-	struct sanlk_host *hs;
++	struct sanlk_host *hs = NULL;
+ 	const char *host_state;
+ 	int count = 0;
+ 	int rv;
+@@ -2366,6 +2366,11 @@ int lm_vg_status_sanlock(struct lockspace *ls, struct action *act)
+ 		return rv;
+ 	}
+ 
++	if (!count || !hs) {
++		log_error("S %s vg_status_san get_hosts empty", ls->name);
++		return -EINVAL;
++	}
++
+ 	act->owner.host_id = (uint32_t)hs->host_id;
+ 	act->owner.generation = (uint32_t)hs->generation;
+ 	act->owner.timestamp = (uint32_t)hs->timestamp;
+@@ -2373,6 +2378,7 @@ int lm_vg_status_sanlock(struct lockspace *ls, struct action *act)
+ 	if ((host_state = _host_flags_to_str(hs->flags)))
+ 		dm_strncpy(act->owner.state, host_state, OWNER_STATE_SIZE-1);
+ 
++	free(hs);
+ 	return 0;
+ }
+ 
+-- 
+2.51.0
+

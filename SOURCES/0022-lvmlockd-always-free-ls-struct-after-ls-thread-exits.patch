@@ -1,0 +1,57 @@
+From 2477a95fe1a47ff4e8c4c8afda7c4b95dddfaeda Mon Sep 17 00:00:00 2001
+From: David Teigland <teigland@redhat.com>
+Date: Fri, 5 Sep 2025 12:21:12 -0500
+Subject: [PATCH 22/47] lvmlockd: always free ls struct after ls thread exits
+
+The ls struct was being freed after ls thread exit for common stop,
+but was missing when the ls thread was stopped for drop and rename.
+Also free ls->actions structs in case any still exist.
+
+(cherry picked from commit 5b410e589c75d0d540e4ebe4f44cc71b5624cbc6)
+---
+ daemons/lvmlockd/lvmlockd-core.c | 20 +++++++++-----------
+ 1 file changed, 9 insertions(+), 11 deletions(-)
+
+diff --git a/daemons/lvmlockd/lvmlockd-core.c b/daemons/lvmlockd/lvmlockd-core.c
+index 369755ac7..f7340ff3e 100644
+--- a/daemons/lvmlockd/lvmlockd-core.c
++++ b/daemons/lvmlockd/lvmlockd-core.c
+@@ -3553,6 +3553,7 @@ static int count_lockspace_starting(uint32_t client_id)
+ static int for_each_lockspace(int do_stop, int do_free, int do_force)
+ {
+ 	struct lockspace *ls, *safe;
++	struct action *act, *act2;
+ 	int need_stop = 0;
+ 	int need_free = 0;
+ 	int stop_count = 0;
+@@ -3605,19 +3606,16 @@ static int for_each_lockspace(int do_stop, int do_free, int do_force)
+ 				if ((perrno = pthread_join(ls->thread, NULL)))
+ 					log_error("pthread_join error %d", perrno);
+ 
++				log_debug("free ls struct %s", ls->name);
+ 				list_del(&ls->list);
+-
+-				/* FIXME: will free_vg ever not be set? */
+-
+-				log_debug("free ls %s", ls->name);
+-
+-				if (ls->free_vg) {
+-					/* In future we may need to free ls->actions here */
+-					free_ls_resources(ls);
+-					free_pvs_path(&ls->pvs);
+-					free(ls);
+-					free_count++;
++				list_for_each_entry_safe(act, act2, &ls->actions, list) {
++					list_del(&act->list);
++					free_action(act);
+ 				}
++				free_ls_resources(ls);
++				free_pvs_path(&ls->pvs);
++				free(ls);
++				free_count++;
+ 			} else {
+ 				need_free++;
+ 			}
+-- 
+2.51.0
+

@@ -1,7 +1,7 @@
-From 2e8e66c62f67405223c6c208f343f0540505aa36 Mon Sep 17 00:00:00 2001
+From a71342640ddf81b73625e55149f1077245ee7412 Mon Sep 17 00:00:00 2001
 From: Heinz Mauelshagen <heinzm@redhat.com>
 Date: Mon, 27 Oct 2025 17:37:09 +0100
-Subject: [PATCH 16/18] lv_manip: show a warning during classic snapshot
+Subject: [PATCH 49/51] lv_manip: show a warning during classic snapshot
  creation on a RaidLV.
 
 The RaidLV will fail to activate in case of the loss of any of its snapshots.
@@ -14,10 +14,10 @@ catch any loss of such snapshots and provide remedy information.
  1 file changed, 5 insertions(+)
 
 diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
-index b188ea280..2de982b24 100644
+index 577ffd0b3..e7405f1dc 100644
 --- a/lib/metadata/lv_manip.c
 +++ b/lib/metadata/lv_manip.c
-@@ -9628,6 +9628,11 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
+@@ -9654,6 +9654,11 @@ static struct logical_volume *_lv_create_an_lv(struct volume_group *vg,
  			goto revert_new_lv;
  	}
  

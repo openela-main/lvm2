@@ -1,0 +1,54 @@
+From ceb2cbb8a9252222e24d919977b149a5f455c11c Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Mon, 30 Jun 2025 14:14:01 +0200
+Subject: [PATCH 32/47] cov: check for potential empty row list
+
+Skip potential 0 length allocation and return early for empty list.
+
+(cherry picked from commit 9fcc66316cd5f4b78b78ab1e0d50fafad362d499)
+---
+ device_mapper/libdm-report.c | 7 +++++--
+ libdm/libdm-report.c         | 7 +++++--
+ 2 files changed, 10 insertions(+), 4 deletions(-)
+
+diff --git a/device_mapper/libdm-report.c b/device_mapper/libdm-report.c
+index 4c3f3266a..343a7edbc 100644
+--- a/device_mapper/libdm-report.c
++++ b/device_mapper/libdm-report.c
+@@ -4668,9 +4668,12 @@ static int _sort_rows(struct dm_report *rh)
+ 	struct row *(*rows)[];
+ 	uint32_t count = 0;
+ 	struct row *row;
++	size_t cnt_rows;
+ 
+-	if (!(rows = dm_pool_alloc(rh->mem, sizeof(**rows) *
+-				dm_list_size(&rh->rows)))) {
++	if (!(cnt_rows = dm_list_size(&rh->rows)))
++		return 1; /* nothing to sort */
++
++	if (!(rows = dm_pool_alloc(rh->mem, sizeof(**rows) * cnt_rows))) {
+ 		log_error("dm_report: sort array allocation failed");
+ 		return 0;
+ 	}
+diff --git a/libdm/libdm-report.c b/libdm/libdm-report.c
+index 36d99f7d7..87c588c3c 100644
+--- a/libdm/libdm-report.c
++++ b/libdm/libdm-report.c
+@@ -4665,9 +4665,12 @@ static int _sort_rows(struct dm_report *rh)
+ 	struct row *(*rows)[];
+ 	uint32_t count = 0;
+ 	struct row *row;
++	size_t cnt_rows;
+ 
+-	if (!(rows = dm_pool_alloc(rh->mem, sizeof(**rows) *
+-				dm_list_size(&rh->rows)))) {
++	if (!(cnt_rows = dm_list_size(&rh->rows)))
++		return 1; /* nothing to sort */
++
++	if (!(rows = dm_pool_alloc(rh->mem, sizeof(**rows) * cnt_rows))) {
+ 		log_error("dm_report: sort array allocation failed");
+ 		return 0;
+ 	}
+-- 
+2.51.0
+

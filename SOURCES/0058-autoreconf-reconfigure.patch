@@ -1,0 +1,113 @@
+From 5c44e8301451e0bace56c5f1400f11f4758d2aed Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Sun, 14 Dec 2025 17:16:22 +0100
+Subject: [PATCH 2/2] autoreconf: reconfigure
+
+Regenerate configure and configure.h.in after adding XFS header check.
+---
+ aclocal.m4             |  8 ++++----
+ configure              | 28 ++++++++++++++++++++++++++++
+ include/configure.h.in |  3 +++
+ 3 files changed, 35 insertions(+), 4 deletions(-)
+
+diff --git a/aclocal.m4 b/aclocal.m4
+index 5f3a3e9c4..fa488e1f8 100644
+--- a/aclocal.m4
++++ b/aclocal.m4
+@@ -1,6 +1,6 @@
+-# generated automatically by aclocal 1.17 -*- Autoconf -*-
++# generated automatically by aclocal 1.18.1 -*- Autoconf -*-
+ 
+-# Copyright (C) 1996-2024 Free Software Foundation, Inc.
++# Copyright (C) 1996-2025 Free Software Foundation, Inc.
+ 
+ # This file is free software; the Free Software Foundation
+ # gives unlimited permission to copy and/or distribute it,
+@@ -422,7 +422,7 @@ AS_IF([test "$AS_TR_SH([with_]m4_tolower([$1]))" = "yes"],
+         [AC_DEFINE([HAVE_][$1], 1, [Enable ]m4_tolower([$1])[ support])])
+ ])dnl PKG_HAVE_DEFINE_WITH_MODULES
+ 
+-# Copyright (C) 1999-2024 Free Software Foundation, Inc.
++# Copyright (C) 1999-2025 Free Software Foundation, Inc.
+ #
+ # This file is free software; the Free Software Foundation
+ # gives unlimited permission to copy and/or distribute it,
+@@ -792,7 +792,7 @@ for i in list(range(0, 4)): minverhex = (minverhex << 8) + minver[[i]]
+ sys.exit(sys.hexversion < minverhex)"
+   AS_IF([AM_RUN_LOG([$1 -c "$prog"])], [$3], [$4])])
+ 
+-# Copyright (C) 2001-2024 Free Software Foundation, Inc.
++# Copyright (C) 2001-2025 Free Software Foundation, Inc.
+ #
+ # This file is free software; the Free Software Foundation
+ # gives unlimited permission to copy and/or distribute it,
+diff --git a/configure b/configure
+index 342bd0047..e3eb37ff6 100755
+--- a/configure
++++ b/configure
+@@ -6921,6 +6921,20 @@ then :
+ 
+ fi
+ 
++       for ac_header in xfs/xfs.h
++do :
++  ac_fn_c_check_header_compile "$LINENO" "xfs/xfs.h" "ac_cv_header_xfs_xfs_h" "#define _GNU_SOURCE 1
++"
++if test "x$ac_cv_header_xfs_xfs_h" = xyes
++then :
++  printf "%s\n" "#define HAVE_XFS_XFS_H 1" >>confdefs.h
++ LVM_NO_XFS_WARN=
++else case e in #(
++  e) LVM_NO_XFS_WARN=y ;;
++esac
++fi
++
++done
+        for ac_header in libaio.h
+ do :
+   ac_fn_c_check_header_compile "$LINENO" "libaio.h" "ac_cv_header_libaio_h" "$ac_includes_default"
+@@ -12183,6 +12197,14 @@ then :
+   test $ac_status = 0; }; then
+   LOCKDSANLOCK_SUPPORT=400
+ fi
++	if test -n "$PKG_CONFIG" && \
++    { { printf "%s\n" "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"libsanlock_client >= 4.1.0\""; } >&5
++  ($PKG_CONFIG --exists --print-errors "libsanlock_client >= 4.1.0") 2>&5
++  ac_status=$?
++  printf "%s\n" "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
++  test $ac_status = 0; }; then
++  LOCKDSANLOCK_SUPPORT=410
++fi
+ 
+ pkg_failed=no
+ { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for libsanlock_client >= 3.7.0" >&5
+@@ -18224,6 +18246,12 @@ then :
+ printf "%s\n" "$as_me: WARNING: Only libdm part can be build without libaio:  make [install_]device-mapper" >&2;}
+ fi
+ 
++if test -n "$LVM_NO_XFS_WARN"
++then :
++  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: WARNING: 'lvextend --resizefs' is less capable without xfs/xfs.h (see package: xfsprogs devel)" >&5
++printf "%s\n" "$as_me: WARNING: 'lvextend --resizefs' is less capable without xfs/xfs.h (see package: xfsprogs devel)" >&2;}
++fi
++
+ if test "$ODIRECT" != "yes"
+ then :
+   { printf "%s\n" "$as_me:${as_lineno-$LINENO}: WARNING: O_DIRECT disabled: low-memory pvmove may lock up" >&5
+diff --git a/include/configure.h.in b/include/configure.h.in
+index 3fe1dc85b..eee47a36d 100644
+--- a/include/configure.h.in
++++ b/include/configure.h.in
+@@ -549,6 +549,9 @@
+ /* Define to 1 if 'vfork' works. */
+ #undef HAVE_WORKING_VFORK
+ 
++/* Define to 1 if you have the <xfs/xfs.h> header file. */
++#undef HAVE_XFS_XFS_H
++
+ /* Define to 1 if the system has the type '_Bool'. */
+ #undef HAVE__BOOL
+ 
+-- 
+2.52.0
+

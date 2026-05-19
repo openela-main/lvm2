@@ -1,0 +1,39 @@
+From 15164d1c1f84cd583e93b13e277f4cbae310b03b Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Sat, 28 Jun 2025 22:42:17 +0200
+Subject: [PATCH 28/47] cov: fix va_end resource leak in szscanf()
+
+- Fix potential resource leak by ensuring va_end() is called on error path
+- Set matched = -1 and break from while loop instead of immediate return
+- This ensures proper cleanup of va_list when unsupported format
+  specifiers are encountered in lvmlockctl.
+
+The szscanf function is a custom string scanner used for parsing lvmlockd
+status information. Previously, encountering an unsupported format
+specifier would cause an immediate return without calling va_end(),
+leading to undefined behavior and potential resource leaks.
+
+This fix ensures proper cleanup of variable argument lists in all code paths.
+
+(cherry picked from commit a53352b4aaa9277cec96f61c50b05d6334320bfe)
+---
+ daemons/lvmlockd/lvmlockctl.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/daemons/lvmlockd/lvmlockctl.c b/daemons/lvmlockd/lvmlockctl.c
+index 5a4512095..4623e349d 100644
+--- a/daemons/lvmlockd/lvmlockctl.c
++++ b/daemons/lvmlockd/lvmlockctl.c
+@@ -181,7 +181,8 @@ static int szscanf(const char *input, const char *format, ...)
+ 
+ 			} else {
+ 				/* unsupported format specifier */
+-				return -1;
++				matched = -1;
++				break;
+ 			}
+ 
+ 			/* advance past 'd', 'u', or 's' character */
+-- 
+2.51.0
+

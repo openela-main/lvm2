@@ -1,0 +1,44 @@
+From 1fee1b03564bb807e7adedefb27180babcd861d0 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Fri, 27 Jun 2025 11:15:05 +0200
+Subject: [PATCH 24/47] lvmlockd: allow 1 more extra character
+
+Function dm_strncpy() ensures the last character is \0,
+so pass whole array size for buffer size.
+
+This give 1 extra character for use to store owner state and name.
+
+(cherry picked from commit 879fb36f0a6c4fda783efbc02b4bf6477f18a4af)
+---
+ daemons/lvmlockd/lvmlockd-sanlock.c | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/daemons/lvmlockd/lvmlockd-sanlock.c b/daemons/lvmlockd/lvmlockd-sanlock.c
+index 89df4ec44..6ef59b591 100644
+--- a/daemons/lvmlockd/lvmlockd-sanlock.c
++++ b/daemons/lvmlockd/lvmlockd-sanlock.c
+@@ -2208,10 +2208,10 @@ int lm_lock_sanlock(struct lockspace *ls, struct resource *r, int ld_mode,
+ 			owner->timestamp = (uint32_t)owner_host.timestamp;
+ 
+ 			if ((host_state = _host_flags_to_str(owner_host.flags)))
+-				dm_strncpy(owner->state, host_state, OWNER_STATE_SIZE-1);
++				dm_strncpy(owner->state, host_state, sizeof(owner->state));
+ 
+ 			if (owner_name) {
+-				dm_strncpy(owner->name, owner_name, OWNER_NAME_SIZE-1);
++				dm_strncpy(owner->name, owner_name, sizeof(owner->name));
+ 				free(owner_name);
+ 			}
+ 
+@@ -2553,7 +2553,7 @@ int lm_vg_status_sanlock(struct lockspace *ls, struct action *act)
+ 	act->owner.timestamp = (uint32_t)hs->timestamp;
+ 
+ 	if ((host_state = _host_flags_to_str(hs->flags)))
+-		dm_strncpy(act->owner.state, host_state, OWNER_STATE_SIZE-1);
++		dm_strncpy(act->owner.state, host_state, sizeof(act->owner.state));
+ 
+ 	free(hs);
+ 	return 0;
+-- 
+2.51.0
+

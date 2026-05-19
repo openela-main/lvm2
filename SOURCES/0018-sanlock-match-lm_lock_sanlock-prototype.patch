@@ -1,0 +1,26 @@
+From a70dd84cfdd897a8b9d8cdddd98caaacaa1dff72 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Wed, 2 Jul 2025 11:46:20 +0200
+Subject: [PATCH 18/47] sanlock: match lm_lock_sanlock prototype
+
+(cherry picked from commit 95c77bc922ec9867764ddd95df635444804c12ba)
+---
+ daemons/lvmlockd/lvmlockd-internal.h | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/daemons/lvmlockd/lvmlockd-internal.h b/daemons/lvmlockd/lvmlockd-internal.h
+index 7999c2a03..df69824b6 100644
+--- a/daemons/lvmlockd/lvmlockd-internal.h
++++ b/daemons/lvmlockd/lvmlockd-internal.h
+@@ -634,7 +634,7 @@ static inline int lm_add_resource_sanlock(struct lockspace *ls, struct resource
+ 
+ static inline int lm_lock_sanlock(struct lockspace *ls, struct resource *r, int ld_mode,
+ 		    struct val_blk *vb_out, int *retry, struct owner *owner,
+-		    int adopt_only, int adopt_ok)
++		    int adopt_only, int adopt_ok, int repair)
+ {
+ 	return -1;
+ }
+-- 
+2.51.0
+

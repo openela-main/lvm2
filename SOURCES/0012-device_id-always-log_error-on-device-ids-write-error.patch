@@ -1,0 +1,32 @@
+From 6d7837dc2b93a51bfdad7c796d2b8e3f7fe9f938 Mon Sep 17 00:00:00 2001
+From: Peter Rajnoha <prajnoha@redhat.com>
+Date: Mon, 21 Jul 2025 13:40:30 +0200
+Subject: [PATCH 12/47] device_id: always log_error on device ids write error
+
+(cherry picked from commit 03e3b27ba094cc6e58113713a0d36a8b3190a2f3)
+---
+ lib/device/device_id.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/lib/device/device_id.c b/lib/device/device_id.c
+index a3f341bfc..76165559f 100644
+--- a/lib/device/device_id.c
++++ b/lib/device/device_id.c
+@@ -1730,12 +1730,12 @@ int device_ids_write(struct cmd_context *cmd)
+ 		log_sys_debug("unlink", tmppath);
+ 
+ 	if (!(fp = fopen(tmppath, "w+"))) {
+-		log_warn("Cannot open to write %s.", tmppath);
++		log_error("Cannot open to write %s.", tmppath);
+ 		goto out;
+ 	}
+ 
+ 	if ((dir_fd = open(dirpath, O_RDONLY)) < 0) {
+-		log_sys_debug("open", dirpath);
++		log_sys_error("open", dirpath);
+ 		goto out;
+ 	}
+ 
+-- 
+2.51.0
+

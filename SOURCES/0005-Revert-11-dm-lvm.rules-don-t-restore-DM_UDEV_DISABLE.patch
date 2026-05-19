@@ -1,10 +1,12 @@
-From 4316c786f25f8b01b831458f8baf1f77faad79ba Mon Sep 17 00:00:00 2001
+From 1ab5db0e811306dafabcd7281ce84ffbe32b2566 Mon Sep 17 00:00:00 2001
 From: Marian Csontos <mcsontos@redhat.com>
 Date: Thu, 16 May 2024 15:30:37 +0200
-Subject: [PATCH 5/7] Revert "11-dm-lvm.rules: don't restore
+Subject: [PATCH 05/47] Revert "11-dm-lvm.rules: don't restore
  DM_UDEV_DISABLE_OTHER_RULES_FLAG from db"
 
 This reverts commit 2b2f11a74cd5cc05f266fd0c65f0e55eb8bafd9f.
+
+(cherry picked from commit 4316c786f25f8b01b831458f8baf1f77faad79ba)
 ---
  udev/11-dm-lvm.rules.in | 13 ++++++++-----
  1 file changed, 8 insertions(+), 5 deletions(-)
@@ -34,5 +36,5 @@ index 6dd556aa9..9836f41ca 100644
  ENV{DM_UDEV_DISABLE_SUBSYSTEM_RULES_FLAG}=="1", GOTO="lvm_end"
  
 -- 
-2.49.0
+2.51.0
 

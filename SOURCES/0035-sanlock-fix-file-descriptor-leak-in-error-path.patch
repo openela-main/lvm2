@@ -1,0 +1,33 @@
+From e10a604ae404ff6a87eced54743d5a539a06a030 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Thu, 10 Jul 2025 15:13:18 +0200
+Subject: [PATCH 35/47] sanlock: fix file descriptor leak in error path
+
+Add proper cleanup of file descriptor in the error handling path
+to prevent resource leaks when sanlock operations fail.
+
+(cherry picked from commit f82c46e6735ce123da27fb576371e660697b0bb7)
+---
+ daemons/lvmlockd/lvmlockd-sanlock.c | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/daemons/lvmlockd/lvmlockd-sanlock.c b/daemons/lvmlockd/lvmlockd-sanlock.c
+index 93cb3ab17..17820b91d 100644
+--- a/daemons/lvmlockd/lvmlockd-sanlock.c
++++ b/daemons/lvmlockd/lvmlockd-sanlock.c
+@@ -320,8 +320,11 @@ static int read_host_id_file(void)
+ 			break;
+ 		}
+ 	}
+-	_fclose(file, (char *)daemon_host_id_file);
++
+ out:
++	if (file)
++		_fclose(file, (char *)daemon_host_id_file);
++
+ 	log_debug("host_id %d from %s", host_id, daemon_host_id_file);
+ 	return host_id;
+ }
+-- 
+2.51.0
+

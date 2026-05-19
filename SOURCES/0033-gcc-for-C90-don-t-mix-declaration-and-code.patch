@@ -1,0 +1,61 @@
+From 659e03ed04eff50f12d56baff949d1e7e7b3168b Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Sun, 29 Jun 2025 16:45:49 +0200
+Subject: [PATCH 33/47] gcc: for C90 don't mix declaration and code
+
+This commit fixes C90 compatibility issues by ensuring variable declarations
+are placed at the beginning of code blocks before any executable statements.
+
+(cherry picked from commit 0be635934c9cb4ac56e53d95adc7d7800d15e11f)
+---
+ daemons/lvmlockd/lvmlockctl.c | 9 ++++++---
+ tools/reporter.c              | 3 ++-
+ 2 files changed, 8 insertions(+), 4 deletions(-)
+
+diff --git a/daemons/lvmlockd/lvmlockctl.c b/daemons/lvmlockd/lvmlockctl.c
+index 4623e349d..e36293260 100644
+--- a/daemons/lvmlockd/lvmlockctl.c
++++ b/daemons/lvmlockd/lvmlockctl.c
+@@ -87,12 +87,15 @@ do { \
+ static int szscanf(const char *input, const char *format, ...)
+ {
+ 	va_list args;
+-	va_start(args, format);
+-	const char *fm = format;
+-	const char *in = input;
++	const char *fm;
++	const char *in;
+ 	int matched = 0;
+ 	int n;
+ 
++	va_start(args, format);
++	fm = format;
++	in = input;
++
+ 	while (*fm != '\0') {
+ 
+ 		/*
+diff --git a/tools/reporter.c b/tools/reporter.c
+index 5cc6a2487..e88b8fa72 100644
+--- a/tools/reporter.c
++++ b/tools/reporter.c
+@@ -1498,6 +1498,7 @@ int report_format_init(struct cmd_context *cmd)
+ 	struct single_report_args *single_args;
+ 	struct dm_report_group *new_report_group;
+ 	struct dm_report *tmp_log_rh = NULL;
++	const char * radixchar;
+ 
+ 	args.log_only = arg_is_set(cmd, logonly_ARG);
+ 	report_command_log = args.log_only || find_config_tree_bool(cmd, log_report_command_log_CFG, NULL);
+@@ -1522,7 +1523,7 @@ int report_format_init(struct cmd_context *cmd)
+ 		cmd->report_strict_type_mode = 1;
+ 
+ 		/* For json_std, the radix character must be '.'. */
+-		const char * radixchar = nl_langinfo(RADIXCHAR);
++		radixchar = nl_langinfo(RADIXCHAR);
+ 		if (radixchar && strcmp(radixchar, ".")) {
+ 			log_debug("Radix character for current locale is '%s', json_std requires '.', "
+ 				  "overriding LC_NUMERIC locale to 'C'", radixchar);
+-- 
+2.51.0
+

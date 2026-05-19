@@ -1,0 +1,39 @@
+From 89300351f254ce1fe499f6bae609c16a0b1ef60a Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Wed, 9 Jul 2025 23:26:03 +0200
+Subject: [PATCH 38/47] gcc: ensure pointer is properly initialized
+
+Fix gcc warning by ensuring pointers are properly defined and
+initialized before use in man-generator code to prevent potential
+undefined behavior.
+
+(cherry picked from commit a23ef8e26f5468c37d676da15d0125bff6de7095)
+---
+ tools/man-generator.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/tools/man-generator.c b/tools/man-generator.c
+index bd161796a..7a60d4327 100644
+--- a/tools/man-generator.c
++++ b/tools/man-generator.c
+@@ -1219,7 +1219,7 @@ static void _print_cmd_usage_option(const struct command_name *cname,
+ static int _print_man(char *name, char *des_file, int secondary)
+ {
+ 	const struct command_name *cname;
+-	const struct command_name_args *cna;
++	const struct command_name_args *cna = NULL;
+ 	struct command *cmd, *prev_cmd = NULL;
+ 	char *lvmname = name;
+ 	int i, sep = 0;
+@@ -1363,7 +1363,7 @@ static int _print_man(char *name, char *des_file, int secondary)
+ 		if (cname && (i == (COMMAND_COUNT - 1))) {
+ 			_print_cmd_usage_option(cname, cmd);
+ 		} else {
+-			if (cna->variants > 1)
++			if (cna && cna->variants > 1)
+ 				sep = 1;
+ 		}
+ 	}
+-- 
+2.51.0
+

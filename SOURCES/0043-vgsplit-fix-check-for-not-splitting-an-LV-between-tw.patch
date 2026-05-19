@@ -1,0 +1,88 @@
+From 147d05c177c39d298f02fc6f786e476308413133 Mon Sep 17 00:00:00 2001
+From: Peter Rajnoha <prajnoha@redhat.com>
+Date: Tue, 12 Aug 2025 11:32:18 +0200
+Subject: [PATCH 43/47] vgsplit: fix check for not splitting an LV between two
+ VGs for cachevol
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+When cachevol was used for the cache LV, the check for not splitting an
+LV between two VGs was incorrect, not allowing to split the VG in cases
+it should have been possible.
+
+For example, splitting a VG which contains the cache LV with cachevol
+only on two devices (sda and sdb here) and leaving third device completely
+unused (sdc here) should clearly allow us to split it into a new VG:
+
+❯  vgcreate vg /dev/sd{a..c}
+  Physical volume "/dev/sda" successfully created.
+  Physical volume "/dev/sdb" successfully created.
+  Physical volume "/dev/sdc" successfully created.
+  Volume group "vg" successfully created
+
+❯  lvcreate -l2 -n main vg /dev/sda
+  Logical volume "main" created.
+
+❯  lvcreate -l2 -n fast vg /dev/sdb
+  Logical volume "fast" created.
+
+❯  lvconvert -y --type cache --cachevol fast vg/main
+  Logical volume vg/main is now cached.
+
+❯  lvs -a -o name,devices vg
+  lv_name      devices
+  [fast_cvol]  /dev/sdb(0)
+  main         main_corig(0)
+  [main_corig] /dev/sda(0)
+
+❯  lsblk -o name /dev/sd{a..c}
+NAME
+sda
+└─vg-main_corig
+  └─vg-main
+sdb
+└─vg-fast_cvol
+  ├─vg-fast_cvol-cdata
+  │ └─vg-main
+  └─vg-fast_cvol-cmeta
+    └─vg-main
+sdc
+
+Before this patch:
+
+❯  vgsplit vg vg2 /dev/sdc
+  Logical volume vg/main must be inactive.
+
+❯  vgchange -an vg
+  0 logical volume(s) in volume group "vg" now active
+
+❯  vgsplit vg vg2 /dev/sdc
+  Can't split LV main between two Volume Groups
+
+With this patch applied:
+
+❯  vgsplit vg vg2 /dev/sdc
+  New volume group "vg2" successfully split from "vg"
+
+(cherry picked from commit 3fe57cc892fc984c30fb14c866a109ef17772ed4)
+---
+ tools/vgsplit.c | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/tools/vgsplit.c b/tools/vgsplit.c
+index aa89835d3..5d6c0a06c 100644
+--- a/tools/vgsplit.c
++++ b/tools/vgsplit.c
+@@ -450,6 +450,8 @@ static int _move_cache(struct volume_group *vg_from,
+ 
+ 		if (lv_is_cache_vol(lv)) {
+ 			fast = lv;
++		} else if (lv_is_cache_vol(seg->lv)) {
++			fast = seg->lv;
+ 		} else {
+ 			data = seg_lv(seg, 0);
+ 			meta = seg->metadata_lv;
+-- 
+2.51.0
+

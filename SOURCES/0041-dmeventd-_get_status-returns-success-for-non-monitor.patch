@@ -1,0 +1,37 @@
+From d825680fd9fae523f166a1ff1a833e5157ccce79 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Tue, 29 Jul 2025 16:00:39 +0200
+Subject: [PATCH 41/47] dmeventd: _get_status returns success for non
+ monitoring
+
+No longer returning EINVAL when the dmeventd is not monitoring
+any device (there are no registered devices).
+
+This makes usable i.e. 'dmeventd -R' for the case, the dmeventd
+was not monnitoring anything during this call.
+
+Previously this actually cause refuse of 'restart' - since
+restarting 'dmeventd' has seen failing resutl of a call:
+DM_EVENT_CMD_GET_STATUS
+
+(cherry picked from commit 6a31246bdd50ee8619d58704d83e4e916e0608d8)
+---
+ daemons/dmeventd/dmeventd.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/daemons/dmeventd/dmeventd.c b/daemons/dmeventd/dmeventd.c
+index b696cc77a..22a713b9a 100644
+--- a/daemons/dmeventd/dmeventd.c
++++ b/daemons/dmeventd/dmeventd.c
+@@ -685,7 +685,7 @@ static int _get_status(struct message_data *message_data)
+ 	_lock_mutex();
+ 	if (!(count = dm_list_size(&_thread_registry))) {
+ 		_unlock_mutex();
+-		ret = -EINVAL;
++		ret = 0;        /* no monitored devices */
+ 		goto out;
+ 	}
+ 
+-- 
+2.51.0
+

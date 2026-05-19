@@ -1,7 +1,7 @@
-From 1742273a30f6ed5fa0176805f8bd1c133b2a600c Mon Sep 17 00:00:00 2001
+From 52efa6f5a1a5a9057130d0b3c8acfdb8feff2e22 Mon Sep 17 00:00:00 2001
 From: David Teigland <teigland@redhat.com>
 Date: Mon, 27 Oct 2025 11:01:16 -0500
-Subject: [PATCH 15/18] activating raid LV with partial snapshot is an error
+Subject: [PATCH] activating raid LV with partial snapshot is an error
 
 Detect and report this error early in the command, with
 a clear message, including a possible remedy.  Previously,
@@ -20,7 +20,7 @@ New error message:
  1 file changed, 13 insertions(+)
 
 diff --git a/tools/toollib.c b/tools/toollib.c
-index 9235f431f..0e711fbc7 100644
+index a7384dd60..b9fa67446 100644
 --- a/tools/toollib.c
 +++ b/tools/toollib.c
 @@ -781,6 +781,19 @@ int lv_change_activate(struct cmd_context *cmd, struct logical_volume *lv,

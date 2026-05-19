@@ -1,0 +1,686 @@
+From 5878a6dc3167e4f9fc4c1dcb04c3dd41e3d4db19 Mon Sep 17 00:00:00 2001
+From: David Teigland <teigland@redhat.com>
+Date: Mon, 30 Jun 2025 12:59:49 -0500
+Subject: [PATCH 09/47] lvmlockd: add repair option to reinitialize sanlock
+ leases
+
+If sanlock leases become corrupted, adding --lockopt repair
+to the command will let lvmlockd reinitialize them.
+
+(cherry picked from commit 4bc52d2dc5dee3c57f88d58c3143e8a2f4d44d9f)
+---
+ configure.ac                         |   1 +
+ daemons/lvmlockd/lvmlockd-core.c     |  24 +--
+ daemons/lvmlockd/lvmlockd-internal.h |   8 +-
+ daemons/lvmlockd/lvmlockd-sanlock.c  | 212 ++++++++++++++++++++++++---
+ lib/locking/lvmlockd.c               |  69 +++++++--
+ lib/locking/lvmlockd.h               |   4 +
+ 6 files changed, 277 insertions(+), 41 deletions(-)
+
+diff --git a/configure.ac b/configure.ac
+index 6fcf6f2b5..11a735af5 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -936,6 +936,7 @@ dnl -- Look for sanlock libraries
+ AS_IF([test "$BUILD_LOCKDSANLOCK" = "yes"], [
+ 	LOCKDSANLOCK_SUPPORT=370
+ 	PKG_CHECK_EXISTS(libsanlock_client >= 4.0.0, [LOCKDSANLOCK_SUPPORT=400])
++	PKG_CHECK_EXISTS(libsanlock_client >= 4.1.0, [LOCKDSANLOCK_SUPPORT=410])
+ 	PKG_CHECK_MODULES(LIBSANLOCKCLIENT, libsanlock_client >= 3.7.0, [BUILD_LVMLOCKD="yes"])
+ 	AC_DEFINE_UNQUOTED([LOCKDSANLOCK_SUPPORT], [$LOCKDSANLOCK_SUPPORT], [Define version of sanlock.])
+ ])
+diff --git a/daemons/lvmlockd/lvmlockd-core.c b/daemons/lvmlockd/lvmlockd-core.c
+index 66a5d5e20..0cb10369a 100644
+--- a/daemons/lvmlockd/lvmlockd-core.c
++++ b/daemons/lvmlockd/lvmlockd-core.c
+@@ -1057,7 +1057,7 @@ static void lm_vg_status(struct lockspace *ls, struct action *act)
+ 		act->lm_rv = rv;
+ }
+ 
+-static int lm_prepare_lockspace(struct lockspace *ls, struct action *act)
++static int lm_prepare_lockspace(struct lockspace *ls, struct action *act, int repair)
+ {
+ 	uint64_t prev_generation = 0;
+ 	int rv = -1;
+@@ -1065,7 +1065,7 @@ static int lm_prepare_lockspace(struct lockspace *ls, struct action *act)
+ 	if (ls->lm_type == LD_LM_DLM) {
+ 		rv = lm_prepare_lockspace_dlm(ls);
+ 	} else if (ls->lm_type == LD_LM_SANLOCK) {
+-		rv = lm_prepare_lockspace_sanlock(ls, &prev_generation);
++		rv = lm_prepare_lockspace_sanlock(ls, &prev_generation, repair);
+ 		/* borrowing action.owner to avoid adding another action field */
+ 		if (!rv)
+ 			act->owner.generation = (uint32_t)prev_generation;
+@@ -1126,14 +1126,14 @@ static int lm_add_resource(struct lockspace *ls, struct resource *r)
+ 
+ static int lm_lock(struct lockspace *ls, struct resource *r, int mode, struct action *act,
+ 		   struct val_blk *vb_out, int *retry, struct owner *owner,
+-		   int adopt_only, int adopt_ok)
++		   int adopt_only, int adopt_ok, int repair)
+ {
+ 	int rv = -1;
+ 
+ 	if (ls->lm_type == LD_LM_DLM)
+ 		rv = lm_lock_dlm(ls, r, mode, vb_out, adopt_only, adopt_ok);
+ 	else if (ls->lm_type == LD_LM_SANLOCK)
+-		rv = lm_lock_sanlock(ls, r, mode, vb_out, retry, owner, adopt_only, adopt_ok);
++		rv = lm_lock_sanlock(ls, r, mode, vb_out, retry, owner, adopt_only, adopt_ok, repair);
+ 	else if (ls->lm_type == LD_LM_IDM)
+ 		rv = lm_lock_idm(ls, r, mode, vb_out, act->lv_uuid,
+ 				 &act->pvs, adopt_only, adopt_ok);
+@@ -1309,7 +1309,8 @@ static int res_lock(struct lockspace *ls, struct resource *r, struct action *act
+ 
+ 	rv = lm_lock(ls, r, act->mode, act, &vb, retry, owner,
+ 		     act->flags & LD_AF_ADOPT_ONLY ? 1 : 0,
+-		     act->flags & LD_AF_ADOPT ? 1 : 0);
++		     act->flags & LD_AF_ADOPT ? 1 : 0,
++		     act->flags & LD_AF_REPAIR ? 1 : 0);
+ 
+ 	if (rv && r->use_vb)
+ 		log_debug("%s:%s res_lock rv %d read vb %x %x %u",
+@@ -2577,6 +2578,7 @@ static void *lockspace_thread_main(void *arg_in)
+ 	int error = 0;
+ 	int adopt_only = 0;
+ 	int adopt_ok = 0;
++	int repair = 0;
+ 	int wait_flag = 0;
+ 	int nodelay = 0;
+ 	int nocreate;
+@@ -2604,6 +2606,8 @@ static void *lockspace_thread_main(void *arg_in)
+ 				adopt_ok = 1;
+ 			if (add_act->flags & LD_AF_NODELAY)
+ 				nodelay = 1;
++			if (add_act->flags & LD_AF_REPAIR)
++				repair = 1;
+ 		}
+ 	}
+ 	pthread_mutex_unlock(&ls->mutex);
+@@ -2613,14 +2617,14 @@ static void *lockspace_thread_main(void *arg_in)
+ 		adopt_ok = 1;
+ 	}
+ 
+-	log_debug("S %s lm_add_lockspace %s wait %d adopt_only %d adopt_ok %d",
+-		  ls->name, lm_str(ls->lm_type), wait_flag, adopt_only, adopt_ok);
++	log_debug("S %s lm_add_lockspace %s act %d wait %d adopt_only %d adopt_ok %d repair %d",
++		  ls->name, lm_str(ls->lm_type), add_act ? 1 : 0, wait_flag, adopt_only, adopt_ok, repair);
+ 
+ 	/*
+ 	 * The prepare step does not wait for anything and is quick;
+ 	 * it tells us if the parameters are valid and the lm is running.
+ 	 */
+-	error = lm_prepare_lockspace(ls, add_act);
++	error = lm_prepare_lockspace(ls, add_act, repair);
+ 
+ 	if (add_act && (!wait_flag || error)) {
+ 		/* send initial join result back to client */
+@@ -4789,6 +4793,8 @@ static uint32_t str_to_opts(const char *str)
+ 		flags |= LD_AF_DISABLE;
+ 	if (strstr(str, "nodelay"))
+ 		flags |= LD_AF_NODELAY;
++	if (strstr(str, "repair"))
++		flags |= LD_AF_REPAIR;
+ 
+ 	/* FIXME: parse the flag values properly */
+ 	if (strstr(str, "adopt_only"))
+@@ -5310,7 +5316,7 @@ skip_pvs_path:
+ 	dm_config_destroy(req.cft);
+ 	buffer_destroy(&req.buffer);
+ 
+-	log_debug("recv %s[%d][%u] %s%s%s %s%s %s%s%s%s opts=%x",
++	log_debug("recv %s[%d][%u] %s%s%s %s%s %s%s%s%s opts=0x%x",
+ 		  cl->name[0] ? cl->name : "client", cl->pid, cl->id,
+ 		  op_mode_str(act->op, act->mode), act->rt ? "_" : "", rt_str(act->rt),
+ 		  act->vg_name[0] ? "vg=" : "",
+diff --git a/daemons/lvmlockd/lvmlockd-internal.h b/daemons/lvmlockd/lvmlockd-internal.h
+index bf40c77f2..7999c2a03 100644
+--- a/daemons/lvmlockd/lvmlockd-internal.h
++++ b/daemons/lvmlockd/lvmlockd-internal.h
+@@ -118,6 +118,7 @@ struct client {
+ #define LD_AF_SH_EXISTS            0x00100000
+ #define LD_AF_ADOPT_ONLY           0x00200000 /* adopt orphan or fail */
+ #define LD_AF_NODELAY              0x00400000
++#define LD_AF_REPAIR		   0x00800000
+ 
+ /*
+  * Number of times to repeat a lock request after
+@@ -209,6 +210,7 @@ struct lockspace {
+ 	int8_t lm_type;			/* lock manager: LM_DLM, LM_SANLOCK */
+ 	void *lm_data;
+ 	uint32_t host_id;
++	uint64_t generation;
+ 	uint64_t free_lock_offset;	/* for sanlock, start search for free lock here */
+ 	struct pvs pvs;			/* for idm: PV list */
+ 
+@@ -561,13 +563,13 @@ int lm_init_vg_sanlock(char *ls_name, char *vg_name, uint32_t flags, char *vg_ar
+ int lm_init_lv_sanlock(struct lockspace *ls, char *ls_name, char *vg_name, char *lv_name, char *vg_args, char *lv_args, char *prev_args);
+ int lm_free_lv_sanlock(struct lockspace *ls, struct resource *r);
+ int lm_rename_vg_sanlock(char *ls_name, char *vg_name, uint32_t flags, char *vg_args);
+-int lm_prepare_lockspace_sanlock(struct lockspace *ls, uint64_t *prev_generation);
++int lm_prepare_lockspace_sanlock(struct lockspace *ls, uint64_t *prev_generation, int repair);
+ int lm_add_lockspace_sanlock(struct lockspace *ls, int adopt_only, int adopt_ok, int nodelay);
+ int lm_rem_lockspace_sanlock(struct lockspace *ls, int free_vg);
+ int lm_add_resource_sanlock(struct lockspace *ls, struct resource *r);
+ int lm_lock_sanlock(struct lockspace *ls, struct resource *r, int ld_mode,
+ 		    struct val_blk *vb_out, int *retry, struct owner *owner,
+-		    int adopt_only, int adopt_ok);
++		    int adopt_only, int adopt_ok, int repair);
+ int lm_convert_sanlock(struct lockspace *ls, struct resource *r,
+ 		       int ld_mode, uint32_t r_version);
+ int lm_unlock_sanlock(struct lockspace *ls, struct resource *r,
+@@ -610,7 +612,7 @@ static inline int lm_rename_vg_sanlock(char *ls_name, char *vg_name, uint32_t fl
+ 	return -1;
+ }
+ 
+-static inline int lm_prepare_lockspace_sanlock(struct lockspace *ls, uint64_t *prev_generation)
++static inline int lm_prepare_lockspace_sanlock(struct lockspace *ls, uint64_t *prev_generation, int repair)
+ {
+ 	return -1;
+ }
+diff --git a/daemons/lvmlockd/lvmlockd-sanlock.c b/daemons/lvmlockd/lvmlockd-sanlock.c
+index 97f06d115..ce5953faf 100644
+--- a/daemons/lvmlockd/lvmlockd-sanlock.c
++++ b/daemons/lvmlockd/lvmlockd-sanlock.c
+@@ -218,6 +218,18 @@ int lm_data_size_sanlock(void)
+ 
+ static uint64_t daemon_test_lv_count;
+ 
++static void _fclose(FILE *fp, char *name)
++{
++	if (fclose(fp))
++		log_warn("fclose error %d %s", errno, name ?: "");
++}
++
++static void _close(int fd)
++{
++	if (close(fd))
++		log_warn("close error %d fd %d", errno, fd);
++}
++
+ /*
+  * Copy a null-terminated string "str" into a fixed
+  * size struct field "buf" which is not null terminated.
+@@ -308,14 +320,74 @@ static int read_host_id_file(void)
+ 			break;
+ 		}
+ 	}
+-	if (fclose(file))
+-		log_debug("Failed to fclose host id file %s (%s).",
+-			  daemon_host_id_file, strerror(errno));
++	_fclose(file, (char *)daemon_host_id_file);
+ out:
+ 	log_debug("host_id %d from %s", host_id, daemon_host_id_file);
+ 	return host_id;
+ }
+ 
++static int read_info_file(struct lockspace *ls, uint32_t *host_id, uint64_t *generation, int *sector_size, int *align_size)
++{
++	char line[MAX_LINE];
++	char path[PATH_MAX] = { 0 };
++	FILE *fp;
++
++	if (dm_snprintf(path, PATH_MAX-1, "/var/lib/lvm/lvmlockd_info_%s", ls->vg_name) < 0)
++		return -1;
++
++	if (!(fp = fopen(path, "r"))) {
++		log_debug("Failed to open info file");
++		return -1;
++	}
++
++	while (fgets(line, sizeof(line), fp)) {
++		if (line[0] == '#')
++			continue;
++		if (!strncmp(line, "host_id ", 8)) {
++			sscanf(line, "host_id %u", host_id);
++		} else if (!strncmp(line, "generation ", 11)) {
++			sscanf(line, "generation %llu", (unsigned long long *)generation);
++		} else if (!strncmp(line, "sector_size ", 12)) {
++			sscanf(line, "sector_size %d", sector_size);
++		} else if (!strncmp(line, "align_size ", 11)) {
++			sscanf(line, "align_size %d", align_size);
++		}
++	}
++
++	_fclose(fp, path);
++	log_debug("info file: read %u %llu %d %d", *host_id, (unsigned long long)*generation, *sector_size, *align_size);
++	return 0;
++}
++
++static int write_info_file(struct lockspace *ls)
++{
++	struct lm_sanlock *lms = (struct lm_sanlock *)ls->lm_data;
++	char path[PATH_MAX] = { 0 };
++	FILE *fp;
++	time_t t;
++
++	if (dm_snprintf(path, PATH_MAX-1, "/var/lib/lvm/lvmlockd_info_%s", ls->vg_name) < 0)
++		return -1;
++
++	if (!(fp = fopen(path, "w"))) {
++		log_debug("Failed to create info file");
++		return -1;
++	}
++
++	fprintf(fp, "# vg %s %s created %s", ls->vg_name, ls->vg_uuid, ctime(&t));
++	fprintf(fp, "host_id %u\n", ls->host_id);
++	fprintf(fp, "generation %llu\n", (unsigned long long)ls->generation);
++	fprintf(fp, "sector_size %d\n", lms->sector_size);
++	fprintf(fp, "align_size %d\n", lms->align_size);
++
++	if (fflush(fp))
++		log_warn("Failed to write/flush %s", path);
++	_fclose(fp, path);
++
++	log_debug("info file: wrote %u %llu %d %d", ls->host_id, (unsigned long long)ls->generation, lms->sector_size, lms->align_size);
++	return 0;
++}
++
+ /* Prepare valid /dev/mapper/vgname-lvname with all the mangling */
+ static int build_dm_path(char *path, size_t path_len,
+ 			 const char *vg_name, const char *lv_name)
+@@ -370,7 +442,7 @@ static void _read_sysfs_size(dev_t devno, const char *name, uint64_t *val)
+ 	if (strlen(buf))
+ 		*val = strtoull(buf, NULL, 0);
+ out:
+-	(void)fclose(fp);
++	_fclose(fp, path);
+ }
+ 
+ /* Select sector/align size for a new VG based on what the device reports for
+@@ -479,6 +551,7 @@ static int _lease_corrupt_error(int rv)
+ {
+ 	if (rv == SANLK_LEADER_MAGIC ||
+ 	    rv == SANLK_LEADER_VERSION ||
++	    rv == SANLK_LEADER_DIFF ||
+ 	    rv == SANLK_LEADER_LOCKSPACE ||
+ 	    rv == SANLK_LEADER_RESOURCE ||
+ 	    rv == SANLK_LEADER_CHECKSUM ||
+@@ -509,8 +582,10 @@ static int read_lockspace_info(char *path, uint32_t host_id, int *sector_size, i
+ #endif
+ 		rv = sanlock_read_lockspace(&ss, 0, &io_timeout);
+ 
+-	if (_lease_corrupt_error(rv))
++	if (_lease_corrupt_error(rv)) {
++		log_error("read_lockspace_info %s %u corrupt lease error %d", path, host_id, rv);
+ 		return -ELOCKREPAIR;
++	}
+ 
+ 	if (rv < 0) {
+ 		log_error("read_lockspace_info %s %u error %d", path, host_id, rv);
+@@ -1471,7 +1546,7 @@ int lm_find_free_lock_sanlock(struct lockspace *ls, uint64_t lv_size_bytes)
+  * This should also not create any major problems.
+  */
+ 
+-int lm_prepare_lockspace_sanlock(struct lockspace *ls, uint64_t *prev_generation)
++int lm_prepare_lockspace_sanlock(struct lockspace *ls, uint64_t *prev_generation, int repair)
+ {
+ 	struct stat st;
+ 	struct lm_sanlock *lms = NULL;
+@@ -1486,6 +1561,7 @@ int lm_prepare_lockspace_sanlock(struct lockspace *ls, uint64_t *prev_generation
+ 	int sector_size = 0;
+ 	int align_size = 0;
+ 	int align_mb = 0;
++	int retries = 0;
+ 	int gl_found;
+ 	int ret, rv;
+ 
+@@ -1502,6 +1578,8 @@ int lm_prepare_lockspace_sanlock(struct lockspace *ls, uint64_t *prev_generation
+ 	memset(killargs, 0, sizeof(killargs));
+ 	snprintf(killargs, SANLK_PATH_LEN, "--kill %s", ls->vg_name);
+ 
++	log_debug("S %s prepare_lockspace_san host_id %u repair %d", ls->name, ls->host_id, repair);
++
+ 	rv = check_args_version(ls->vg_args, VG_LOCK_ARGS_MAJOR);
+ 	if (rv < 0) {
+ 		ret = -EARGS;
+@@ -1602,7 +1680,63 @@ int lm_prepare_lockspace_sanlock(struct lockspace *ls, uint64_t *prev_generation
+ 		goto fail;
+ 	}
+ 
++ repair_retry:
++	sector_size = 0;
++	align_size = 0;
++
+ 	rv = read_lockspace_info(disk_path, lms->ss.host_id, &sector_size, &align_size, &align_mb, &ss_flags, &rs_flags, &hs);
++
++#if LOCKDSANLOCK_SUPPORT >= 410
++	if ((rv == -ELOCKREPAIR) && repair && !retries) {
++		uint64_t generation = 0;
++		uint32_t host_id = 0;
++
++		rv = read_info_file(ls, &host_id, &generation, &sector_size, &align_size);
++		if (rv < 0) {
++			log_error("S %s prepare_lockspace_san cannot repair lockspace no info file", lsname);
++			ret = -EINVAL;
++		}
++
++		if (host_id != lms->ss.host_id) {
++			log_error("S %s prepare_lockspace_san cannot repair lockspace other info host_id", lsname);
++			ret = -EINVAL;
++		}
++
++		hs.generation = generation;
++
++		if (sector_size == 512) {
++			lms->ss.flags |= SANLK_LSF_SECTOR512;
++			lms->ss.flags |= SANLK_LSF_ALIGN1M;
++		} else if (sector_size == 4096) {
++			lms->ss.flags |= SANLK_LSF_SECTOR4K;
++			if (align_size == ONE_MB)
++				lms->ss.flags |= SANLK_LSF_ALIGN1M;
++			else if (align_size == 2 * ONE_MB)
++				lms->ss.flags |= SANLK_LSF_ALIGN2M;
++			else if (align_size == 4 * ONE_MB)
++				lms->ss.flags |= SANLK_LSF_ALIGN4M;
++			else if (align_size == 8 * ONE_MB)
++				lms->ss.flags |= SANLK_LSF_ALIGN8M;
++		} else {
++			log_error("S %s prepare_lockspace_san cannot repair lockspace invalid sector_size", lsname);
++			ret = -EINVAL;
++		}
++
++		log_debug("S %s prepare_lockspace_san repair host %u lease", lsname, host_id);
++
++		rv = sanlock_init_lockspace_host(&lms->ss, NULL, generation, 0, 0, 0);
++		if (rv < 0) {
++			log_error("S %s prepare_lockspace_san repair host %u lease error %d", lsname, host_id, rv);
++			ret = -EMANAGER;
++		}
++		retries = 1;
++		goto repair_retry;
++	}
++#else
++	if ((rv == -ELOCKREPAIR) && repair && !retries)
++		log_debug("S %s prepare_lockspace_san sanlock does not support repair.", lsname);
++#endif
++
+ 	if (rv < 0) {
+ 		log_error("S %s prepare_lockspace_san cannot read lockspace info %d", lsname, rv);
+ 		ret = -EMANAGER;
+@@ -1675,7 +1809,7 @@ out:
+ 
+ fail:
+ 	if (lms && lms->sock)
+-		close(lms->sock);
++		_close(lms->sock);
+ 	free(lms);
+ 	return ret;
+ }
+@@ -1683,7 +1817,9 @@ fail:
+ int lm_add_lockspace_sanlock(struct lockspace *ls, int adopt_only, int adopt_ok, int nodelay)
+ {
+ 	struct lm_sanlock *lms = (struct lm_sanlock *)ls->lm_data;
++	struct sanlk_host *hs = NULL;
+ 	uint32_t flags = 0;
++	int count = 0;
+ 	int rv;
+ 
+ 	if (daemon_test) {
+@@ -1710,6 +1846,33 @@ int lm_add_lockspace_sanlock(struct lockspace *ls, int adopt_only, int adopt_ok,
+ 		goto fail;
+ 	}
+ 
++	rv = sanlock_get_hosts(ls->name, 0, &hs, &count, SANLK_GET_HOST_LOCAL);
++	if (rv < 0) {
++		log_error("S %s add_lockspace_san add_lockspace get_host error %d", ls->name, rv);
++		goto fail_rem;
++	}
++
++	if (!count || !hs) {
++		log_error("S %s add_lockspace_san add_lockspace get_host empty", ls->name);
++		goto fail_rem;
++	}
++
++	if ((uint32_t)hs->host_id != ls->host_id) {
++		log_error("S %s add_lockspace_san add_lockspace get_host invalid host_id", ls->name);
++		goto fail_rem;
++	}
++
++	if (!hs->generation) {
++		log_error("S %s add_lockspace_san add_lockspace get_host zero generation", ls->name);
++		goto fail_rem;
++	}
++
++	ls->generation = hs->generation;
++
++	free(hs);
++
++	write_info_file(ls);
++
+ 	/*
+ 	 * Don't let the lockspace be cleanly released if orphan locks
+ 	 * exist, because the orphan locks are still protecting resources
+@@ -1721,17 +1884,17 @@ int lm_add_lockspace_sanlock(struct lockspace *ls, int adopt_only, int adopt_ok,
+ 	rv = sanlock_set_config(ls->name, 0, SANLK_CONFIG_USED_BY_ORPHANS, NULL);
+ 	if (rv < 0) {
+ 		log_error("S %s add_lockspace_san set_config error %d", ls->name, rv);
+-		sanlock_rem_lockspace(&lms->ss, 0);
+-		goto fail;
++		goto fail_rem;
+ 	}
+ 
+ out:
+ 	log_debug("S %s add_lockspace_san done", ls->name);
+ 	return 0;
+ 
++fail_rem:
++	sanlock_rem_lockspace(&lms->ss, 0);
+ fail:
+-	if (close(lms->sock))
+-		log_error("failed to close sanlock daemon socket connection");
++	_close(lms->sock);
+ 	free(lms);
+ 	ls->lm_data = NULL;
+ 	return rv;
+@@ -1767,8 +1930,7 @@ int lm_rem_lockspace_sanlock(struct lockspace *ls, int free_vg)
+ 		}
+ 	}
+ 
+-	if (close(lms->sock))
+-		log_error("failed to close sanlock daemon socket connection");
++	_close(lms->sock);
+ out:
+ 	free(lms);
+ 	ls->lm_data = NULL;
+@@ -1845,7 +2007,7 @@ static const char *_host_flags_to_str(uint32_t flags)
+ 
+ int lm_lock_sanlock(struct lockspace *ls, struct resource *r, int ld_mode,
+ 		    struct val_blk *vb_out, int *retry, struct owner *owner,
+-		    int adopt_only, int adopt_ok)
++		    int adopt_only, int adopt_ok, int repair)
+ {
+ 	struct lm_sanlock *lms = (struct lm_sanlock *)ls->lm_data;
+ 	struct rd_sanlock *rds = (struct rd_sanlock *)r->lm_data;
+@@ -1857,6 +2019,7 @@ int lm_lock_sanlock(struct lockspace *ls, struct resource *r, int ld_mode,
+ 	uint32_t flags = 0;
+ 	struct val_blk vb = { 0 };
+ 	int added = 0;
++	int retries = 0;
+ 	int rv;
+ 
+ 	if (!r->lm_init) {
+@@ -1956,6 +2119,8 @@ int lm_lock_sanlock(struct lockspace *ls, struct resource *r, int ld_mode,
+ 	memset(&opt, 0, sizeof(opt));
+ 	sprintf(opt.owner_name, "%s", "lvmlockd");
+ 
++ repair_retry:
++
+ #if LOCKDSANLOCK_SUPPORT >= 400
+ 	rv = sanlock_acquire2(lms->sock, -1, flags, rs, &opt, &owner_host, &owner_name);
+ #else
+@@ -2068,9 +2233,20 @@ int lm_lock_sanlock(struct lockspace *ls, struct resource *r, int ld_mode,
+ 		return -EIOTIMEOUT;
+ 	}
+ 
++	if (_lease_corrupt_error(rv) && repair && !retries) {
++		log_debug("%s:%s lock_san acquire lease_corrupt %d repair", ls->name, r->name, rv);
++
++		rv = sanlock_write_resource(rs, 0, 0, 0);
++		if (rv < 0) {
++			log_error("%s:%s lock_san acquire lease repair write_resource error %d", ls->name, r->name, rv);
++			return rv;
++		}
++		retries = 1;
++		goto repair_retry;
++	}
++
+ 	if (rv < 0) {
+-		log_error("%s:%s lock_san acquire error %d",
+-			  ls->name, r->name, rv);
++		log_error("%s:%s lock_san acquire error %d", ls->name, r->name, rv);
+ 
+ 		/* if the gl has been disabled, remove and free the gl resource */
+ 		if ((rv == SANLK_LEADER_RESOURCE) && (r->type == LD_RT_GL)) {
+@@ -2094,8 +2270,10 @@ int lm_lock_sanlock(struct lockspace *ls, struct resource *r, int ld_mode,
+ 		    rv == SANLK_DBLOCK_WRITE)
+ 			return -ELOCKIO;
+ 
+-		if (_lease_corrupt_error(rv))
++		if (_lease_corrupt_error(rv)) {
++			log_debug("%s:%s lock_san lease corrupt repair %d retries %d", ls->name, r->name, repair, retries);
+ 			return -ELOCKREPAIR;
++		}
+ 
+ 		/*
+ 		 * The sanlock lockspace can disappear if the lease storage fails,
+diff --git a/lib/locking/lvmlockd.c b/lib/locking/lvmlockd.c
+index f86007858..68dea52e0 100644
+--- a/lib/locking/lvmlockd.c
++++ b/lib/locking/lvmlockd.c
+@@ -1466,11 +1466,17 @@ int lockd_start_vg(struct cmd_context *cmd, struct volume_group *vg, int *exists
+ 
+ 	if ((cmd->lockopt & LOCKOPT_NODELAY) ||
+ 	    (cmd->lockopt & LOCKOPT_ADOPTLS) ||
+-	    (cmd->lockopt & LOCKOPT_ADOPT)) {
+-		(void) dm_snprintf(opt_buf, sizeof(opt_buf), "%s%s%s",
+-			    (cmd->lockopt & LOCKOPT_NODELAY) ? "nodelay," : "",
+-			    (cmd->lockopt & LOCKOPT_ADOPTLS) ? "adopt_only" : "",
+-			    (cmd->lockopt & LOCKOPT_ADOPT) ? "adopt" : "");
++	    (cmd->lockopt & LOCKOPT_ADOPT) ||
++	    (cmd->lockopt & LOCKOPT_REPAIRVG) ||
++	    (cmd->lockopt & LOCKOPT_REPAIR)) {
++		if (dm_snprintf(opt_buf, sizeof(opt_buf), "%s%s%s%s",
++				(cmd->lockopt & LOCKOPT_NODELAY) ? "nodelay," : "",
++				(cmd->lockopt & LOCKOPT_ADOPTLS) ? "adopt_only," : "",
++				(cmd->lockopt & LOCKOPT_ADOPT) ? "adopt," : "",
++				(cmd->lockopt & (LOCKOPT_REPAIR|LOCKOPT_REPAIRVG)) ? "repair" : "") < 0) {
++			log_error("Options string too long %x", cmd->lockopt);
++			return 0;
++		}
+ 		opts = opt_buf;
+ 	}
+ 
+@@ -1967,6 +1973,7 @@ out:
+ int lockd_global(struct cmd_context *cmd, const char *def_mode)
+ {
+ 	struct owner owner = { 0 };
++	char opt_buf[64] = {};
+ 	const char *mode = NULL;
+ 	const char *opts = NULL;
+ 	uint32_t lockd_flags;
+@@ -1996,10 +2003,19 @@ int lockd_global(struct cmd_context *cmd, const char *def_mode)
+ 		return 0;
+ 	}
+ 
+-	if (cmd->lockopt & LOCKOPT_ADOPTGL)
+-		opts = "adopt_only";
+-	else if (cmd->lockopt & LOCKOPT_ADOPT)
+-		opts = "adopt";
++	if ((cmd->lockopt & LOCKOPT_ADOPTGL) ||
++	    (cmd->lockopt & LOCKOPT_ADOPT) ||
++	    (cmd->lockopt & LOCKOPT_REPAIRGL) ||
++	    (cmd->lockopt & LOCKOPT_REPAIR)) {
++		if (dm_snprintf(opt_buf, sizeof(opt_buf), "%s%s%s",
++			    (cmd->lockopt & LOCKOPT_ADOPTGL) ? "adopt_only" : "",
++			    (cmd->lockopt & LOCKOPT_ADOPT) ? "adopt" : "",
++			    (cmd->lockopt & (LOCKOPT_REPAIR|LOCKOPT_REPAIRGL)) ? "repair" : "") < 0) {
++			log_error("Options string too long %x", cmd->lockopt);
++			return 0;
++		}
++		opts = opt_buf;
++	}
+ 
+ 	if (!strcmp(mode, "sh") && cmd->lockd_global_ex)
+ 		return 1;
+@@ -2255,6 +2271,7 @@ int lockd_vg(struct cmd_context *cmd, const char *vg_name, const char *def_mode,
+ 	     uint32_t flags, uint32_t *lockd_state)
+ {
+ 	struct owner owner = { 0 };
++	char opt_buf[64] = {};
+ 	const char *mode = NULL;
+ 	const char *opts = NULL;
+ 	uint32_t lockd_flags;
+@@ -2332,6 +2349,20 @@ int lockd_vg(struct cmd_context *cmd, const char *vg_name, const char *def_mode,
+ 	else if (cmd->lockopt & LOCKOPT_ADOPT)
+ 		opts = "adopt";
+ 
++	if ((cmd->lockopt & LOCKOPT_ADOPTVG) ||
++	    (cmd->lockopt & LOCKOPT_ADOPT) ||
++	    (cmd->lockopt & LOCKOPT_REPAIRVG) ||
++	    (cmd->lockopt & LOCKOPT_REPAIR)) {
++		if (dm_snprintf(opt_buf, sizeof(opt_buf), "%s%s%s",
++			    (cmd->lockopt & LOCKOPT_ADOPTVG) ? "adopt_only" : "",
++			    (cmd->lockopt & LOCKOPT_ADOPT) ? "adopt" : "",
++			    (cmd->lockopt & (LOCKOPT_REPAIR|LOCKOPT_REPAIRVG)) ? "repair" : "") < 0) {
++			log_error("Options string too long %x.", cmd->lockopt);
++			return 0;
++		}
++		opts = opt_buf;
++	}
++
+ 	if (!strcmp(mode, "ex"))
+ 		*lockd_state |= LDST_EX;
+ 
+@@ -2792,11 +2823,17 @@ int lockd_lv_name(struct cmd_context *cmd, struct volume_group *vg,
+ 
+ 	if ((flags & LDLV_PERSISTENT) ||
+ 	    (cmd->lockopt & LOCKOPT_ADOPTLV) ||
+-	    (cmd->lockopt & LOCKOPT_ADOPT)) {
+-		(void) dm_snprintf(opt_buf, sizeof(opt_buf), "%s%s%s",
++	    (cmd->lockopt & LOCKOPT_ADOPT) ||
++	    (cmd->lockopt & LOCKOPT_REPAIRLV) ||
++	    (cmd->lockopt & LOCKOPT_REPAIR)) {
++		if (dm_snprintf(opt_buf, sizeof(opt_buf), "%s%s%s%s",
+ 			    (flags & LDLV_PERSISTENT) ? "persistent," : "",
+ 			    (cmd->lockopt & LOCKOPT_ADOPTLV) ? "adopt_only" : "",
+-			    (cmd->lockopt & LOCKOPT_ADOPT) ? "adopt" : "");
++			    (cmd->lockopt & LOCKOPT_ADOPT) ? "adopt" : "",
++			    (cmd->lockopt & (LOCKOPT_REPAIR|LOCKOPT_REPAIRLV)) ? "repair" : "") < 0) {
++			log_error("Options string too long %x.", cmd->lockopt);
++			return 0;
++		}
+ 		opts = opt_buf;
+ 	}
+ 
+@@ -4397,6 +4434,14 @@ void lockd_lockopt_get_flags(const char *str, uint32_t *flags)
+ 			*flags |= LOCKOPT_ADOPT;
+ 		else if (!strcmp(argv[i], "nodelay"))
+ 			*flags |= LOCKOPT_NODELAY;
++		else if (!strcmp(argv[i], "repair"))
++			*flags |= LOCKOPT_REPAIR;
++		else if (!strcmp(argv[i], "repairgl"))
++			*flags |= LOCKOPT_REPAIRGL;
++		else if (!strcmp(argv[i], "repairvg"))
++			*flags |= LOCKOPT_REPAIRVG;
++		else if (!strcmp(argv[i], "repairlv"))
++			*flags |= LOCKOPT_REPAIRLV;
+ 		else
+ 			log_warn("Ignoring unknown lockopt value: %s", argv[i]);
+ 	}
+diff --git a/lib/locking/lvmlockd.h b/lib/locking/lvmlockd.h
+index 85295852c..18f01cd23 100644
+--- a/lib/locking/lvmlockd.h
++++ b/lib/locking/lvmlockd.h
+@@ -58,6 +58,10 @@
+ #define LOCKOPT_ADOPTLV		0x00001000
+ #define LOCKOPT_ADOPT		0x00002000
+ #define LOCKOPT_NODELAY		0x00004000
++#define LOCKOPT_REPAIR		0x00008000
++#define LOCKOPT_REPAIRGL	0x00010000
++#define LOCKOPT_REPAIRVG	0x00020000
++#define LOCKOPT_REPAIRLV	0x00040000
+ 
+ #ifdef LVMLOCKD_SUPPORT
+ 
+-- 
+2.51.0
+

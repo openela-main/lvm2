@@ -1,0 +1,35 @@
+From 6596b120d33f33286f37ba8b2f486fa01978b82e Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Thu, 10 Jul 2025 15:11:30 +0200
+Subject: [PATCH 34/47] sanlock: fix struct copy to avoid aliasing issues
+
+Replace direct structure assignment with explicit copying to prevent
+potential undefined behavior from structure aliasing. This ensures
+proper memory handling when working with sanlock structures.
+
+This possibly fixes regression introduced with commit: e9640e5178769
+as unintended side effect.
+
+(cherry picked from commit b86b1da80acfa97ee6cc18e3d3a44809d4083a1b)
+---
+ daemons/lvmlockd/lvmlockd-sanlock.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/daemons/lvmlockd/lvmlockd-sanlock.c b/daemons/lvmlockd/lvmlockd-sanlock.c
+index 6ef59b591..93cb3ab17 100644
+--- a/daemons/lvmlockd/lvmlockd-sanlock.c
++++ b/daemons/lvmlockd/lvmlockd-sanlock.c
+@@ -2420,8 +2420,8 @@ static int release_rename(struct lockspace *ls, struct resource *r)
+ 	if (!res_args)
+ 		return -ENOMEM;
+ 
+-	memcpy(&rd1, &rds->rs, sizeof(struct rd_sanlock));
+-	memcpy(&rd2, &rds->rs, sizeof(struct rd_sanlock));
++	rd1.rs = rds->rs;
++	rd2.rs = rds->rs;
+ 
+ 	res1 = &rd1.rs;
+ 	res2 = &rd2.rs;
+-- 
+2.51.0
+

@@ -1,0 +1,51 @@
+From c370fe563dd095a09f6e070afb8a5c8e4915ec47 Mon Sep 17 00:00:00 2001
+From: David Teigland <teigland@redhat.com>
+Date: Fri, 8 Aug 2025 12:36:11 -0500
+Subject: [PATCH 44/47] lvmdevices: do not create system.devices when deleting
+ entries
+
+When using "lvmdevices --deldev" or "lvmdevices --delpvid" and no
+system.devices file exists, the commands should not create the file.
+
+(cherry picked from commit e61aab70498a887557c133fcba21fcc41345d272)
+---
+ test/shell/devicesfile-edit.sh | 7 +++++++
+ tools/lvmdevices.c             | 4 ++++
+ 2 files changed, 11 insertions(+)
+
+diff --git a/test/shell/devicesfile-edit.sh b/test/shell/devicesfile-edit.sh
+index 5f8eb90ee..4b8f9c008 100644
+--- a/test/shell/devicesfile-edit.sh
++++ b/test/shell/devicesfile-edit.sh
+@@ -249,6 +249,13 @@ lvmdevices --update --delnotfound
+ not grep PVID=aaa $DF
+ not grep PVID=bbb $DF
+ 
++# test that deldev does not create devices file when it doesn't exist
++rm -f $DF
++test ! -e $DF
++not lvmdevices --deldev "$LOOP1"
++test ! -e $DF
++not lvmdevices --delpvid "$PVID1"
++test ! -e $DF
+ 
+ # TODO: add/rem of partitions of same device
+ 
+diff --git a/tools/lvmdevices.c b/tools/lvmdevices.c
+index 7f10038d4..65399c96c 100644
+--- a/tools/lvmdevices.c
++++ b/tools/lvmdevices.c
+@@ -590,6 +590,10 @@ int lvmdevices(struct cmd_context *cmd, int argc, char **argv)
+ 			return ECMD_FAILED;
+ 		}
+ 		if (!devices_file_exists(cmd)) {
++			if (arg_is_set(cmd, deldev_ARG) || arg_is_set(cmd, delpvid_ARG) || arg_is_set(cmd, update_ARG)) {
++				log_error("Devices file does not exist.");
++				return ECMD_FAILED;
++			}
+ 			if (!devices_file_touch(cmd)) {
+ 				log_error("Failed to create the devices file.");
+ 				return ECMD_FAILED;
+-- 
+2.51.0
+

@@ -1,7 +1,7 @@
-From c2b5a0f3b8825ce0ac04e405633fb435d3471d20 Mon Sep 17 00:00:00 2001
+From 4ad6776b11103a864b98963c3540e87e13db2450 Mon Sep 17 00:00:00 2001
 From: Heinz Mauelshagen <heinzm@redhat.com>
 Date: Mon, 27 Oct 2025 19:12:25 +0100
-Subject: [PATCH 17/18] test: add new test for snapshot on raid
+Subject: [PATCH 50/51] test: add new test for snapshot on raid
  creation/activation warning/error
 
 (cherry picked from commit 6704ef4012e8c187deaeadb1275e2d80661c3941)
