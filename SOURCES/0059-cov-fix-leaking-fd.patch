@@ -1,0 +1,39 @@
+From 1036f297b0daaa257735f84873b6f4a5762c326e Mon Sep 17 00:00:00 2001
+From: Marian Csontos <mcsontos@redhat.com>
+Date: Fri, 27 Feb 2026 11:25:45 +0100
+Subject: [PATCH 59/64] cov: fix leaking fd
+
+---
+ lib/device/filesystem.c | 7 +++----
+ 1 file changed, 3 insertions(+), 4 deletions(-)
+
+diff --git a/lib/device/filesystem.c b/lib/device/filesystem.c
+index f1add62f9..adb8f0174 100644
+--- a/lib/device/filesystem.c
++++ b/lib/device/filesystem.c
+@@ -215,9 +215,11 @@ static int _btrfs_get_mnt(struct fs_info *fsi, dev_t lv_devt)
+ 		r = read(fd, buffer, sizeof(buffer));
+ 		if (r < 0) {
+ 			ret = 0;
+-			close(fd);
+ 			log_sys_debug("read", rdev_path);
++			close(fd);
+ 			break;
++		} else {
++			close(fd);
+ 		}
+ 
+ 		buffer[r - 1] = 0;
+@@ -239,9 +241,6 @@ static int _btrfs_get_mnt(struct fs_info *fsi, dev_t lv_devt)
+ 			break;
+ 	}
+ 
+-	if (fd >= 0)
+-		close(fd);
+-
+ 	if (closedir(dr))
+ 		log_sys_debug("closedir", devices_path);
+ 
+-- 
+2.53.0
+

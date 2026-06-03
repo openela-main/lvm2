@@ -1,0 +1,26 @@
+From 284f3d3b192238129ce451df322d58d82711766d Mon Sep 17 00:00:00 2001
+From: David Teigland <teigland@redhat.com>
+Date: Tue, 1 Jul 2025 10:25:48 -0500
+Subject: [PATCH 60/64] lvmlockd-sanlock: fix uninitialized time value
+
+(cherry picked from commit 1eaada302b3e78b3e91328a724369b2e1d83369c)
+---
+ daemons/lvmlockd/lvmlockd-sanlock.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/daemons/lvmlockd/lvmlockd-sanlock.c b/daemons/lvmlockd/lvmlockd-sanlock.c
+index 17820b91d..f06af6c60 100644
+--- a/daemons/lvmlockd/lvmlockd-sanlock.c
++++ b/daemons/lvmlockd/lvmlockd-sanlock.c
+@@ -367,7 +367,7 @@ static int write_info_file(struct lockspace *ls)
+ 	struct lm_sanlock *lms = (struct lm_sanlock *)ls->lm_data;
+ 	char path[PATH_MAX] = { 0 };
+ 	FILE *fp;
+-	time_t t;
++	time_t t = time(NULL);
+ 
+ 	if (dm_snprintf(path, PATH_MAX-1, "/var/lib/lvm/lvmlockd_info_%s", ls->vg_name) < 0)
+ 		return -1;
+-- 
+2.53.0
+

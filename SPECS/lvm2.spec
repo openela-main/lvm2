@@ -42,6 +42,7 @@
 %global shortcommit %(c=%{commit}; echo ${c:0:7})
 %endif
 #%%global rel_suffix .bz2141837
+%global rel_suffix .1
 
 # Do not reset Release to 1 unless both lvm2 and device-mapper
 # versions are increased together.
@@ -123,6 +124,11 @@ Patch55: 0055-log-add-string.h.patch
 Patch56: 0056-filesystem-refactor-code-working-with-xfs.patch
 Patch57: 0057-lib-rename-uuid.c-to-id.c.patch
 Patch58: 0058-autoreconf-reconfigure.patch
+# static analysis issues:
+Patch59: 0059-cov-fix-leaking-fd.patch
+Patch60: 0060-lvmlockd-sanlock-fix-uninitialized-time-value.patch
+# RHEL-153394:
+Patch61: 0061-libdaemon-CLOEXEC-descriptors-are-not-stray-fds.patch
 
 BuildRequires: make
 BuildRequires: gcc
@@ -756,6 +762,9 @@ An extensive functional testsuite for LVM2.
 %endif
 
 %changelog
+* Mon Mar 09 2026 Marian Csontos <mcsontos@redhat.com> - 2.03.33-4.el9_8.1
+- Fix false positive warnings about stray FDs on s390x.
+
 * Thu Jan 15 2026 Marian Csontos <mcsontos@redhat.com> - 2.03.33-4
 - Handle wrong XFS reported size when shrinking LV immediately after growing.
 
