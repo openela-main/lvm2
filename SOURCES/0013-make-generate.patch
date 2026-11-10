@@ -1,0 +1,44 @@
+From 60d971e910d8e1ffac7c4e5dafa9933ab0e3a767 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Sun, 26 Apr 2026 16:29:42 +0200
+Subject: [PATCH 13/16] make: generate
+
+(cherry picked from commit 9ec3d17d61a0a7bb5063129bbbf4b3144234ccc4)
+---
+ conf/example.conf.in | 11 +++++++++--
+ 1 file changed, 9 insertions(+), 2 deletions(-)
+
+diff --git a/conf/example.conf.in b/conf/example.conf.in
+index 9a74feda5..ef8ca256f 100644
+--- a/conf/example.conf.in
++++ b/conf/example.conf.in
+@@ -703,6 +703,13 @@ allocation {
+ 	# This configuration option has an automatic default value.
+ 	# vdo_use_sparse_index = 0
+ 
++	# Configuration option allocation/vdo_use_kernel_format.
++	# Use kernel direct formatting for VDO volume.
++	# When enabled (1), uses kernel direct formatting (requires dm-vdo 9.2.0+).
++	# When disabled (0), uses traditional userspace vdoformat tool.
++	# This configuration option has an automatic default value.
++	# vdo_use_kernel_format = 1
++
+ 	# Configuration option allocation/vdo_index_memory_size_mb.
+ 	# Specifies the amount of index memory in MiB for VDO volume.
+ 	# The value must be at least 256MiB and at most 1TiB.
+@@ -1383,10 +1390,10 @@ global {
+ 	# Configuration option global/vdo_disabled_features.
+ 	# Features to not use in the vdo driver.
+ 	# This can be helpful for testing, or to avoid using a feature that is
+-	# causing problems. Features include: online_rename, version4
++	# causing problems. Features include: online_rename, version4, kernel_format
+ 	#
+ 	# Example
+-	# vdo_disabled_features = [ "online_rename", "version4" ]
++	# vdo_disabled_features = [ "online_rename", "version4", "kernel_format" ]
+ 	#
+ 	# This configuration option does not have a default value defined.
+ 
+-- 
+2.54.0
+

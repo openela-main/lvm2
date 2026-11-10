@@ -1,14 +1,14 @@
 ## START: Set by rpmautospec
-## (rpmautospec version 0.8.3)
+## (rpmautospec version 0.8.4)
 ## RPMAUTOSPEC: autorelease
 %define autorelease(e:s:pb:n) %{?-p:0.}%{lua:
-    release_number = 2;
+    release_number = 3;
     base_release_number = tonumber(rpm.expand("%{?-b*}%{!?-b:1}"));
     print(release_number + base_release_number - 1);
 }%{?-e:.%{-e*}}%{?-s:.%{-s*}}%{!?-n:%{?dist}}
 ## END: Set by rpmautospec
 
-%global device_mapper_version 1.02.210
+%global device_mapper_version 1.02.215
 
 %global enable_cache 1
 %global enable_lvmdbusd 1
@@ -16,7 +16,7 @@
 %global enable_lvmpolld 1
 %global enable_thin 1
 %global enable_dmfilemapd 1
-%global enable_testsuite 1
+%global enable_testsuite 0
 %global enable_vdo 1
 %global enable_writecache 1
 %global enable_integrity 1
@@ -26,11 +26,9 @@
 %global dracut_version 002-18
 %global util_linux_version 2.24
 %global bash_version 4.0
-%global corosync_version 1.99.9-1
-%global resource_agents_version 3.9.5-12
 %global libselinux_version 1.30.19-4
 %global persistent_data_version 0.7.0-0.1.rc6
-%global sanlock_version 3.3.0-2
+%global sanlock_version 5.1.0-1
 
 %global enable_lockd_sanlock %{enable_lvmlockd}
 
@@ -51,43 +49,28 @@ Name: lvm2
 %if 0%{?rhel}
 Epoch: %{rhel}
 %endif
-Version: 2.03.36
+Version: 2.03.41
 Release: %autorelease
 License: GPL-2.0-only
 URL: https://sourceware.org/lvm2
 Source0: https://sourceware.org/pub/lvm2/releases/LVM2.%{version}.tgz
 Patch1: 0001-RHEL10.patch
-Patch2: 0002-lvmdbusd-check-DEVLINKS-when-detecting-udev-events.patch
-Patch3: 0003-activating-raid-LV-with-partial-snapshot-is-an-error.patch
-Patch4: 0004-lv_manip-show-a-warning-during-classic-snapshot-crea.patch
+Patch2: 0002-lvmlockd-fix-adopt-failure-when-gl-is-not-found.patch
+Patch3: 0003-udev-check-MD-array_state-value-instead-of-just-file.patch
+Patch4: 0004-udev-MD-and-loop-fallback-handling-for-synthetic-ADD.patch
 Patch5: 0005-WHATS_NEW-update.patch
-Patch6: 0006-cachevol-add-missing-synchronization-with-udev.patch
-Patch7: 0007-lvmdbusd-fix-deadlock-on-SIGINT-in-lvm-shell-mode.patch
-Patch8: 0008-vdo-add-missing-synchronization.patch
-Patch9: 0009-man-update-pvmove-for-pvmove_max_segment_size_mb.patch
-Patch10: 0010-lvmpersist-typo-in-PATH.patch
-Patch11: 0011-lvmpersist-remove-unregister-error-message.patch
-Patch12: 0012-man-keep-page-ascii.patch
-Patch13: 0013-man-remove-spaces-at-eol.patch
-Patch14: 0014-lvmlockd-vgsplit-is-not-supported.patch
-Patch15: 0015-persist-changing-lock-type-should-stop-PR.patch
-Patch16: 0016-vgsplit-keep-track-of-the-devices-that-are-moved.patch
-Patch17: 0017-vgsplit-update-PR-on-devs-to-match-destination-VG.patch
-Patch18: 0018-vgmerge-require-VGs-to-have-the-same-PR-settings.patch
-Patch19: 0019-vgimportclone-don-t-use-PR-on-device-being-imported.patch
-Patch20: 0020-vgs-add-reporting-field-pr.patch
-Patch21: 0021-vgchange-limit-persist-stop-in-lockstop.patch
-Patch22: 0022-device_id-prevent-incorrect-dm-uuid-idtype.patch
-Patch23: 0023-cache-adding-sync-points.patch
-Patch24: 0024-lvmdevices-update-force-option.patch
-Patch25: 0025-lvresize-fix-xfs-size-checks.patch
-Patch26: 0026-configure-check-for-xfs-header-file.patch
-Patch27: 0027-filesystem-refactor-code-working-with-xfs.patch
-Patch28: 0028-filesystem-add-internal-xfs-struct-copy.patch
-Patch29: 0029-autoreconf-reconfigure.patch
-Patch30: 0030-persist-improve-setpersist-failures.patch
-Patch31: 0031-persist-report-error-if-pr-state-is-not-stopped-or-s.patch
-Patch32: 0032-log-add-string.h.patch
+# RHEL-188186:
+Patch6: 0006-fix-lvmpersist-WEAR-EAAR-reserve-race-when-multiple-.patch
+# Minor fixes
+Patch7: 0007-man-lvmlockd-fix-invalid-vgchange-setpersist-setlock.patch
+Patch8: 0008-lvmpersist-settle-udev-between-register-and-preempt-.patch
+Patch9: 0009-man-lvmlockd-improve-setlockargs-description.patch
+# RHEL-164001:
+Patch10: 0010-vdo-add-pre-format-pool-geometry-computation.patch
+Patch11: 0011-vdo-add-support-for-VDO-kernel-direct-formatting.patch
+Patch12: 0012-vdo-add-kernel-formatting-path-with-LV_VDOFORMAT-met.patch
+Patch13: 0013-make-generate.patch
+Patch14: 0014-WHATS_NEW-update.patch
 
 BuildRequires: make
 BuildRequires: gcc
@@ -96,6 +79,7 @@ BuildRequires: gcc-c++
 %endif
 BuildRequires: libselinux-devel >= %{libselinux_version}, libsepol-devel
 BuildRequires: libblkid-devel >= %{util_linux_version}
+BuildRequires: xfsprogs-devel
 BuildRequires: ncurses-devel
 BuildRequires: libedit-devel
 BuildRequires: libaio-devel
@@ -121,7 +105,7 @@ Requires: %{name}-libs = %{?epoch}:%{version}-%{release}
 Requires(post): (system-release >= %{system_release_version} if system-release)
 %endif
 Requires: bash >= %{bash_version}
-Requires(post): systemd-units >= %{systemd_version}, systemd-sysv
+Requires(post): systemd-units >= %{systemd_version}
 Requires(preun): systemd-units >= %{systemd_version}
 Requires(postun): systemd-units >= %{systemd_version}
 Requires: module-init-tools
@@ -313,6 +297,9 @@ systemctl start lvm2-lvmpolld.socket >/dev/null 2>&1 || :
 %{_sbindir}/vgsplit
 %attr(755, -, -) %{_libexecdir}/lvresize_fs_helper
 %{_mandir}/man5/lvm.conf.5.gz
+%{_mandir}/man7/lvm-args.7.gz
+%{_mandir}/man7/lvm-categories.7.gz
+%{_mandir}/man7/lvm-index.7.gz
 %{_mandir}/man7/lvmautoactivation.7.gz
 %{_mandir}/man7/lvmcache.7.gz
 %{_mandir}/man7/lvmraid.7.gz
@@ -566,8 +553,10 @@ for the kernel device-mapper.
 %{_sbindir}/dmsetup
 %{_sbindir}/blkdeactivate
 %{_sbindir}/dmstats
+%{_sbindir}/dmvdostats
 %{_mandir}/man8/dmsetup.8.gz
 %{_mandir}/man8/dmstats.8.gz
+%{_mandir}/man8/dmvdostats.8.gz
 %{_mandir}/man8/blkdeactivate.8.gz
 %if %{enable_dmfilemapd}
 %{_sbindir}/dmfilemapd
@@ -645,6 +634,7 @@ fi
 Summary: Device-mapper event daemon shared library
 Version: %{device_mapper_version}
 License: LGPL-2.1-only
+Requires: device-mapper-libs = %{epoch}:%{version}-%{release}
 
 %description -n device-mapper-event-libs
 This package contains the device-mapper event daemon shared library,
@@ -692,6 +682,21 @@ An extensive functional testsuite for LVM2.
 %endif
 
 %changelog
+* Thu Jul 02 2026 Marian Csontos <mcsontos@redhat.com> - 2.03.41-3
+- Fix concurrent PR start.
+- Use kernel vdoformat if present.
+
+* Tue Jun 02 2026 Marian Csontos <mcsontos@redhat.com> - 2.03.41-2
+- Fix MD handling in udev rules.
+
+* Fri May 15 2026 Marian Csontos <mcsontos@redhat.com> - 2.03.41-1
+- Update to upstream version 2.03.41.
+- See WHATS_NEW and WHATS_NEW_DM for more information.
+
+* Tue Apr 28 2026 Marian Csontos <mcsontos@redhat.com> - 2.03.40-1
+- Update to upstream version 2.03.40.
+- See WHATS_NEW and WHATS_NEW_DM for more information.
+
 * Wed Jan 07 2026 Marian Csontos <mcsontos@redhat.com> - 2.03.36-2
 - Additional fixes up to 2.03.38.
 

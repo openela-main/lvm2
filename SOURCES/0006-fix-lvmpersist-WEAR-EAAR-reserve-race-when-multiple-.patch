@@ -1,0 +1,47 @@
+From b185eefe423ad4292edac96456c45fe3da3402a1 Mon Sep 17 00:00:00 2001
+From: David Teigland <teigland@redhat.com>
+Date: Thu, 4 Jun 2026 15:36:29 -0500
+Subject: [PATCH 06/16] fix lvmpersist WEAR/EAAR reserve race when multiple
+ nodes start simultaneously
+
+When multiple nodes run "vgchange --persist start" in parallel, the
+check-then-reserve sequence for WEAR/EAAR reservations can race: a node
+checks that no reservation exists, but by the time it calls resv-acquire,
+another node has already created the reservation.  The acquire fails and
+lvmpersist treats it as fatal, undoing its registration and failing the
+start.
+
+After a failed acquire, re-check whether the expected reservation type
+now exists.  If another registrant completed the reservation, the node
+is already protected under the all-registrants scope, so treat it as
+success.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit a01615872e5ba97fecb16c3c67d14186c1ef91ca)
+---
+ scripts/lvmpersist.sh | 9 +++++++++
+ 1 file changed, 9 insertions(+)
+
+diff --git a/scripts/lvmpersist.sh b/scripts/lvmpersist.sh
+index 4cc0ba300..02ab245f0 100755
+--- a/scripts/lvmpersist.sh
++++ b/scripts/lvmpersist.sh
+@@ -766,6 +766,15 @@ do_start() {
+ 		fi
+ 
+ 		if [[ "$?" -ne 0 ]]; then
++			# For WEAR/EAAR, another host may have acquired the
++			# reservation between our check and our acquire attempt.
++			# Re-check: if the reservation now exists, that's fine.
++			if [[ "$type_str" == "WEAR" || "$type_str" == "EAAR" ]]; then
++				get_dev_reservation "$dev"
++				if [[ "$DEV_PRDESC" == "$type_str" ]]; then
++					continue
++				fi
++			fi
+ 			logmsg "start $GROUP failed to reserve $dev."
+ 			undo_register
+ 			exit 1
+-- 
+2.54.0
+

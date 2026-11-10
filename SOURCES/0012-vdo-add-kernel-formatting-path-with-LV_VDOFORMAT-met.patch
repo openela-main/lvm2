@@ -1,0 +1,355 @@
+From cc3b0438480b7bdc140416010e077943543a305a Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Thu, 25 Jun 2026 17:17:32 +0200
+Subject: [PATCH 12/16] vdo: add kernel formatting path with LV_VDOFORMAT
+ metadata flag
+
+Introduce LV_VDOFORMAT status flag persisted in VG metadata so the
+VDO pool activation can pass use_kernel_format=1 to the dm-vdo target.
+The flag is set before activation and cleared after formatting completes.
+
+Add _format_vdo_pool_kernel() which activates the VDO pool with the
+flag set, waits for the VDO index to come online, deactivates, clears
+LV_VDOFORMAT and commits metadata.
+
+In convert_vdo_pool_lv(), gracefully fall back to userspace vdoformat
+when the VDO target is older than 9.2.0 instead of failing with an
+error.  For the kernel path, compute pool geometry via vdo_pool_info()
+to determine virtual size and report slab layout after formatting.
+On failure, revert status flags and remove the data layer.
+
+Correct versioning for dm_tree_node_add_vdo_target as DM_1_02_216 after
+adding use_kernel_format to dm_vdo_target_params.
+Add ABI compatibility wrapper for 1.02.213 callers whose struct lacks
+the new field -- the wrapper zero-initialises use_kernel_format so old
+binaries default to userspace vdoformat.
+
+Use a local copy of vdo_params in _vdo_pool_add_target_line() to
+avoid mutating in-memory metadata when setting use_kernel_format
+
+(cherry picked from commit 50355f35e5eaad7d44f82c7d2a4c3d39f23527e1)
+---
+ lib/format_text/flags.c             |   1 +
+ lib/metadata/metadata-exported.h    |   1 +
+ lib/metadata/vdo_manip.c            | 138 ++++++++++++++++++++++++----
+ lib/vdo/vdo.c                       |   7 +-
+ libdm/.exported_symbols.DM_1_02_216 |   1 +
+ libdm/libdm-deptree.c               |  53 +++++++++--
+ 6 files changed, 176 insertions(+), 25 deletions(-)
+ create mode 100644 libdm/.exported_symbols.DM_1_02_216
+
+diff --git a/lib/format_text/flags.c b/lib/format_text/flags.c
+index 1f81d063a..dde5aabc8 100644
+--- a/lib/format_text/flags.c
++++ b/lib/format_text/flags.c
+@@ -77,6 +77,7 @@ static const struct flag _lv_flags[] = {
+ 	{LV_CROP_METADATA, "CROP_METADATA", SEGTYPE_FLAG},
+ 	{LV_CACHE_VOL, "CACHE_VOL", COMPATIBLE_FLAG},
+ 	{LV_CACHE_USES_CACHEVOL, "CACHE_USES_CACHEVOL", SEGTYPE_FLAG},
++	{LV_VDOFORMAT, "VDOFORMAT", SEGTYPE_FLAG},
+ 	{LV_NOSCAN, NULL, 0},
+ 	{LV_TEMPORARY, NULL, 0},
+ 	{POOL_METADATA_SPARE, NULL, 0},
+diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
+index 1f78c7aac..70a00d0bd 100644
+--- a/lib/metadata/metadata-exported.h
++++ b/lib/metadata/metadata-exported.h
+@@ -156,6 +156,7 @@
+ #define LV_VDO			UINT64_C(0x0000000020000000)    /* LV - Internal use only */
+ #define LV_VDO_POOL		UINT64_C(0x0000000040000000)    /* LV - Internal use only */
+ #define LV_VDO_POOL_DATA	UINT64_C(0x8000000000000000)    /* LV - Internal use only */
++#define LV_VDOFORMAT		UINT64_C(0x0000000000000800)	/* LV - VDO pool passes format args */
+ 
+ #define LV_CACHE_VOL		UINT64_C(0x0010000000000000)	/* LV - also a PV flag */
+ #define LV_CACHE_USES_CACHEVOL	UINT64_C(0x4000000000000000)	/* LV - also a PV flag */
+diff --git a/lib/metadata/vdo_manip.c b/lib/metadata/vdo_manip.c
+index 0b4f2d3fe..ca1c34331 100644
+--- a/lib/metadata/vdo_manip.c
++++ b/lib/metadata/vdo_manip.c
+@@ -16,6 +16,7 @@
+ #include "lib/metadata/metadata.h"
+ #include "lib/locking/locking.h"
+ #include "lib/misc/lvm-string.h"
++#include "lib/misc/lvm-signal.h"
+ #include "lib/commands/toolcontext.h"
+ #include "lib/display/display.h"
+ #include "lib/metadata/segtype.h"
+@@ -367,6 +368,73 @@ static int _format_vdo_pool_data_lv(struct logical_volume *data_lv,
+ 	return 1;
+ }
+ 
++static int _format_vdo_pool_kernel(struct logical_volume *vdo_pool_lv)
++{
++	struct cmd_context *cmd = vdo_pool_lv->vg->cmd;
++	struct lv_status_vdo *vdo_status;
++	enum dm_vdo_index_state index_state;
++	int r = 0;
++
++	if (!vg_write(vdo_pool_lv->vg) || !vg_commit(vdo_pool_lv->vg))
++		return_0;
++
++	if (!activate_lv(cmd, vdo_pool_lv)) {
++		log_error("Failed to activate VDO pool %s for kernel formatting.",
++			  display_lvname(vdo_pool_lv));
++		goto out;
++	}
++
++	sync_local_dev_names(cmd);
++
++	/* Wait for the UDS index to finish initializing */
++	for (;;) {
++		if (!lv_vdo_pool_status(vdo_pool_lv, 0, &vdo_status)) {
++			stack;
++			break;
++		}
++
++		index_state = vdo_status->vdo->index_state;
++		dm_pool_destroy(vdo_status->mem);
++
++		if (index_state == DM_VDO_INDEX_ERROR) {
++			log_error("Failed to format VDO pool %s, index error.",
++				  display_lvname(vdo_pool_lv));
++			break;
++		}
++
++		log_verbose("VDO pool %s index state: %s.",
++			    display_lvname(vdo_pool_lv),
++			    get_vdo_index_state_name(index_state));
++
++		if (index_state != DM_VDO_INDEX_OPENING) {
++			r = 1; /* Initialized */
++			break;
++		}
++
++		/* 50ms: formatting is typically fast, avoid unnecessary delay */
++		if (!sigint_usleep(50000)) {
++			log_warn("WARNING: Interrupted waiting for VDO index on %s.",
++				 display_lvname(vdo_pool_lv));
++			break;
++		}
++	}
++
++	if (!deactivate_lv(cmd, vdo_pool_lv)) {
++		log_error("Failed to deactivate VDO pool %s after kernel formatting.",
++			  display_lvname(vdo_pool_lv));
++		r = 0;
++	}
++out:
++	vdo_pool_lv->status &= ~LV_VDOFORMAT;
++
++	if (!vg_write(vdo_pool_lv->vg) || !vg_commit(vdo_pool_lv->vg))
++		return_0;
++
++	sync_local_dev_names(cmd);
++
++	return r;
++}
++
+ /*
+  * convert_vdo_pool_lv
+  * @data_lv
+@@ -388,6 +456,7 @@ int convert_vdo_pool_lv(struct logical_volume *data_lv,
+ 	struct logical_volume *vdo_pool_lv = data_lv;
+ 	const struct segment_type *vdo_pool_segtype;
+ 	struct lv_segment *vdo_pool_seg;
++	struct vdo_pool_info pinfo = { 0 };
+ 	uint64_t vdo_logical_size = 0;
+ 	uint64_t adjust;
+ 	unsigned attrs = 0;
+@@ -414,29 +483,37 @@ int convert_vdo_pool_lv(struct logical_volume *data_lv,
+ 	if (format) {
+ 		if (test_mode()) {
+ 			log_verbose("Test mode: Skipping formatting of VDO pool volume.");
+-		} else if (use_kernel) {
++		} else {
+ 			if (use_kernel &&
+ 			    (!vdo_pool_segtype->ops->target_present ||
+ 			     !vdo_pool_segtype->ops->target_present(cmd, NULL, &attrs) ||
+ 			     !(attrs & VDO_FEATURE_KERNEL_FORMAT))) {
+-				log_error("Kernel direct formatting (vdo_use_kernel_format=1) requires VDO target version 9.2.0 or newer.");
+-				return 0;
++				log_verbose("Kernel formatting requires VDO target version 9.2.0 or newer, using vdoformat.");
++				use_kernel = 0;
+ 			}
+ 
+-			/* Kernel decides to format if the first 4k are zeroes */
+-			if (!activate_and_wipe_lv(data_lv, WIPE_MODE_DO_ZERO, 0, 0)) {
+-				log_error("Aborting. Failed to wipe first 4 KiB of VDO pool volume %s.",
+-					  display_lvname(data_lv));
+-				return 0;
+-			}
+-
+-			if (!*virtual_extents)
+-				vdo_logical_size = data_lv->size;
+-		} else {
+-			/* Traditional userspace vdoformat */
+-			if (!_format_vdo_pool_data_lv(data_lv, vtp, &vdo_logical_size)) {
+-				log_error("Cannot format VDO pool volume %s.", display_lvname(data_lv));
+-				return 0;
++			if (use_kernel) {
++				/* Kernel decides to format if the first 4k are zeroes */
++				if (!activate_and_wipe_lv(data_lv, WIPE_MODE_DO_ZERO, 0, 0)) {
++					log_error("Aborting. Failed to wipe first 4 KiB of VDO pool volume %s.",
++						  display_lvname(data_lv));
++					return 0;
++				}
++
++				if (!vdo_pool_info(data_lv->size, vtp, &pinfo)) {
++					log_error("Pool %s is too small for the given VDO configuration.",
++						  display_lvname(data_lv));
++					return 0;
++				}
++
++				if (!*virtual_extents)
++					vdo_logical_size = pinfo.data_blocks * DM_VDO_BLOCK_SIZE;
++			} else {
++				/* Traditional userspace vdoformat */
++				if (!_format_vdo_pool_data_lv(data_lv, vtp, &vdo_logical_size)) {
++					log_error("Cannot format VDO pool volume %s.", display_lvname(data_lv));
++					return 0;
++				}
+ 			}
+ 		}
+ 	} else {
+@@ -485,6 +562,33 @@ int convert_vdo_pool_lv(struct logical_volume *data_lv,
+ 	vdo_pool_lv->status |= LV_VDO_POOL;
+ 	data_lv->status |= LV_VDO_POOL_DATA;
+ 
++	if (use_kernel) {
++		vdo_pool_lv->status |= LV_VDOFORMAT;
++
++		if (!_format_vdo_pool_kernel(vdo_pool_lv)) {
++			log_error("Failed to kernel format VDO pool %s, reverting.",
++				  display_lvname(vdo_pool_lv));
++			vdo_pool_lv->status &= ~LV_VDO_POOL;
++			data_lv->status &= ~LV_VDO_POOL_DATA;
++			if (!remove_layer_from_lv(vdo_pool_lv, data_lv))
++				return_0;
++			if (!lv_remove(data_lv))
++				return_0;
++			if (!vg_write(vdo_pool_lv->vg) || !vg_commit(vdo_pool_lv->vg))
++				return_0;
++			return 0;
++		}
++
++		log_print_unless_silent("  The VDO volume can address %s in %u data slabs, each %s.",
++					display_size(cmd, (uint64_t)pinfo.data_per_slab * pinfo.slab_count * DM_VDO_BLOCK_SIZE),
++					pinfo.slab_count,
++					display_mb_size(cmd, vtp->slab_size_mb));
++		log_print_unless_silent("  It can grow to address at most %s of physical storage in %u slabs.",
++					display_mb_size(cmd, (uint64_t)DM_VDO_SLABS_MAXIMUM * vtp->slab_size_mb),
++					(unsigned)DM_VDO_SLABS_MAXIMUM);
++		log_print_unless_silent("  If a larger maximum size might be needed, use bigger slabs.");
++	}
++
+ 	return 1;
+ }
+ 
+diff --git a/lib/vdo/vdo.c b/lib/vdo/vdo.c
+index 1e9d377b5..e0a0c3079 100644
+--- a/lib/vdo/vdo.c
++++ b/lib/vdo/vdo.c
+@@ -391,6 +391,7 @@ static int _vdo_pool_add_target_line(struct dev_manager *dm,
+ 				     struct dm_tree_node *node, uint64_t len,
+ 				     uint32_t *pvmove_mirror_count __attribute__((unused)))
+ {
++	struct dm_vdo_target_params vdo_params;
+ 	char *vdo_pool_name, *data_uuid;
+ 	unsigned attrs = 0;
+ 
+@@ -411,11 +412,15 @@ static int _vdo_pool_add_target_line(struct dev_manager *dm,
+ 	if (!(data_uuid = build_dm_uuid(mem, seg_lv(seg, 0), lv_layer(seg_lv(seg, 0)))))
+ 		return_0;
+ 
++	/* Use local copy to avoid mutating in-memory metadata */
++	vdo_params = seg->vdo_params;
++	vdo_params.use_kernel_format = (seg->lv->status & LV_VDOFORMAT) ? 1 : 0;
++
+ 	/* VDO uses virtual size instead of its physical size */
+ 	if (!dm_tree_node_add_vdo_target(node, get_vdo_pool_virtual_size(seg),
+ 					 !(attrs & VDO_FEATURE_VERSION4) ? 2 : 4,
+ 					 vdo_pool_name, data_uuid, seg_lv(seg, 0)->size,
+-					 &seg->vdo_params))
++					 &vdo_params))
+ 		return_0;
+ 
+ 	return 1;
+diff --git a/libdm/.exported_symbols.DM_1_02_216 b/libdm/.exported_symbols.DM_1_02_216
+new file mode 100644
+index 000000000..f88fb03a7
+--- /dev/null
++++ b/libdm/.exported_symbols.DM_1_02_216
+@@ -0,0 +1 @@
++dm_tree_node_add_vdo_target
+diff --git a/libdm/libdm-deptree.c b/libdm/libdm-deptree.c
+index 02b730bb8..4c420eeba 100644
+--- a/libdm/libdm-deptree.c
++++ b/libdm/libdm-deptree.c
+@@ -4609,13 +4609,14 @@ void dm_tree_node_set_callback(struct dm_tree_node *dnode,
+ 	dnode->callback_data = cb_data;
+ }
+ 
+-int dm_tree_node_add_vdo_target(struct dm_tree_node *node,
+-				uint64_t size,
+-				uint32_t vdo_version,
+-				const char *vdo_pool_name,
+-				const char *data_uuid,
+-				uint64_t data_size,
+-				const struct dm_vdo_target_params *vtp)
++DM_EXPORT_NEW_SYMBOL(int, dm_tree_node_add_vdo_target, 1_02_216)
++	(struct dm_tree_node *node,
++	 uint64_t size,
++	 uint32_t vdo_version,
++	 const char *vdo_pool_name,
++	 const char *data_uuid,
++	 uint64_t data_size,
++	 const struct dm_vdo_target_params *vtp)
+ {
+ 	struct load_segment *seg;
+ 
+@@ -4699,4 +4700,42 @@ int dm_tree_node_add_cache_target_base(struct dm_tree_node *node,
+ 					     metadata_uuid, data_uuid, origin_uuid,
+ 					     policy_name, policy_settings, data_block_size);
+ }
++
++/*
++ * Retain ABI compatibility after adding use_kernel_format field
++ * to dm_vdo_target_params in version 1.02.216.
++ *
++ * Old binaries compiled against 1.02.213 have struct dm_vdo_target_params
++ * without the use_kernel_format field at the end. The wrapper copies only
++ * the old fields and leaves use_kernel_format=0 (old apps use userspace
++ * vdoformat).
++ *
++ * dm_vdo_validate_target_params does not need versioning as it never
++ * accesses the use_kernel_format field.
++ */
++
++DM_EXPORT_SYMBOL(dm_tree_node_add_vdo_target, 1_02_213)
++int dm_tree_node_add_vdo_target_v1_02_213(struct dm_tree_node *node,
++					  uint64_t size,
++					  uint32_t vdo_version,
++					  const char *vdo_pool_name,
++					  const char *data_uuid,
++					  uint64_t data_size,
++					  const struct dm_vdo_target_params *vtp);
++int dm_tree_node_add_vdo_target_v1_02_213(struct dm_tree_node *node,
++					  uint64_t size,
++					  uint32_t vdo_version,
++					  const char *vdo_pool_name,
++					  const char *data_uuid,
++					  uint64_t data_size,
++					  const struct dm_vdo_target_params *vtp)
++{
++	struct dm_vdo_target_params vtp_compat = { 0 };
++
++	/* Old callers pass struct without use_kernel_format at the end */
++	memcpy(&vtp_compat, vtp, offsetof(struct dm_vdo_target_params, use_kernel_format));
++
++	return dm_tree_node_add_vdo_target(node, size, vdo_version, vdo_pool_name,
++					   data_uuid, data_size, &vtp_compat);
++}
+ #endif
+-- 
+2.54.0
+

@@ -1,0 +1,38 @@
+From d3bc31dc85f8890ccb14101703b8da4484040a5b Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Sun, 26 Apr 2026 11:36:45 +0200
+Subject: [PATCH 14/16] WHATS_NEW: update
+
+(cherry picked from commit 4785084a64bbe6426dbc4adc43a4e181280713ab)
+---
+ WHATS_NEW    | 2 ++
+ WHATS_NEW_DM | 4 ++++
+ 2 files changed, 6 insertions(+)
+
+diff --git a/WHATS_NEW b/WHATS_NEW
+index e53280e10..56c565d9c 100644
+--- a/WHATS_NEW
++++ b/WHATS_NEW
+@@ -1,5 +1,7 @@
+ Version 2.03.42 - 
+ ==================
++  Support formatting vdo volumes with kernel vdo target (version >= 9.2).
++  Add vdo_format.c with pre-format logical size computation for kernel format.
+   Fix autoactivation on top of MD and loop devices if udev db records incomplete.
+   Make MD device ready state check in udev to be in sync with MD udev rules.
+ 
+diff --git a/WHATS_NEW_DM b/WHATS_NEW_DM
+index b567591db..e58e4f86e 100644
+--- a/WHATS_NEW_DM
++++ b/WHATS_NEW_DM
+@@ -1,3 +1,7 @@
++Version 1.02.216 - 
++===================
++  Add use_kernel_format to dm_vdo_target_params.
++
+ Version 1.02.215 - 15th May 2026
+ ================================
+   Fix ttree insert/lookup depth mismatch in libdm.
+-- 
+2.54.0
+

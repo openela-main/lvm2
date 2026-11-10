@@ -1,0 +1,46 @@
+From 559cb88b10214befbb786ba1a51f892a9a4c47bd Mon Sep 17 00:00:00 2001
+From: David Teigland <teigland@redhat.com>
+Date: Tue, 23 Jun 2026 14:01:48 -0500
+Subject: [PATCH 08/16] lvmpersist: settle udev between register and
+ preempt-abort
+
+sg_persist REGISTER triggers udev to re-probe the device (blkid,
+scsi_id), issuing ~50 reads over ~14ms.  do_takeover() follows
+REGISTER with PREEMPT AND ABORT only ~3ms later, while probing
+reads are still in-flight on the same iSCSI connection.
+
+On the LIO target, core_tmr_drain_state_list() finds those reads
+as in-flight commands and blocks, forming a deadlock with the TX
+thread's iscsit_close_connection().
+
+Add udevadm settle between the register and preempt-abort loops
+so udev probing completes before the preempt-abort is issued.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit 0080e310bf82f91d737f4ec4e4be8454bd7361af)
+---
+ scripts/lvmpersist.sh | 8 ++++++++
+ 1 file changed, 8 insertions(+)
+
+diff --git a/scripts/lvmpersist.sh b/scripts/lvmpersist.sh
+index 02ab245f0..b91f456f3 100755
+--- a/scripts/lvmpersist.sh
++++ b/scripts/lvmpersist.sh
+@@ -682,6 +682,14 @@ do_takeover() {
+ 		exit 1
+ 	fi
+ 
++	# The register above triggers udev to re-probe the device (blkid,
++	# scsi_id).  Those probing reads share the iSCSI connection with
++	# the preempt-abort below.  If probing is still in-flight when the
++	# preempt-abort arrives at the LIO target, the target deadlocks in
++	# core_tmr_drain_state_list (waiting for in-flight reads) vs
++	# iscsit_close_connection (waiting for RX thread exit).
++	udevadm settle
++
+ 	# Reserve the device
+ 
+ 	for dev in "${DEVICES[@]}"; do
+-- 
+2.54.0
+

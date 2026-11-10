@@ -1,0 +1,34 @@
+From a186787a056bf0f4f424cfa1ce9dec4ee22492f2 Mon Sep 17 00:00:00 2001
+From: David Teigland <teigland@redhat.com>
+Date: Wed, 24 Jun 2026 13:17:07 -0500
+Subject: [PATCH 07/16] man lvmlockd: fix invalid vgchange --setpersist
+ --setlockargs
+
+(cherry picked from commit c19a1561e031e3633ffc83eeb9daf10a9d08e3aa)
+---
+ man/lvmlockd.8_main | 8 ++++++--
+ 1 file changed, 6 insertions(+), 2 deletions(-)
+
+diff --git a/man/lvmlockd.8_main b/man/lvmlockd.8_main
+index dc8865a4c..a7a17c4df 100644
+--- a/man/lvmlockd.8_main
++++ b/man/lvmlockd.8_main
+@@ -382,9 +382,13 @@ For more information on using PR with LVM in general, see
+ .P
+ The vgcreate options to enable PR-based lock recovery in a new VG are shown above.
+ .P
+-To enable PR-based lock recovery in an existing VG:
++To enable PR-based lock recovery in an existing VG, first enable PR (if
++not already), then change the lock args:
+ .br
+-.B $ vgchange --setpersist y --setlockargs persist,notimeout
++.B $ vgchange --setpersist y
++.I VG
++.br
++.B $ vgchange --setlockargs persist,notimeout
+ .I VG
+ .P
+ Changing the PR or lockargs settings requires the VG to be stopped on all
+-- 
+2.54.0
+

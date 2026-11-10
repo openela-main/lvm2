@@ -1,0 +1,46 @@
+From 3e5b9e9816788762eca1fc92ac5f18223c7ede87 Mon Sep 17 00:00:00 2001
+From: David Teigland <teigland@redhat.com>
+Date: Wed, 20 May 2026 10:50:51 -0500
+Subject: [PATCH 2/5] lvmlockd: fix adopt failure when gl is not found
+
+When GL was not enabled in any started lockspace (e.g. after
+gl-disable), and lvmlockd restarted with adopt (-A 1), the GL
+lock adopt action failed with -ENOLS because no lockspace was
+found for the GL.  This error fell through to the general error
+handler which incremented count_adopt_fail, causing the entire
+adopt to fail with "adopt_locks failed, reset host".
+
+Handle -ENOLS for GL lock adopt as a normal condition rather
+than a fatal error.  In the adopt flow, all lockspaces found
+in the lock manager have already been started, so -ENOLS means
+there is no orphan GL lock to adopt.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit 4ea7fcc916f6f6286bb9354afd4a630254526df5)
+---
+ daemons/lvmlockd/lvmlockd-core.c | 9 +++++++++
+ 1 file changed, 9 insertions(+)
+
+diff --git a/daemons/lvmlockd/lvmlockd-core.c b/daemons/lvmlockd/lvmlockd-core.c
+index d46ce6daa..469610643 100644
+--- a/daemons/lvmlockd/lvmlockd-core.c
++++ b/daemons/lvmlockd/lvmlockd-core.c
+@@ -6932,6 +6932,15 @@ static void adopt_locks(void)
+ 			count_adopt_done++;
+ 			free_action(act);
+ 
++		} else if (act->result == -ENOLS && act->rt == LD_RT_GL) {
++			/*
++			 * No started lockspace has gl enabled, so there is
++			 * no orphan gl lock to adopt.
++			 */
++			log_debug("Did not adopt gl lock, no gl lockspace found");
++			count_adopt_done++;
++			free_action(act);
++
+ 		} else if (act->result < 0) {
+ 			/*
+ 			 * Some unexpected error.
+-- 
+2.54.0
+

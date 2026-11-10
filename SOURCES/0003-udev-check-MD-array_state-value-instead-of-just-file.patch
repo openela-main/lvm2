@@ -1,0 +1,40 @@
+From c8e4ca5ecfafd55896e8781512176f5013895784 Mon Sep 17 00:00:00 2001
+From: Peter Rajnoha <prajnoha@redhat.com>
+Date: Mon, 18 May 2026 09:47:50 +0200
+Subject: [PATCH 3/5] udev: check MD array_state value instead of just file
+ existence
+
+Replace TEST=="md/array_state" with ATTR{md/array_state}!="clear*|inactive"
+to verify the MD array is actually in a usable state, not just that the
+sysfs file exists. The "clear" and "inactive" states indicate the array
+is not assembled or not running.
+
+This is the same check used by the MD udev rules themselves in
+/lib/udev/rules.d/63-md-raid-arrays.rules:
+  ATTR{md/array_state}=="clear*|inactive", ENV{SYSTEMD_READY}="0", GOTO="md_end"
+
+Using ATTR also makes the separate TEST check unnecessary because ATTR
+match fails when the sysfs attribute does not exist, which correctly
+prevents scanning in that case.
+
+(cherry picked from commit f55287379cc2a9d65c9d43e1f5ba1428b4596808)
+---
+ udev/69-dm-lvm.rules.in | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/udev/69-dm-lvm.rules.in b/udev/69-dm-lvm.rules.in
+index adcf63453..6a53a4e3e 100644
+--- a/udev/69-dm-lvm.rules.in
++++ b/udev/69-dm-lvm.rules.in
+@@ -45,7 +45,7 @@ LABEL="next"
+ KERNEL!="md[0-9]*", GOTO="next"
+ IMPORT{db}="LVM_MD_PV_ACTIVATED"
+ ACTION=="add", ENV{LVM_MD_PV_ACTIVATED}=="1", GOTO="lvm_scan"
+-ACTION=="change", ENV{LVM_MD_PV_ACTIVATED}!="1", TEST=="md/array_state", ENV{LVM_MD_PV_ACTIVATED}="1", GOTO="lvm_scan"
++ACTION=="change", ENV{LVM_MD_PV_ACTIVATED}!="1", ATTR{md/array_state}!="clear*|inactive", ENV{LVM_MD_PV_ACTIVATED}="1", GOTO="lvm_scan"
+ ACTION=="add", KERNEL=="md[0-9]*p[0-9]*", GOTO="lvm_scan"
+ GOTO="lvm_end"
+ 
+-- 
+2.54.0
+

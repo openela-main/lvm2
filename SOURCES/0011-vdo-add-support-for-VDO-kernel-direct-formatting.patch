@@ -1,0 +1,239 @@
+From efdcd4b2f8c2f25e9db8e3b217de85d8cba54aab Mon Sep 17 00:00:00 2001
+From: Bruce Johnston <bjohnsto@redhat.com>
+Date: Wed, 17 Dec 2025 12:40:44 -0500
+Subject: [PATCH 11/16] vdo: add support for VDO kernel direct formatting
+
+VDO has added a feature (dm-vdo 9.2.0+) to format devices directly
+in its kernel code vs using the vdoformat userspace tool. Add support
+for this via a new config parameter vdo_use_kernel_format.
+
+When vdo_use_kernel_format=1, LVM zeroes the first 4KiB of the pool
+data LV and passes slabSize, indexMemory, and indexSparse parameters
+on the device-mapper table line so the kernel formats on activation.
+
+The use_kernel_format flag is persisted in VDO pool metadata so it
+survives reactivation. Old metadata without the flag defaults to 0
+(userspace vdoformat), ensuring backward compatibility.
+
+Signed-off-by: Bruce Johnston <bjohnsto@redhat.com>
+Made-with: Cursor
+(cherry picked from commit 7642c5b4ab0c87ed6dc31bcb56e2de40a45045ce)
+---
+ lib/config/config_settings.h | 10 ++++++++--
+ lib/config/defaults.h        |  1 +
+ lib/metadata/segtype.h       |  1 +
+ lib/metadata/vdo_manip.c     | 32 +++++++++++++++++++++++++++++---
+ lib/vdo/vdo.c                |  6 ++++++
+ libdm/libdevmapper.h         |  2 ++
+ libdm/libdm-deptree.c        | 20 ++++++++++++++++++++
+ tools/toollib.c              |  1 +
+ 8 files changed, 68 insertions(+), 5 deletions(-)
+
+diff --git a/lib/config/config_settings.h b/lib/config/config_settings.h
+index 8a1872b62..92d5f9e40 100644
+--- a/lib/config/config_settings.h
++++ b/lib/config/config_settings.h
+@@ -782,6 +782,12 @@ cfg(allocation_vdo_check_point_frequency_CFG, "vdo_check_point_frequency", alloc
+ cfg(allocation_vdo_use_sparse_index_CFG, "vdo_use_sparse_index", allocation_CFG_SECTION, CFG_PROFILABLE | CFG_PROFILABLE_METADATA | CFG_DEFAULT_COMMENTED, CFG_TYPE_BOOL, DEFAULT_VDO_USE_SPARSE_INDEX, VDO_1ST_VSN, NULL, 0, NULL,
+ 	"Enables sparse indexing for VDO volume.\n")
+ 
++/* vdo format */
++cfg(allocation_vdo_use_kernel_format_CFG, "vdo_use_kernel_format", allocation_CFG_SECTION, CFG_PROFILABLE | CFG_PROFILABLE_METADATA | CFG_DEFAULT_COMMENTED, CFG_TYPE_BOOL, DEFAULT_VDO_USE_KERNEL_FORMAT, vsn(2, 3, 41), NULL, 0, NULL,
++	"Use kernel direct formatting for VDO volume.\n"
++	"When enabled (1), uses kernel direct formatting (requires dm-vdo 9.2.0+).\n"
++	"When disabled (0), uses traditional userspace vdoformat tool.\n")
++
+ /* vdo format */
+ cfg(allocation_vdo_index_memory_size_mb_CFG, "vdo_index_memory_size_mb", allocation_CFG_SECTION, CFG_PROFILABLE | CFG_PROFILABLE_METADATA | CFG_DEFAULT_COMMENTED, CFG_TYPE_INT, DEFAULT_VDO_INDEX_MEMORY_SIZE_MB, VDO_1ST_VSN, NULL, 0, NULL,
+ 	"Specifies the amount of index memory in MiB for VDO volume.\n"
+@@ -1336,10 +1342,10 @@ cfg_array(global_vdo_format_options_CFG, "vdo_format_options", global_CFG_SECTIO
+ cfg_array(global_vdo_disabled_features_CFG, "vdo_disabled_features", global_CFG_SECTION, CFG_ALLOW_EMPTY | CFG_DEFAULT_UNDEFINED, CFG_TYPE_STRING, NULL, vsn(2, 3, 11), NULL, 0, NULL,
+ 	"Features to not use in the vdo driver.\n"
+ 	"This can be helpful for testing, or to avoid using a feature that is\n"
+-	"causing problems. Features include: online_rename, version4\n"
++	"causing problems. Features include: online_rename, version4, kernel_format\n"
+ 	"#\n"
+ 	"Example\n"
+-	"vdo_disabled_features = [ \"online_rename\", \"version4\" ]\n"
++	"vdo_disabled_features = [ \"online_rename\", \"version4\", \"kernel_format\" ]\n"
+ 	"#\n")
+ 
+ cfg(global_fsadm_executable_CFG, "fsadm_executable", global_CFG_SECTION, CFG_DEFAULT_COMMENTED, CFG_TYPE_STRING, DEFAULT_FSADM_PATH, vsn(2, 2, 170), "@FSADM_PATH@", 0, NULL,
+diff --git a/lib/config/defaults.h b/lib/config/defaults.h
+index c9c19dcef..f0cbddf72 100644
+--- a/lib/config/defaults.h
++++ b/lib/config/defaults.h
+@@ -169,6 +169,7 @@
+ #define DEFAULT_VDO_BLOCK_MAP_CACHE_SIZE_MB	(DM_VDO_BLOCK_MAP_CACHE_SIZE_MINIMUM_MB)
+ #define DEFAULT_VDO_BLOCK_MAP_ERA_LENGTH (DM_VDO_BLOCK_MAP_ERA_LENGTH_MAXIMUM)
+ #define DEFAULT_VDO_USE_SPARSE_INDEX	0
++#define DEFAULT_VDO_USE_KERNEL_FORMAT	1
+ #define DEFAULT_VDO_CHECK_POINT_FREQUENCY	(0)
+ #define DEFAULT_VDO_INDEX_MEMORY_SIZE_MB	(DM_VDO_INDEX_MEMORY_SIZE_MINIMUM_MB)
+ #define DEFAULT_VDO_SLAB_SIZE_MB	(2 * 1024)  /* 2GiB ... 19 slabbits */
+diff --git a/lib/metadata/segtype.h b/lib/metadata/segtype.h
+index b53859d9d..64650579b 100644
+--- a/lib/metadata/segtype.h
++++ b/lib/metadata/segtype.h
+@@ -356,6 +356,7 @@ int init_vdo_segtypes(struct cmd_context *cmd, struct segtype_library *seglib);
+ 
+ #define VDO_FEATURE_ONLINE_RENAME		(1U << 0) /* version 6.2.3 */
+ #define VDO_FEATURE_VERSION4			(1U << 1) /* version 8.2.0 */
++#define VDO_FEATURE_KERNEL_FORMAT		(1U << 2) /* version 9.2.0 */
+ 
+ int init_writecache_segtypes(struct cmd_context *cmd, struct segtype_library *seglib);
+ 
+diff --git a/lib/metadata/vdo_manip.c b/lib/metadata/vdo_manip.c
+index 9d1c7305e..0b4f2d3fe 100644
+--- a/lib/metadata/vdo_manip.c
++++ b/lib/metadata/vdo_manip.c
+@@ -390,6 +390,8 @@ int convert_vdo_pool_lv(struct logical_volume *data_lv,
+ 	struct lv_segment *vdo_pool_seg;
+ 	uint64_t vdo_logical_size = 0;
+ 	uint64_t adjust;
++	unsigned attrs = 0;
++	int use_kernel = format && vtp->use_kernel_format;
+ 
+ 	if (!(vdo_pool_segtype = get_segtype_from_string(cmd, SEG_TYPE_NAME_VDO_POOL)))
+ 		return_0;
+@@ -412,9 +414,30 @@ int convert_vdo_pool_lv(struct logical_volume *data_lv,
+ 	if (format) {
+ 		if (test_mode()) {
+ 			log_verbose("Test mode: Skipping formatting of VDO pool volume.");
+-		} else if (!_format_vdo_pool_data_lv(data_lv, vtp, &vdo_logical_size)) {
+-			log_error("Cannot format VDO pool volume %s.", display_lvname(data_lv));
+-			return 0;
++		} else if (use_kernel) {
++			if (use_kernel &&
++			    (!vdo_pool_segtype->ops->target_present ||
++			     !vdo_pool_segtype->ops->target_present(cmd, NULL, &attrs) ||
++			     !(attrs & VDO_FEATURE_KERNEL_FORMAT))) {
++				log_error("Kernel direct formatting (vdo_use_kernel_format=1) requires VDO target version 9.2.0 or newer.");
++				return 0;
++			}
++
++			/* Kernel decides to format if the first 4k are zeroes */
++			if (!activate_and_wipe_lv(data_lv, WIPE_MODE_DO_ZERO, 0, 0)) {
++				log_error("Aborting. Failed to wipe first 4 KiB of VDO pool volume %s.",
++					  display_lvname(data_lv));
++				return 0;
++			}
++
++			if (!*virtual_extents)
++				vdo_logical_size = data_lv->size;
++		} else {
++			/* Traditional userspace vdoformat */
++			if (!_format_vdo_pool_data_lv(data_lv, vtp, &vdo_logical_size)) {
++				log_error("Cannot format VDO pool volume %s.", display_lvname(data_lv));
++				return 0;
++			}
+ 		}
+ 	} else {
+ 		log_verbose("Skipping VDO formatting %s.", display_lvname(data_lv));
+@@ -455,6 +478,7 @@ int convert_vdo_pool_lv(struct logical_volume *data_lv,
+ 	vdo_pool_seg = first_seg(vdo_pool_lv);
+ 	vdo_pool_seg->segtype = vdo_pool_segtype;
+ 	vdo_pool_seg->vdo_params = *vtp;
++	vdo_pool_seg->vdo_params.use_kernel_format = use_kernel;
+ 	vdo_pool_seg->vdo_pool_header_size = vdo_pool_header_size;
+ 	vdo_pool_seg->vdo_pool_virtual_extents = *virtual_extents;
+ 
+@@ -621,6 +645,8 @@ int fill_vdo_target_params(struct cmd_context *cmd,
+ 		find_config_tree_int(cmd, allocation_vdo_block_map_era_length_CFG, profile);
+ 	vtp->use_sparse_index =
+ 		find_config_tree_bool(cmd, allocation_vdo_use_sparse_index_CFG, profile);
++	vtp->use_kernel_format =
++		find_config_tree_bool(cmd, allocation_vdo_use_kernel_format_CFG, profile);
+ 	vtp->index_memory_size_mb =
+ 		find_config_tree_int64(cmd, allocation_vdo_index_memory_size_mb_CFG, profile);
+ 	vtp->slab_size_mb =
+diff --git a/lib/vdo/vdo.c b/lib/vdo/vdo.c
+index c3cb2b2a5..1e9d377b5 100644
+--- a/lib/vdo/vdo.c
++++ b/lib/vdo/vdo.c
+@@ -254,6 +254,9 @@ static int _vdo_pool_text_import(struct lv_segment *seg,
+ 	if (!_import_bool(n, "use_sparse_index", &vtp->use_sparse_index))
+ 		return_0;
+ 
++	if (!_import_bool(n, "use_kernel_format", &vtp->use_kernel_format))
++		return_0;
++
+ 	if (!dm_config_get_uint32(n, "index_memory_size_mb", &vtp->index_memory_size_mb))
+ 		return _bad_field("index_memory_size_mb");
+ 
+@@ -327,6 +330,8 @@ static int _vdo_pool_text_export(const struct lv_segment *seg, struct formatter
+ 
+ 	if (vtp->use_sparse_index)
+ 		outf(f, "use_sparse_index = 1");
++	if (vtp->use_kernel_format)
++		outf(f, "use_kernel_format = 1");
+ 	/* TODO - conditionally */
+ 	outsize(f, vtp->index_memory_size_mb * UINT64_C(2 * 1024),
+ 		"index_memory_size_mb = %u", vtp->index_memory_size_mb);
+@@ -430,6 +435,7 @@ static int _vdo_target_present(struct cmd_context *cmd,
+ 	} _features[] = {
+ 		{ 6, 2, 3, VDO_FEATURE_ONLINE_RENAME, "online_rename" },
+ 		{ 8, 2, 0, VDO_FEATURE_VERSION4, "version4" },
++		{ 9, 2, 0, VDO_FEATURE_KERNEL_FORMAT, "kernel_format" },
+ 	};
+ 	static const char _lvmconf[] = "global/vdo_disabled_features";
+ 	static int _vdo_checked = 0;
+diff --git a/libdm/libdevmapper.h b/libdm/libdevmapper.h
+index c393c217e..d5066fbda 100644
+--- a/libdm/libdevmapper.h
++++ b/libdm/libdevmapper.h
+@@ -2167,6 +2167,8 @@ struct dm_vdo_target_params {
+ 
+ 	/* write policy */
+ 	enum dm_vdo_write_policy write_policy;
++
++	int use_kernel_format;         /* kernel direct format (added last for ABI compat) */
+ };
+ 
+ int dm_vdo_validate_target_params(const struct dm_vdo_target_params *vtp,
+diff --git a/libdm/libdm-deptree.c b/libdm/libdm-deptree.c
+index 0a246f272..02b730bb8 100644
+--- a/libdm/libdm-deptree.c
++++ b/libdm/libdm-deptree.c
+@@ -3026,6 +3026,26 @@ static int _vdo_emit_segment_line(struct dm_task *dmt, uint32_t major, uint32_t
+ 		    seg->vdo_params.logical_threads,
+ 		    seg->vdo_params.physical_threads);
+ 
++	/* Add format parameters for kernel direct formatting */
++	if (seg->vdo_params.use_kernel_format) {
++		/* Convert slab size from MB to 4KiB blocks */
++		EMIT_PARAMS(pos, " slabSize " FMTu64,
++			    seg->vdo_params.slab_size_mb * UINT64_C(256)); // 1MiB -> 256 * 4KiB blocks
++
++		/* Index memory size: format as GiB if >= 1024MB, otherwise as fraction */
++		if (seg->vdo_params.index_memory_size_mb >= 1024)
++			EMIT_PARAMS(pos, " indexMemory %u", seg->vdo_params.index_memory_size_mb / 1024);
++		else if (seg->vdo_params.index_memory_size_mb >= 768)
++			EMIT_PARAMS(pos, " indexMemory 0.75");
++		else if (seg->vdo_params.index_memory_size_mb >= 512)
++			EMIT_PARAMS(pos, " indexMemory 0.50");
++		else
++			EMIT_PARAMS(pos, " indexMemory 0.25");
++
++		/* Sparse index setting */
++		EMIT_PARAMS(pos, " indexSparse %s", seg->vdo_params.use_sparse_index ? "on" : "off");
++	}
++
+ 	return 1;
+ }
+ 
+diff --git a/tools/toollib.c b/tools/toollib.c
+index 0e6ce5d3a..f91fae701 100644
+--- a/tools/toollib.c
++++ b/tools/toollib.c
+@@ -1369,6 +1369,7 @@ int get_vdo_settings(struct cmd_context *cmd,
+ 			DO_OFFLINE(slab_size_mb);
+ 			DO_OFFLINE(use_metadata_hints);
+ 			DO_OFFLINE(use_sparse_index);
++			DO_OFFLINE(use_kernel_format);
+ 
+ 			option = "write_policy";
+ 			if (_compare_vdo_option(cn->key, option)) {
+-- 
+2.54.0
+
