@@ -1,0 +1,56 @@
+From 8483c7d96d831c06968ef585533ba06da8c36a05 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Fri, 3 Apr 2026 22:01:14 +0200
+Subject: [PATCH 064/211] cov: dev-mpath: fix TOCTOU race in holders directory
+ check
+
+Remove stat() check before opendir() to eliminate TOCTOU race.
+Call opendir() directly and check errno:
+- ENOENT: silently skip (normal for partitions without holders)
+- ENOTDIR: warn (path exists but is not a directory)
+- Other errors: log debug message
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit 44b9934d92c2e1ef723d58753ee1633b528582d1)
+---
+ lib/device/dev-mpath.c | 20 +++++++++-----------
+ 1 file changed, 9 insertions(+), 11 deletions(-)
+
+diff --git a/lib/device/dev-mpath.c b/lib/device/dev-mpath.c
+index 7e99e17d0..6e71ab080 100644
+--- a/lib/device/dev-mpath.c
++++ b/lib/device/dev-mpath.c
+@@ -459,21 +459,19 @@ static int _dev_is_mpath_component_sysfs(struct cmd_context *cmd, struct device
+ 		return 0;
+ 	}
+ 
+-	/* also will filter out partitions */
+-	if (stat(holders_path, &info))
+-		return 0;
+-
+-	if (!S_ISDIR(info.st_mode)) {
+-		log_warn("Path %s is not a directory.", holders_path);
+-		return 0;
+-	}
+-
+ 	/*
+ 	 * If any holder is a dm mpath device, then return 1;
++	 * This also filters out partitions (no holders directory).
+ 	 */
+-
+ 	if (!(dr = opendir(holders_path))) {
+-		log_debug("Device %s has no holders dir", dev_name(dev));
++		/* Distinguish between non-existent (partitions) and errors */
++		if (errno == ENOENT)
++			return 0; /* Normal for partitions */
++		if (errno == ENOTDIR) {
++			log_warn("Path %s is not a directory.", holders_path);
++			return 0;
++		}
++		log_debug("Device %s has no holders dir.", dev_name(dev));
+ 		return 0;
+ 	}
+ 
+-- 
+2.54.0
+

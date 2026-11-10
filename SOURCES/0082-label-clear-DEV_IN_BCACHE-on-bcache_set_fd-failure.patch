@@ -1,0 +1,30 @@
+From aea719b00789152a2213f4791ac698836b2bd439 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Fri, 3 Apr 2026 13:14:40 +0200
+Subject: [PATCH 082/211] label: clear DEV_IN_BCACHE on bcache_set_fd failure
+
+When bcache_set_fd() fails, DEV_IN_BCACHE flag was left set while
+bcache_fd was reset to -1. This causes _in_bcache() to return true,
+making label_scan_open() skip the actual open.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit b69f9cc41a1f5b806cf1fc088876fa89cc14c0a2)
+---
+ lib/label/label.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/lib/label/label.c b/lib/label/label.c
+index 91243494b..12a825c62 100644
+--- a/lib/label/label.c
++++ b/lib/label/label.c
+@@ -563,6 +563,7 @@ static int _scan_dev_open(struct device *dev)
+ 		if (close(fd))
+ 			log_sys_debug("close", name);
+ 		dev->bcache_fd = -1;
++		dev->flags &= ~DEV_IN_BCACHE;
+ 		return 0;
+ 	}
+ 
+-- 
+2.54.0
+

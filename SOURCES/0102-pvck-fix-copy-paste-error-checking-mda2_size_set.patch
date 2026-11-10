@@ -1,0 +1,31 @@
+From 142ce4f7bb4e0d2d1f62aa24fdfb27c7d0153ecf Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Fri, 3 Apr 2026 11:06:50 +0200
+Subject: [PATCH 102/211] pvck: fix copy-paste error checking mda2_size_set
+
+The condition was checking set->mda_size_set instead of
+set->mda2_size_set in the mda2 settings block, making
+the mda2 size setting ignored.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit b3e913dcecfe9fe2d745546464efb1a88123a217)
+---
+ tools/pvck.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/tools/pvck.c b/tools/pvck.c
+index 8c7bbc92f..3be469562 100644
+--- a/tools/pvck.c
++++ b/tools/pvck.c
+@@ -1631,7 +1631,7 @@ static int _dump_search(struct cmd_context *cmd, const char *dump, struct settin
+ 			mda_offset = set->mda2_offset;
+ 			set_vals++;
+ 		}
+-		if (set->mda_size_set) {
++		if (set->mda2_size_set) {
+ 			mda_size = set->mda2_size;
+ 			set_vals++;
+ 		}
+-- 
+2.54.0
+

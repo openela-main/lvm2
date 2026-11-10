@@ -1,0 +1,38 @@
+From d1bb06be39ef3d7862f0fbc1a2e1767d9b003079 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Mon, 20 Apr 2026 20:22:35 +0200
+Subject: [PATCH 162/211] libdm: config: add missing NULL check for n->v in
+ _find_config_bool
+
+All other _find_config_* lookup functions guard against n->v being
+NULL before dereferencing (e.g. _find_config_int64 checks
+"if (n && n->v && n->v->type == DM_CFG_INT)"), but _find_config_bool
+only checked "if (n)" before accessing n->v->type.
+
+A config section node (parsed from "section { ... }") has n->v == NULL
+since it carries children, not a value. Querying such a node via
+dm_config_find_bool() or dm_config_tree_find_bool() would dereference
+the NULL pointer and crash.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit e029c2d4cd65fcbcd909bbc3cd75f8aebe098dbd)
+---
+ libdm/libdm-config.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/libdm/libdm-config.c b/libdm/libdm-config.c
+index 3ecf29816..25b206dbd 100644
+--- a/libdm/libdm-config.c
++++ b/libdm/libdm-config.c
+@@ -1152,7 +1152,7 @@ static int _find_config_bool(const void *start, node_lookup_fn find,
+ 	const struct dm_config_value *v;
+ 	int b;
+ 
+-	if (n) {
++	if (n && n->v) {
+ 		v = n->v;
+ 
+ 		switch (v->type) {
+-- 
+2.54.0
+

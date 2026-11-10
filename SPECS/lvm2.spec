@@ -6,7 +6,7 @@
 %global enable_lvmpolld 1
 %global enable_thin 1
 %global enable_dmfilemapd 1
-%global enable_testsuite 1
+%global enable_testsuite 0
 %global enable_vdo 1
 %global enable_writecache 1
 %global enable_integrity 1
@@ -42,7 +42,7 @@
 %global shortcommit %(c=%{commit}; echo ${c:0:7})
 %endif
 #%%global rel_suffix .bz2141837
-%global rel_suffix .1
+#%%global rel_suffix .1
 
 # Do not reset Release to 1 unless both lvm2 and device-mapper
 # versions are increased together.
@@ -55,7 +55,7 @@ Version: 2.03.33
 %if 0%{?from_snapshot}
 Release: 0.1.20211115git%{shortcommit}%{?dist}%{?rel_suffix}
 %else
-Release: 4%{?dist}%{?rel_suffix}
+Release: 6%{?dist}%{?rel_suffix}
 %endif
 License: GPL-2.0-only
 URL: https://sourceware.org/lvm2
@@ -129,6 +129,151 @@ Patch59: 0059-cov-fix-leaking-fd.patch
 Patch60: 0060-lvmlockd-sanlock-fix-uninitialized-time-value.patch
 # RHEL-153394:
 Patch61: 0061-libdaemon-CLOEXEC-descriptors-are-not-stray-fds.patch
+# Patches from upstream up to 2.03.41:
+Patch62: 0062-cov-pvck-fix-TOCTOU-race-in-get_devicefile.patch
+Patch63: 0063-cov-libdm-fix-TOCTOU-race-in-_sysfs_find_kernel_name.patch
+Patch64: 0064-cov-dev-mpath-fix-TOCTOU-race-in-holders-directory-c.patch
+Patch65: 0065-cov-dev-cache-fix-TOCTOU-race-in-devices_file_rename.patch
+Patch66: 0066-libdm-dbg_malloc-fix-buffer-overflow-in-dm_realloc_a.patch
+Patch67: 0067-libdevmapper-event-fix-read-buffer-overflow-in-_daem.patch
+Patch68: 0068-dmsetup-fix-dangling-pointer-in-_slurp_stdin-after-r.patch
+Patch69: 0069-export-fix-out-of-bounds-access-in-_sectors_to_units.patch
+Patch70: 0070-id-fix-out-of-bounds-read-in-_id_valid-with-corrupt-.patch
+Patch71: 0071-clang-lvmcache-fix-use-after-free-in-lvmcache_update.patch
+Patch72: 0072-clang-lvmlockd-fix-use-after-free-in-res_process.patch
+Patch73: 0073-cov-device_id-fix-NULL-dereference-in-_dev_has_id.patch
+Patch74: 0074-dmeventd-snapshot-fix-NULL-target_type-passed-to-log.patch
+Patch75: 0075-libdaemon-config-util-fix-NULL-dereference-in-error-.patch
+Patch76: 0076-clang-metadata-add-NULL-check-for-pva-in-_alloc_para.patch
+Patch77: 0077-clang-libdm-fix-dangling-parent-pointer-to-stack-var.patch
+Patch78: 0078-parse_vpd-fix-VPD-descriptor-bounds-checking.patch
+Patch79: 0079-cov-dev-ext-validate-src-bounds-in-dev_ext_enable.patch
+Patch80: 0080-cov-config-check-for-size-overflow-in-config_file_re.patch
+Patch81: 0081-cov-format_text-validate-rlocn-bounds-before-uint32_.patch
+Patch82: 0082-label-clear-DEV_IN_BCACHE-on-bcache_set_fd-failure.patch
+Patch83: 0083-lv_manip-fix-copy-paste-error-in-thin-pool-metadata-.patch
+Patch84: 0084-activate-fix-cachevol-cmeta-cdata-device-offsets.patch
+Patch85: 0085-merge-fix-wrong-variable-in-mirror-size-check-log_er.patch
+Patch86: 0086-dev_manager-fix-wrong-sizeof-in-raid-status-allocati.patch
+Patch87: 0087-cov-thin-fix-wrong-variable-in-chunk_size-error-mess.patch
+Patch88: 0088-vdo_manip-fix-missing-si.mem_unit-in-total-memory-ca.patch
+Patch89: 0089-dmeventd-vdo-fix-name-overwrite-and-missing-max_fail.patch
+Patch90: 0090-lvmlockd-dlm-fix-wrong-variable-in-fopen-and-error-l.patch
+Patch91: 0091-lvmlockd-sanlock-fix-wrong-variable-in-error-log.patch
+Patch92: 0092-daemon-client-fix-swapped-parameters-in-log_debug.patch
+Patch93: 0093-raid_manip-fix-swapped-parameters-in-error-message.patch
+Patch94: 0094-cov-memlock-fix-open-return-value-check.patch
+Patch95: 0095-filesystem-fix-nofs-early-return-checking-wrong-stru.patch
+Patch96: 0096-lvconvert-fix-inverted-proc_dir-check-and-wrong-size.patch
+Patch97: 0097-lvmlockd-idm-fix-stale-rv-check-and-missing-in-conve.patch
+Patch98: 0098-cov-lv-fix-off-by-one-in-_sublvs_remove_after_reshap.patch
+Patch99: 0099-hints-fix-off-by-one-in-orphan-vgname-check.patch
+Patch100: 0100-lvmpolld-fix-comma-typo-and-off-by-one-in-timeout-ch.patch
+Patch101: 0101-pvmove_poll-fix-off-by-one-in-mirror-image-bounds-ch.patch
+Patch102: 0102-pvck-fix-copy-paste-error-checking-mda2_size_set.patch
+Patch103: 0103-online-fix-buffer-pointer-in-write-loop.patch
+Patch104: 0104-libdm-fix-cut-and-past-bug.patch
+Patch105: 0105-lvmpolld-fix-STDOUT-STDERR-copy-paste-error-in-poll-.patch
+Patch106: 0106-lvmcache-use-label_destroy-instead-of-free-for-label.patch
+Patch107: 0107-lvm-null-correct-field-after-freeing-log_rh.patch
+Patch108: 0108-dmeventd-fix-msg.data-memory-leak-in-_restart_dmeven.patch
+Patch109: 0109-polldaemon-check-finish_copy-result-on-abort-path.patch
+Patch110: 0110-metadata-fix-lv_raid_healthy-to-detect-metadata-alra.patch
+Patch111: 0111-lv_manip-detect-insufficient-space-for-RAID-with-spl.patch
+Patch112: 0112-libdm-deptree-cancel-delay_resume-for-new-children-w.patch
+Patch113: 0113-integrity-fix-adding-integrity-to-RAID.patch
+Patch114: 0114-integrity-fix-activation-race-during-setup.patch
+Patch115: 0115-snapshot-reject-lvreduce-that-would-truncate-COW-exc.patch
+Patch116: 0116-snapshot-reject-resize-of-merging-CoW-snapshot.patch
+Patch117: 0117-lvresize-skip-fs-handling-for-CoW-snapshot-COW-store.patch
+Patch118: 0118-metadata-fix-vg_split_mdas-losing-first-_move_mdas-r.patch
+Patch119: 0119-libdm-stats-fix-bitwise-AND-and-use-escaped-aux_data.patch
+Patch120: 0120-libdm-report-fix-missing-negation-in-time-range-not-.patch
+Patch121: 0121-libdm-report-fix-row-sorting-of-percent-fields.patch
+Patch122: 0122-libdm-fix-row-sorting-for-string-list-fields.patch
+Patch123: 0123-libdm-report-fix-row-sorting-for-string-list-fields-.patch
+Patch124: 0124-device_id-fix-checking-wrong-buffer-after-format_gen.patch
+Patch125: 0125-device_id-prevent-incorrect-dm-uuid-idtype.patch
+Patch126: 0126-lvmcmdline-fix-line-too-long-check-using-wrong-buffe.patch
+Patch127: 0127-report-fix-lvseg_metadata_devices_str-calling-wrong-.patch
+Patch128: 0128-report-fix-lvseg_seg_le_ranges_str-calling-wrong-fun.patch
+Patch129: 0129-vgchange-add-NULL-check-for-vg-system_id-before-strc.patch
+Patch130: 0130-libdm-iface-use-st_rdev-instead-of-st_mode-for-MAJOR.patch
+Patch131: 0131-lvmcache-fix-unnecessary-address-of-on-array-in-memc.patch
+Patch132: 0132-RHEL9-fix-compilation-issues.patch
+Patch133: 0133-cov-command-fix-NULL-dereference-in-_add_oo_definiti.patch
+Patch134: 0134-bcache-fix-flush-orphaning-locked-dirty-blocks.patch
+Patch135: 0135-dmeventd-fix-inverted-systemd-activation-env-var-che.patch
+Patch136: 0136-lvrename-fix-historical-LV-prefix-stripping-using-wr.patch
+Patch137: 0137-lvmdevices-fix-resource-leak-on-delpvid-duplicate-er.patch
+Patch138: 0138-dev-cache-fix-missing-dev_iter_destroy-in-iterate_de.patch
+Patch139: 0139-import_vsn1-fix-resource-leak-on-historical-LV-id-re.patch
+Patch140: 0140-lvm-exec-fix-close-error-msg-and-null_fd-fd-case.patch
+Patch141: 0141-lvmlockctl-fix-close-error-msg-and-null_fd-fd-case.patch
+Patch142: 0142-bcache-do-not-call-io_destroy-in-forked-process.patch
+Patch143: 0143-debug-add-tracing-for-context-destroy.patch
+Patch144: 0144-bcache-report-libaio-errors-properly.patch
+Patch145: 0145-bcache-retry-io_getevents-on-EINTR.patch
+Patch146: 0146-bcache-retry-io_getevents-only-if-sigint-not-caught.patch
+Patch147: 0147-bcache-fix-_wait_io-failure-ignored-by-_wait_all-and.patch
+Patch148: 0148-libdm-fix-cache-feature_flags-cleaner-policy-to-pres.patch
+Patch149: 0149-libdm-fix-cache-origin-uuid-error-message-printing-w.patch
+Patch150: 0150-lvmlockd-check-if-sanlock-lv-is-not-partial-before-t.patch
+Patch151: 0151-pool-initialize-chunk_size_calc_method-in-update-fun.patch
+Patch152: 0152-pool-drop-LV_ACTIVATION_SKIP-from-converted-LVs.patch
+Patch153: 0153-lib-fix-buffer-overflows-in-device_id-and-GPT-parsin.patch
+Patch154: 0154-lib-add-missing-NULL-checks-to-prevent-dereference-c.patch
+Patch155: 0155-pvck-fix-buffer-overflow-integer-truncation-and-type.patch
+Patch156: 0156-lvmpolld-replace-asserts-with-proper-error-handling.patch
+Patch157: 0157-import_vsn1-validate-area_count-before-subtracting-p.patch
+Patch158: 0158-format-text-validate-mda-size-and-rlocn-size-limits.patch
+Patch159: 0159-lv_manip-validate-area_count-against-MAX_STRIPES.patch
+Patch160: 0160-lvmcache-fix-use-after-free-on-vgid-update-failure.patch
+Patch161: 0161-config-fix-strtoll-error-checking.patch
+Patch162: 0162-libdm-config-add-missing-NULL-check-for-n-v-in-_find.patch
+Patch163: 0163-polldaemon-add-missing-NULL-check-for-display_name-w.patch
+Patch164: 0164-toollib-fix-memory-leak-in-process_each_label-duplic.patch
+Patch165: 0165-lvmpolld-fix-pthread_attr-leak-in-spawn_detached_thr.patch
+Patch166: 0166-vgimportclone-fix-VG-lock-leak-on-second-lock_vol-fa.patch
+Patch167: 0167-pvscan-fix-VG-lock-leak-on-early-return-in-_pvscan_a.patch
+Patch168: 0168-cache-fix-cache_check_for_warns-reading-wrong-cache-.patch
+Patch169: 0169-metadata-fix-vg_is_foreign-missing-NULL-and-empty-sy.patch
+Patch170: 0170-lvchange-fix-swapped-printf-args-and-wrong-arg_long_.patch
+Patch171: 0171-pvchange-use-arg_force_value-instead-of-raw-arg_coun.patch
+Patch172: 0172-raid-fix-missing-failure-return-after-reshape-space-.patch
+Patch173: 0173-integrity-fail-on-lv_remove-error-in-lv_remove_integ.patch
+Patch174: 0174-libdm-preserve-format_flags-in-_clone_config_value.patch
+Patch175: 0175-lv-check-dm_pool_strdup-return-in-lv_set_creation.patch
+Patch176: 0176-libdm-return-error-for-unknown-value-type-in-_write_.patch
+Patch177: 0177-libdm-propagate-return-value-from-recursive-dm_tree_.patch
+Patch178: 0178-libdm-add-missing-SEG_RAID10-case-in-dm_tree_node_ad.patch
+Patch179: 0179-libdm-fix-undersized-group_str-buffer-in-dm_stats_st.patch
+Patch180: 0180-libdm-decode-DM_STATS_WALK_GROUP-flag-before-using-g.patch
+Patch181: 0181-libdm-fix-dm_pool_strndup-over-allocation.patch
+Patch182: 0182-dmeventd-reject-zero-length-daemon-response.patch
+Patch183: 0183-dmeventd-treat-ENODEV-same-as-ENXIO-in-event-wait.patch
+Patch184: 0184-dmfilemapd-fix-fd-validity-check-from-0-to-0.patch
+Patch185: 0185-device-fix-fd-validity-check-to-accept-fd-0.patch
+Patch186: 0186-lvmlockd-fix-off-by-one-in-match_dm_uuid-lv-uuid-ext.patch
+Patch187: 0187-lvmlockd-fix-lockspace-use-after-mutex-unlock-in-wor.patch
+Patch188: 0188-lvmlockd-fix-off-by-one-in-_owner_str-snprintf-size.patch
+Patch189: 0189-lvmlockd-fix-null-pointer-arithmetic-in-read_host_id.patch
+Patch190: 0190-lvmlockd-fix-_free_vg-ignoring-error-result.patch
+Patch191: 0191-lvmlockd-use-CLOCK_MONOTONIC-for-pthread_cond_timedw.patch
+Patch192: 0192-lvconvert-fix-dm_strncpy-off-by-one-in-_raid_split_i.patch
+Patch193: 0193-lvcreate-fix-recovery-rate-check-when-max-is-unset.patch
+Patch194: 0194-lvconvert-add-missing-archive-in-_cache_vol_attach.patch
+Patch195: 0195-toolcontext-fix-_set_time_format-to-advance-past-for.patch
+Patch196: 0196-integrity-pass-vg-extent_size-in-lv_extend_integrity.patch
+Patch197: 0197-pool-fix-fragile-_pmspare-suffix-stripping.patch
+Patch198: 0198-toolcontext-fix-init_run_by_dmeventd-to-return-succe.patch
+Patch199: 0199-label-fix-_in_bcache-returning-NULL-instead-of-false.patch
+Patch200: 0200-mirror-match-alloca-size-with-memset-in-_form_mirror.patch
+Patch201: 0201-memlock-handle-ENOMEM-gracefully-for-anonymous-regio.patch
+Patch202: 0202-polldaemon-cleanup-bcache-before-background-poll-exi.patch
+Patch203: 0203-text_label-validate-pv_header-offset-to-prevent-out-.patch
+Patch204: 0204-libdaemon-harden-I-O-and-fix-crash-paths.patch
+Patch205: 0205-tools-add-arg_force_value-for-enum-handling.patch
 
 BuildRequires: make
 BuildRequires: gcc
@@ -712,6 +857,7 @@ fi
 Summary: Device-mapper event daemon shared library
 Version: %{device_mapper_version}
 License: LGPL-2.1-only
+Requires: device-mapper-libs = %{epoch}:%{version}-%{release}
 
 %description -n device-mapper-event-libs
 This package contains the device-mapper event daemon shared library,
@@ -762,6 +908,12 @@ An extensive functional testsuite for LVM2.
 %endif
 
 %changelog
+* Thu Jun 04 2026 Marian Csontos <mcsontos@redhat.com> - 2.03.33-6.el9
+- Bring important patches from upstream up to verison 2.03.41.
+
+* Thu May 07 2026 Marian Csontos <mcsontos@redhat.com> - 2.03.33-5.el9
+- Fix false positive warnings about stray FDs on s390x.
+
 * Mon Mar 09 2026 Marian Csontos <mcsontos@redhat.com> - 2.03.33-4.el9_8.1
 - Fix false positive warnings about stray FDs on s390x.
 

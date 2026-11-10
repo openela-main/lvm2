@@ -1,0 +1,32 @@
+From 8239bbf3cad6fba2db70bcf62ff24eb275ded214 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Tue, 10 Feb 2026 13:11:24 +0100
+Subject: [PATCH 148/211] libdm: fix cache feature_flags cleaner policy to
+ preserve non-mode bits
+
+When enforcing writethrough mode for cleaner policy, the code was
+assigning ~modemask to feature_flags instead of masking with &=.
+This discarded non-mode feature flags like DM_CACHE_FEATURE_METADATA2.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit 8b955d13ea0d4eeb14427c68ff2939679766bbfa)
+---
+ libdm/libdm-deptree.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/libdm/libdm-deptree.c b/libdm/libdm-deptree.c
+index 318b23ecc..cfb57854d 100644
+--- a/libdm/libdm-deptree.c
++++ b/libdm/libdm-deptree.c
+@@ -3442,7 +3442,7 @@ DM_EXPORT_NEW_SYMBOL(int, dm_tree_node_add_cache_target, 1_02_138)
+ 	case DM_CACHE_FEATURE_WRITEBACK:
+ 		if (strcmp(policy_name, "cleaner") == 0) {
+ 			/* Enforce writethrough mode for cleaner policy */
+-			feature_flags = ~_modemask;
++			feature_flags &= ~_modemask;
+ 			feature_flags |= DM_CACHE_FEATURE_WRITETHROUGH;
+ 		}
+                 /* Fall through */
+-- 
+2.54.0
+

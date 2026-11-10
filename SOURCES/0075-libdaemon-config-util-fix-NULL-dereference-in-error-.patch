@@ -1,0 +1,31 @@
+From 58160a59cafb671695d4c1149b504640d7953ed9 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Fri, 3 Apr 2026 12:23:53 +0200
+Subject: [PATCH 075/211] libdaemon: config-util: fix NULL dereference in error
+ message
+
+When fmt (from strchr) is NULL, the error message was printing
+fmt instead of next, passing NULL to printf %s.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit 7458d4755e724ec49dcf9f0e36566f1e80d49f48)
+---
+ libdaemon/client/config-util.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/libdaemon/client/config-util.c b/libdaemon/client/config-util.c
+index b0813f176..ceefc06a4 100644
+--- a/libdaemon/client/config-util.c
++++ b/libdaemon/client/config-util.c
+@@ -246,7 +246,7 @@ struct dm_config_node *config_make_nodes_v(struct dm_config_tree *cft,
+ 		fmt = strchr(next, '=');
+ 
+ 		if (!fmt) {
+-			log_error(INTERNAL_ERROR "Bad format string '%s'", fmt);
++			log_error(INTERNAL_ERROR "Bad format string '%s'.", next);
+ 			return NULL;
+ 		}
+ 
+-- 
+2.54.0
+

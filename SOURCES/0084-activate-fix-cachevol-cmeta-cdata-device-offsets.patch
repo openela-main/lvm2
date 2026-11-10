@@ -1,0 +1,36 @@
+From d84d1cb3056afa25792e332fa813012760958c62 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Wed, 4 Feb 2026 15:32:27 +0100
+Subject: [PATCH 084/211] activate: fix cachevol cmeta/cdata device offsets
+
+Use actual metadata_start and data_start offsets when creating the
+cmeta and cdata linear devices for cachevol, instead of assuming
+metadata always starts at 0 and data at metadata_len.
+
+This allows for flexible cachevol layouts as specified in metadata.
+
+Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
+(cherry picked from commit cd2f25ee0deb40161a17c7e5f427e237a0bda7bb)
+---
+ lib/activate/dev_manager.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
+index 8caa9f997..db3b24595 100644
+--- a/lib/activate/dev_manager.c
++++ b/lib/activate/dev_manager.c
+@@ -3459,9 +3459,9 @@ static int _add_new_cvol_subdev_to_dtree(struct dev_manager *dm,
+ 		if (!(dlid_pool = build_dm_uuid(dm->mem, pool_lv, NULL)))
+ 			return_0;
+ 
+-		/* add seg_area to prev load_seg: offset 0 maps to cachevol lv offset 0 */
++		/* add seg_area to prev load_seg: map to correct offset in cachevol */
+ 		if (!dm_tree_node_add_target_area(dnode, NULL, dlid_pool,
+-						  meta_or_data ? 0 : lvseg->metadata_len))
++						  meta_or_data ? lvseg->metadata_start : lvseg->data_start))
+ 			return_0;
+ 	}
+ 
+-- 
+2.54.0
+

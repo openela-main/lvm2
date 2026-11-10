@@ -1,0 +1,32 @@
+From ddb889f750e64b8f368493a373bf5fa7e7fe88a1 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Sat, 21 Mar 2026 23:33:53 +0100
+Subject: [PATCH 109/211] polldaemon: check finish_copy result on abort path
+
+When update_metadata fails during segment progression, finish_copy
+is called for cleanup but its return value was silently ignored.
+Add stack trace on failure for diagnostics.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit f8c2e6054226f8ff8bfcfd25791640490b378b1b)
+---
+ tools/polldaemon.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/tools/polldaemon.c b/tools/polldaemon.c
+index 1a3c8fefc..605c90779 100644
+--- a/tools/polldaemon.c
++++ b/tools/polldaemon.c
+@@ -104,7 +104,8 @@ static int _check_lv_status(struct cmd_context *cmd,
+ 		if (parms->poll_fns->update_metadata &&
+ 		    !parms->poll_fns->update_metadata(cmd, vg, lv, lvs_changed, 0)) {
+ 			log_error("ABORTING: Segment progression failed.");
+-			parms->poll_fns->finish_copy(cmd, vg, lv, lvs_changed);
++			if (!parms->poll_fns->finish_copy(cmd, vg, lv, lvs_changed))
++				stack;
+ 			return 0;
+ 		}
+ 		*finished = 0;	/* Another segment */
+-- 
+2.54.0
+

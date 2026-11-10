@@ -1,0 +1,33 @@
+From cc43f53099abafce472746deba9015a9f9db4373 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Fri, 3 Apr 2026 08:40:26 +0200
+Subject: [PATCH 088/211] vdo_manip: fix missing si.mem_unit in total memory
+ calculation
+
+_get_sysinfo_memory() was computing total_mb without multiplying by
+si.mem_unit, unlike the available_mb calculation on the line above.
+When si.mem_unit != 1 (e.g. on 32-bit systems) this gave a wrong
+total memory value.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit ff30ca50aca84903c802a44db8e39aa13993aeaf)
+---
+ lib/metadata/vdo_manip.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/lib/metadata/vdo_manip.c b/lib/metadata/vdo_manip.c
+index 21084468f..f5d04918b 100644
+--- a/lib/metadata/vdo_manip.c
++++ b/lib/metadata/vdo_manip.c
+@@ -651,7 +651,7 @@ static int _get_sysinfo_memory(uint64_t *total_mb, uint64_t *available_mb)
+ 		  (unsigned long long)si.freehigh >> 20, si.mem_unit);
+ 
+ 	*available_mb = ((uint64_t)(si.freeram + si.bufferram) * si.mem_unit) >> 30;
+-	*total_mb = si.totalram >> 30;
++	*total_mb = ((uint64_t) si.totalram * si.mem_unit) >> 30;
+ 
+ 	return 1;
+ }
+-- 
+2.54.0
+

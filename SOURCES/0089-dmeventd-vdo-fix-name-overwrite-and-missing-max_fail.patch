@@ -1,0 +1,45 @@
+From 64029cb552f1b65bad1b2385bdbbfd7a63d6082c Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Fri, 3 Apr 2026 12:45:03 +0200
+Subject: [PATCH 089/211] dmeventd: vdo: fix name overwrite and missing
+ max_fails init
+
+Fix two bugs in VDO plugin register_device():
+
+1. 'state->name = "volume"' was unconditionally overwritten by
+   'state->name = name' (where name="pool"). Fix by setting the
+   local 'name' variable instead of state->name directly.
+
+2. Missing 'state->max_fails = 1' initialization. Since state is
+   zero-allocated, max_fails starts at 0 and the exponential backoff
+   logic (which uses left-shift) never advances: 0 << 1 = 0.
+   This causes failing policy commands to retry on every single event
+   instead of backing off. Match the thin plugin which correctly
+   initializes max_fails to 1.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit 1d9edbfd6d3a1ad5da0a93765350407717436461)
+---
+ daemons/dmeventd/plugins/vdo/dmeventd_vdo.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/daemons/dmeventd/plugins/vdo/dmeventd_vdo.c b/daemons/dmeventd/plugins/vdo/dmeventd_vdo.c
+index 093e71908..536870a16 100644
+--- a/daemons/dmeventd/plugins/vdo/dmeventd_vdo.c
++++ b/daemons/dmeventd/plugins/vdo/dmeventd_vdo.c
+@@ -353,10 +353,11 @@ int register_device(const char *device,
+ 		state->argv[1] = str + 1;  /* 1 argument - vg/lv */
+ 		_init_thread_signals(state);
+ 	} else if (cmd[0] == 0) {
+-		state->name = "volume"; /* What to use with 'others?' */
++		name = "volume"; /* What to use with 'others?' */
+ 	} else/* Unsupported command format */
+ 		goto inval;
+ 
++	state->max_fails = 1;
+ 	state->pid = -1;
+ 	state->name = name;
+ 	*user = state;
+-- 
+2.54.0
+

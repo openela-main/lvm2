@@ -1,0 +1,37 @@
+From 00c5f17b125dc803a0f1c5ae509f9998221d1321 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Sun, 19 Apr 2026 11:36:30 +0200
+Subject: [PATCH 189/211] lvmlockd: fix null pointer arithmetic in
+ read_host_id_file
+
+val was computed as sep + 1 before checking if sep was NULL,
+causing undefined behavior. The subsequent !val check was
+also useless since NULL + 1 is never NULL. Move the null
+check before the pointer arithmetic.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit 1a6da2dcf6f41390ca3f7e84b11e6d10aeff2068)
+---
+ daemons/lvmlockd/lvmlockd-sanlock.c | 5 ++---
+ 1 file changed, 2 insertions(+), 3 deletions(-)
+
+diff --git a/daemons/lvmlockd/lvmlockd-sanlock.c b/daemons/lvmlockd/lvmlockd-sanlock.c
+index 2a5720b07..62765c4d1 100644
+--- a/daemons/lvmlockd/lvmlockd-sanlock.c
++++ b/daemons/lvmlockd/lvmlockd-sanlock.c
+@@ -304,10 +304,9 @@ static int read_host_id_file(void)
+ 
+ 		key = line;
+ 		sep = strstr(line, "=");
+-		val = sep + 1;
+-
+-		if (!sep || !val)
++		if (!sep)
+ 			continue;
++		val = sep + 1;
+ 
+ 		*sep = '\0';
+ 		memset(key_str, 0, sizeof(key_str));
+-- 
+2.54.0
+

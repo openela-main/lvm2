@@ -1,0 +1,32 @@
+From b0a6b406e5ca1eec0727192193f6d6c2566e15f3 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Fri, 3 Apr 2026 11:27:21 +0200
+Subject: [PATCH 136/211] lvrename: fix historical LV prefix stripping using
+ wrong variable
+
+When both old and new names have the historical prefix, the prefix
+was stripped from lv_name_old instead of lv_name_new, leaving
+lv_name_new with the prefix still attached.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit 067fa3eb938bbb808978dcf21ac62236a0dff45b)
+---
+ tools/lvrename.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/tools/lvrename.c b/tools/lvrename.c
+index 74248ee91..6fcf1db53 100644
+--- a/tools/lvrename.c
++++ b/tools/lvrename.c
+@@ -165,7 +165,7 @@ int lvrename(struct cmd_context *cmd, int argc, char **argv)
+ 
+ 	if (!strncmp(lv_name_new, HISTORICAL_LV_PREFIX, strlen(HISTORICAL_LV_PREFIX))) {
+ 		if (historical)
+-			lv_name_new = lv_name_old + strlen(HISTORICAL_LV_PREFIX);
++			lv_name_new = lv_name_new + strlen(HISTORICAL_LV_PREFIX);
+ 		else {
+ 			log_error("Old name references live LV while "
+ 				  "new name is for historical LV.");
+-- 
+2.54.0
+

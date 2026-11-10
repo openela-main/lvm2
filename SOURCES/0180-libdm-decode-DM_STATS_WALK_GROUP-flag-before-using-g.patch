@@ -1,0 +1,54 @@
+From 7f021dfbb01a635d3e89ca4805d780d1fef6c8e2 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Tue, 21 Apr 2026 15:19:40 +0200
+Subject: [PATCH 180/211] libdm: decode DM_STATS_WALK_GROUP flag before using
+ group_id in set_alias
+
+The flag-stripping logic for DM_STATS_WALK_GROUP was placed after
+the _stats_region_is_grouped() check, which uses group_id as an
+array index into dms->regions[].  When called with a flagged
+group_id the raw value (with bit 0x4000000000000 set) would cause
+an out-of-bounds access.
+
+Move the flag decoding before the grouped check, matching the
+order used by dm_stats_get_alias().
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit 4117d8a2d32acfb64bfcad5c905d02ae648cacc7)
+---
+ libdm/libdm-stats.c | 12 ++++++------
+ 1 file changed, 6 insertions(+), 6 deletions(-)
+
+diff --git a/libdm/libdm-stats.c b/libdm/libdm-stats.c
+index ee5e2a181..969f75372 100644
+--- a/libdm/libdm-stats.c
++++ b/libdm/libdm-stats.c
+@@ -3284,12 +3284,6 @@ int dm_stats_set_alias(struct dm_stats *dms, uint64_t group_id, const char *alia
+ 	if (!dms->regions || !dms->groups || !alias)
+ 		return_0;
+ 
+-	if (!_stats_region_is_grouped(dms, group_id)) {
+-		log_error("Cannot set alias for ungrouped region ID "
+-			  FMTu64, group_id);
+-		return 0;
+-	}
+-
+ 	if (group_id & DM_STATS_WALK_GROUP) {
+ 		if (group_id == DM_STATS_WALK_GROUP)
+ 			group_id = dms->cur_group;
+@@ -3297,6 +3291,12 @@ int dm_stats_set_alias(struct dm_stats *dms, uint64_t group_id, const char *alia
+ 			group_id &= ~DM_STATS_WALK_GROUP;
+ 	}
+ 
++	if (!_stats_region_is_grouped(dms, group_id)) {
++		log_error("Cannot set alias for ungrouped region ID "
++			  FMTu64, group_id);
++		return 0;
++	}
++
+ 	if (group_id != dms->regions[group_id].group_id) {
+ 		/* dm_stats_set_alias() must be called on the group ID. */
+ 		log_error("Cannot set alias for group member " FMTu64 ".",
+-- 
+2.54.0
+

@@ -1,0 +1,31 @@
+From 7b6027b5f8d1cbef6833e14ebae7847108b18cff Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Sat, 18 Apr 2026 20:36:13 +0200
+Subject: [PATCH 199/211] label: fix _in_bcache returning NULL instead of false
+
+The function has return type bool but used 'return NULL' for the
+NULL device check. While this works by accident since NULL is 0
+(false), it is a type error - use the correct boolean value.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit 076ffd7187ac4e9d19d175bc9ccc199c418ef2aa)
+---
+ lib/label/label.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/lib/label/label.c b/lib/label/label.c
+index d114c8e42..7520847aa 100644
+--- a/lib/label/label.c
++++ b/lib/label/label.c
+@@ -261,7 +261,7 @@ static struct bcache *scan_bcache;
+ static bool _in_bcache(struct device *dev)
+ {
+ 	if (!dev)
+-		return NULL;
++		return false;
+ 	return (dev->flags & DEV_IN_BCACHE) ? true : false;
+ }
+ 
+-- 
+2.54.0
+

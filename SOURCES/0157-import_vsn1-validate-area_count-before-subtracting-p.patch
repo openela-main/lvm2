@@ -1,0 +1,46 @@
+From 77967846b66b69eacca94a88c092d31515648410 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Fri, 10 Apr 2026 10:52:31 +0200
+Subject: [PATCH 157/211] import_vsn1: validate area_count before subtracting
+ parity_devs
+
+The RAID extent calculation subtracts parity_devs from area_count
+without checking that area_count is large enough:
+
+  area_count - segtype->parity_devs
+
+Both are uint32_t. If an attacker crafts RAID6 metadata with
+device_count = 1, the subtraction underflows (1 - 2 = 0xFFFFFFFF),
+producing an invalid stripes value passed to raid_rimage_extents().
+
+Add validation that area_count > parity_devs before the subtraction
+to reject semantically invalid metadata (fewer devices than parity
+requires).
+
+Reported-by: Tony Asleson <tasleson@redhat.com>
+Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
+(cherry picked from commit 73d24094985d7e27dc6e0f02f898747609b3635b)
+---
+ lib/format_text/import_vsn1.c | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/lib/format_text/import_vsn1.c b/lib/format_text/import_vsn1.c
+index 20b1739e9..5b84d875f 100644
+--- a/lib/format_text/import_vsn1.c
++++ b/lib/format_text/import_vsn1.c
+@@ -440,6 +440,12 @@ static int _read_segment(struct cmd_context *cmd,
+ 	    !segtype->ops->text_import_area_count(sn_child, &area_count))
+ 		return_0;
+ 
++	if (segtype->parity_devs && area_count <= segtype->parity_devs) {
++		log_error("area_count %u must exceed parity_devs %u for segment in %s.",
++			  area_count, segtype->parity_devs, display_lvname(lv));
++		return 0;
++	}
++
+ 	area_extents = segtype->parity_devs ?
+ 		       raid_rimage_extents(segtype, extent_count, area_count - segtype->parity_devs, data_copies) : extent_count;
+ 	if (!(seg = alloc_lv_segment(segtype, lv, start_extent,
+-- 
+2.54.0
+

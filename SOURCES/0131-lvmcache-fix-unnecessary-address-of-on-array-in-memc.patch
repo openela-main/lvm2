@@ -1,0 +1,31 @@
+From c238b6ccc110030a272b1d07e229edc2e0db28e6 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Fri, 3 Apr 2026 01:25:37 +0200
+Subject: [PATCH 131/211] lvmcache: fix unnecessary address-of on array in
+ memcmp
+
+Remove extra '&' before 'pvid' array in _get_pvsummary_device_id
+memcmp call, matching the style of the other two pvsummary functions.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit 27afb397ff88c514cf21a4b02a1e04f5c04a8332)
+---
+ lib/cache/lvmcache.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/lib/cache/lvmcache.c b/lib/cache/lvmcache.c
+index 1effc254c..4c95db7db 100644
+--- a/lib/cache/lvmcache.c
++++ b/lib/cache/lvmcache.c
+@@ -524,7 +524,7 @@ static const char *_get_pvsummary_device_id(const char *pvid_arg, const char **d
+ 
+ 	dm_list_iterate_items(vginfo, &_vginfos) {
+ 		dm_list_iterate_items(pvl, &vginfo->pvsummaries) {
+-			if (!memcmp(&pvid, &pvl->pv->id.uuid, ID_LEN)) {
++			if (!memcmp(pvid, &pvl->pv->id.uuid, ID_LEN)) {
+ 				*device_id_type = pvl->pv->device_id_type;
+ 				return pvl->pv->device_id;
+ 			}
+-- 
+2.54.0
+

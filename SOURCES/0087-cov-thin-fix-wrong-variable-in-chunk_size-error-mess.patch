@@ -1,0 +1,30 @@
+From 3c3f8eac835e42ee6802e7e66bc059b91995ae50 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Fri, 3 Apr 2026 14:34:04 +0200
+Subject: [PATCH 087/211] cov: thin: fix wrong variable in chunk_size error
+ message
+
+The error validates seg->chunk_size but printed seg->device_id.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit 32d6cb664a38fb66fa361e385fc09812d9459b16)
+---
+ lib/thin/thin.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/lib/thin/thin.c b/lib/thin/thin.c
+index c9b40f635..85a90db38 100644
+--- a/lib/thin/thin.c
++++ b/lib/thin/thin.c
+@@ -123,7 +123,7 @@ static int _thin_pool_text_import(struct lv_segment *seg,
+ 	if ((seg->chunk_size < DM_THIN_MIN_DATA_BLOCK_SIZE) ||
+ 	    (seg->chunk_size > DM_THIN_MAX_DATA_BLOCK_SIZE))
+ 		return SEG_LOG_ERROR("Unsupported value %u for chunk_size",
+-				     seg->device_id);
++				     seg->chunk_size);
+ 
+ 	if (dm_config_has_node(sn, "zero_new_blocks") &&
+ 	    !dm_config_get_uint32(sn, "zero_new_blocks", &zero))
+-- 
+2.54.0
+

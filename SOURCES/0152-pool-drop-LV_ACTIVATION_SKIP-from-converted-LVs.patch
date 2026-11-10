@@ -1,0 +1,59 @@
+From 23e65201eee7460e6a40ddce520271924229d46c Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Sun, 14 Dec 2025 15:11:00 +0100
+Subject: [PATCH 152/211] pool: drop LV_ACTIVATION_SKIP from converted LVs
+
+When converting LVs to use them as pool data & metadata LVs,
+drop LV_ACTIVATION_SKIP from their status.
+
+This flag is not meaningful for internal LVs, and for thin-pools
+it has a side-effect selecting whether the thin-pool should be
+left active standalone.
+
+(cherry picked from commit 0d0b42e418aac36c88aecb19aabc0b8d7b81cab3)
+---
+ lib/metadata/pool_manip.c | 3 +++
+ tools/lvconvert.c         | 6 ++++++
+ 2 files changed, 9 insertions(+)
+
+diff --git a/lib/metadata/pool_manip.c b/lib/metadata/pool_manip.c
+index cbe1b3ff0..eb081d978 100644
+--- a/lib/metadata/pool_manip.c
++++ b/lib/metadata/pool_manip.c
+@@ -38,6 +38,7 @@ int attach_pool_metadata_lv(struct lv_segment *pool_seg,
+ 		return 0;
+ 	}
+ 	pool_seg->metadata_lv = metadata_lv;
++	metadata_lv->status &= ~LV_ACTIVATION_SKIP; /* Internal volume does not use skip */
+ 	metadata_lv->status |= seg_is_thin_pool(pool_seg) ?
+ 		THIN_POOL_METADATA : CACHE_POOL_METADATA;
+ 	lv_set_hidden(metadata_lv);
+@@ -80,6 +81,8 @@ int attach_pool_data_lv(struct lv_segment *pool_seg,
+ 				    THIN_POOL_DATA : CACHE_POOL_DATA))
+ 		return_0;
+ 
++	pool_data_lv->status &= ~LV_ACTIVATION_SKIP;
++	pool_seg->lv->status &= ~LV_ACTIVATION_SKIP;
+ 	pool_seg->lv->status |= seg_is_thin_pool(pool_seg) ?
+ 		THIN_POOL : CACHE_POOL;
+ 	lv_set_hidden(pool_data_lv);
+diff --git a/tools/lvconvert.c b/tools/lvconvert.c
+index 7a17028e5..7dc8a3736 100644
+--- a/tools/lvconvert.c
++++ b/tools/lvconvert.c
+@@ -3441,6 +3441,12 @@ static int _lvconvert_to_pool(struct cmd_context *cmd,
+ 		pool_lv = lv;
+ 	}
+ 
++	/* For pool skipping activation has slightly different meaning
++	 * so by default we create a regular pool with standard activation
++	 * User may use 'lvchange --setactivationskip' to use pool
++	 * with skipped activation */
++	pool_lv->status &= ~LV_ACTIVATION_SKIP;
++
+ 	/*
+ 	 * starts with pool_lv foo (not a pool yet)
+ 	 * creates new data_lv foo_tdata
+-- 
+2.54.0
+

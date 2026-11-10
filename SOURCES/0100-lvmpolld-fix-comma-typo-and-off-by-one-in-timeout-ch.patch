@@ -1,0 +1,47 @@
+From d74e3b3f8b3b57cb1c12642fc4a317dd0e075a19 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Fri, 3 Apr 2026 12:27:33 +0200
+Subject: [PATCH 100/211] lvmpolld: fix comma typo and off-by-one in timeout
+ check
+
+- lvmpolld-data-utils.c: comma instead of semicolon after
+  _get_lvid assignment (worked by accident as comma expression)
+- lvmpolld-core.c: use > UINT_MAX instead of >= UINT_MAX
+  in timeout argument parser
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit 2869bd746d57929b099d67c1b17cbcaabc3da5f8)
+---
+ daemons/lvmpolld/lvmpolld-core.c       | 2 +-
+ daemons/lvmpolld/lvmpolld-data-utils.c | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/daemons/lvmpolld/lvmpolld-core.c b/daemons/lvmpolld/lvmpolld-core.c
+index 7ab0db8b4..ff47e1fbc 100644
+--- a/daemons/lvmpolld/lvmpolld-core.c
++++ b/daemons/lvmpolld/lvmpolld-core.c
+@@ -771,7 +771,7 @@ static int process_timeout_arg(const char *str, unsigned *max_timeouts)
+ 
+ 	errno = 0;
+ 	l = strtoul(str, &endptr, 10);
+-	if (errno || *endptr || l >= UINT_MAX)
++	if (errno || *endptr || l > UINT_MAX)
+ 		return 0;
+ 
+ 	*max_timeouts = (unsigned) l;
+diff --git a/daemons/lvmpolld/lvmpolld-data-utils.c b/daemons/lvmpolld/lvmpolld-data-utils.c
+index 2520becbe..8a4c6f8b0 100644
+--- a/daemons/lvmpolld/lvmpolld-data-utils.c
++++ b/daemons/lvmpolld/lvmpolld-data-utils.c
+@@ -124,7 +124,7 @@ struct lvmpolld_lv *pdlv_create(struct lvmpolld_state *ls, const char *id,
+ 	if (!pdlv || !tmp.lvmpolld_id || !tmp.lvname || !tmp.lvm_system_dir_env || !tmp.sinterval)
+ 		goto err;
+ 
+-	tmp.lvid = _get_lvid(tmp.lvmpolld_id, sysdir),
++	tmp.lvid = _get_lvid(tmp.lvmpolld_id, sysdir);
+ 
+ 	*pdlv = tmp;
+ 
+-- 
+2.54.0
+

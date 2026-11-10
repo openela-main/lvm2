@@ -1,0 +1,38 @@
+From 7fd9d29a454797512bbd18b6d560813d34a1df25 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Fri, 3 Apr 2026 13:17:30 +0200
+Subject: [PATCH 099/211] hints: fix off-by-one in orphan vgname check
+
+Hint file lines have format: scan:/dev/sda pvid:xxx devn:8:0 vg:NAME
+For orphan PVs (no VG) it writes "vg:-".
+
+The "vg:" prefix is 3 characters, so vgname[3] is the first char of
+the actual VG name. The orphan check used vgname[4] instead of
+vgname[3], so for "vg:-" it checked '\0' != '-' which is true,
+letting the orphan name "-" through into hint.vgname.
+
+Currently masked by a downstream check (hint->vgname[0] == '-')
+that independently filters orphan hints.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit 3201a6fa88595b2abbec00049ce6826cda7175b5)
+---
+ lib/label/hints.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/lib/label/hints.c b/lib/label/hints.c
+index de36da504..43103b440 100644
+--- a/lib/label/hints.c
++++ b/lib/label/hints.c
+@@ -846,7 +846,7 @@ static int _read_hint_file(struct cmd_context *cmd, struct dm_list *hints, int *
+ 		if (devn && sscanf(devn, "devn:%d:%d", &major, &minor) == 2)
+ 			hint.devt = makedev(major, minor);
+ 
+-		if (vgname && (strlen(vgname) > 3) && (vgname[4] != '-'))
++		if (vgname && (strlen(vgname) > 3) && (vgname[3] != '-'))
+ 			if (!_dm_strncpy(hint.vgname, vgname + 3, sizeof(hint.vgname)))
+ 				continue;
+ 
+-- 
+2.54.0
+

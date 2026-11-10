@@ -1,0 +1,28 @@
+From e68693f02780259d8d15fa2aeb07c70260263068 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Sat, 21 Mar 2026 18:42:01 +0100
+Subject: [PATCH 104/211] libdm: fix cut and past bug
+
+set_read_ahead is using BLKRASET ioctl.
+
+(cherry picked from commit 2bb10cf33ee95f06fa4f10555fec433458c8b83f)
+---
+ libdm/libdm-common.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/libdm/libdm-common.c b/libdm/libdm-common.c
+index 21bdd826e..3ee5a1070 100644
+--- a/libdm/libdm-common.c
++++ b/libdm/libdm-common.c
+@@ -1334,7 +1334,7 @@ static int _set_read_ahead(const char *dev_name, uint32_t major, uint32_t minor,
+ 	}
+ 
+ 	if (!*dev_name) {
+-		log_error("Empty device name passed to BLKRAGET");
++		log_error("Empty device name passed to BLKRASET.");
+ 		return 0;
+ 	}
+ 
+-- 
+2.54.0
+

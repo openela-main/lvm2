@@ -1,0 +1,30 @@
+From 0668105f1995189b5abc1aba2a352ffe65f7645c Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Mon, 20 Apr 2026 17:31:33 +0200
+Subject: [PATCH 184/211] dmfilemapd: fix fd validity check from > 0 to >= 0
+
+File descriptor 0 is valid (stdin).  The adjacent close() at line 615
+already correctly uses fd >= 0, but the mismatch check used fd > 0.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit 9d5912373c269a69c08823d1513f0ebf94985364)
+---
+ libdm/dm-tools/dmfilemapd.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/libdm/dm-tools/dmfilemapd.c b/libdm/dm-tools/dmfilemapd.c
+index 37fbc4e0e..f8456df6f 100644
+--- a/libdm/dm-tools/dmfilemapd.c
++++ b/libdm/dm-tools/dmfilemapd.c
+@@ -618,7 +618,7 @@ check_unlinked:
+ 		return 0;
+ 
+ 	/* Should not happen with normal /proc. */
+-	if ((fd > 0) && !same) {
++	if ((fd >= 0) && !same) {
+ 		log_error("File descriptor mismatch: %d and %s (read from %s) "
+ 			  "are not the same file!", fm->fd, link_buf, path_buf);
+ 		return 0;
+-- 
+2.54.0
+

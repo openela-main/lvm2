@@ -1,0 +1,31 @@
+From cad7f79a1ec5523d36cc55332105e28d69903cd4 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Fri, 3 Apr 2026 10:29:51 +0200
+Subject: [PATCH 106/211] lvmcache: use label_destroy instead of free for label
+ cleanup
+
+Use label_destroy to properly call the labeller's destroy_label
+callback, matching the pattern in _lvmcache_destroy_info.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit 50a6700e44bc018cb925818e2d57eeec07937f23)
+---
+ lib/cache/lvmcache.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/lib/cache/lvmcache.c b/lib/cache/lvmcache.c
+index da9a55d09..1effc254c 100644
+--- a/lib/cache/lvmcache.c
++++ b/lib/cache/lvmcache.c
+@@ -2596,7 +2596,7 @@ update_vginfo:
+ 		if (created) {
+ 			dm_hash_remove(_pvid_hash, pvid);
+ 			info->dev->pvid[0] = 0;
+-			free(info->label);
++			label_destroy(info->label);
+ 			free(info);
+ 		}
+ 		return NULL;
+-- 
+2.54.0
+

@@ -1,0 +1,53 @@
+From b5af2c8f4cafa02fb347861ca2eacba39756afd7 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Sun, 19 Apr 2026 16:59:21 +0200
+Subject: [PATCH 167/211] pvscan: fix VG lock leak on early return in
+ _pvscan_aa_quick
+
+After lock_vol succeeds, two error paths (vgid lookup failure
+and vg_read failure) returned directly without unlocking.
+Initialize vg to NULL and route through the existing out:
+cleanup which calls unlock_vg and release_vg (both NULL-safe).
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit 7d5c8697edba7c1f9c9597b5d693c4a09623bc54)
+---
+ tools/pvscan.c | 8 +++++---
+ 1 file changed, 5 insertions(+), 3 deletions(-)
+
+diff --git a/tools/pvscan.c b/tools/pvscan.c
+index 0539a2b48..3a5b55cb0 100644
+--- a/tools/pvscan.c
++++ b/tools/pvscan.c
+@@ -663,7 +663,7 @@ static int _pvscan_aa_quick(struct cmd_context *cmd, struct pvscan_aa_params *pp
+ 			    int *no_quick)
+ {
+ 	struct dm_list devs; /* device_list */
+-	struct volume_group *vg;
++	struct volume_group *vg = NULL;
+ 	struct pv_list *pvl;
+ 	const char *vgid;
+ 	uint32_t lockd_state = 0;
+@@ -712,7 +712,8 @@ static int _pvscan_aa_quick(struct cmd_context *cmd, struct pvscan_aa_params *pp
+ 
+ 	if (!(vgid = lvmcache_vgid_from_vgname(cmd, vgname))) {
+ 		log_error_pvscan(cmd, "activation for VG %s failed to find vgid.", vgname);
+-		return ECMD_FAILED;
++		ret = ECMD_FAILED;
++		goto out;
+ 	}
+ 
+ 	/*
+@@ -732,7 +733,8 @@ static int _pvscan_aa_quick(struct cmd_context *cmd, struct pvscan_aa_params *pp
+ 		 * cases that would be caught here.
+ 		 */
+ 		log_error_pvscan(cmd, "activation for VG %s cannot read (%x).", vgname, error_flags);
+-		return ECMD_FAILED;
++		ret = ECMD_FAILED;
++		goto out;
+ 	}
+ 
+ 	/*
+-- 
+2.54.0
+

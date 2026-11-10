@@ -1,0 +1,73 @@
+From ce1d80012d4237ea181747b78fe125164a889f3d Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Thu, 2 Apr 2026 00:03:37 +0200
+Subject: [PATCH 078/211] parse_vpd: fix VPD descriptor bounds checking
+
+parse_vpd_ids had broken bounds checks in cases 0x1 (T10) and 0x8
+(SCSI name string) that compared cur_id_size against the output buffer
+size (id_len = 1024) instead of the VPD input buffer. Since cur_id_size
+is uint8_t (max 255 per VPD spec byte 3), those checks were always
+false (dead code), and the overflow assignments were flagged by Coverity.
+
+The real risk is reading past vpd_datalen with malformed VPD data.
+
+Fix by:
+- Tightening loop condition to d + 4 <= vpd_end so the 4-byte
+  descriptor header is always readable
+- Clamping cur_id_size to available VPD bytes (vpd_end - d - 4)
+  instead of output buffer size
+- Removing unused id_len variable
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit 37ec8951e8881e906aa0b9dcd688bb71fe0d178a)
+---
+ lib/device/parse_vpd.c | 12 ++++++------
+ 1 file changed, 6 insertions(+), 6 deletions(-)
+
+diff --git a/lib/device/parse_vpd.c b/lib/device/parse_vpd.c
+index 16a653a14..b67e36763 100644
+--- a/lib/device/parse_vpd.c
++++ b/lib/device/parse_vpd.c
+@@ -153,14 +153,14 @@ int parse_vpd_ids(const unsigned char *vpd_data, int vpd_datalen, struct dm_list
+ 	char id[ID_BUFSIZE];
+ 	unsigned char tmp_str[ID_BUFSIZE];
+ 	const unsigned char *d, *cur_id_str;
+-	size_t id_len = ID_BUFSIZE;
++	const unsigned char *vpd_end = vpd_data + vpd_datalen;
+ 	int id_size = -1;
+ 	int type;
+ 	uint8_t cur_id_size = 0;
+ 
+ 	memset(id, 0, ID_BUFSIZE);
+ 	for (d = vpd_data + 4;
+-	     d < vpd_data + vpd_datalen;
++	     d + 4 <= vpd_end;
+ 	     d += d[3] + 4) {
+ 		memset(tmp_str, 0, sizeof(tmp_str));
+ 
+@@ -168,8 +168,8 @@ int parse_vpd_ids(const unsigned char *vpd_data, int vpd_datalen, struct dm_list
+ 		case 0x1:
+ 			/* T10 Vendor ID */
+ 			cur_id_size = d[3];
+-			if ((size_t)(cur_id_size + 4) > id_len)
+-				cur_id_size = id_len - 4;
++			if (d + 4 + cur_id_size > vpd_end)
++				cur_id_size = vpd_end - d - 4;
+ 			cur_id_str = d + 4;
+ 			format_t10_id(cur_id_str, cur_id_size, tmp_str, sizeof(tmp_str));
+ 			id_size = snprintf(id, ID_BUFSIZE, "t10.%s", tmp_str);
+@@ -230,9 +230,9 @@ int parse_vpd_ids(const unsigned char *vpd_data, int vpd_datalen, struct dm_list
+ 		case 0x8:
+ 			/* SCSI name string */
+ 			cur_id_size = d[3];
++			if (d + 4 + cur_id_size > vpd_end)
++				cur_id_size = vpd_end - d - 4;
+ 			cur_id_str = d + 4;
+-			if (cur_id_size >= id_len)
+-				cur_id_size = id_len - 1;
+ 			memcpy(id, cur_id_str, cur_id_size);
+ 			id_size = cur_id_size;
+ 
+-- 
+2.54.0
+

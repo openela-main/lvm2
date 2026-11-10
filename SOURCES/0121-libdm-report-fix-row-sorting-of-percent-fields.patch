@@ -1,0 +1,62 @@
+From 9af697082ac096eb6eaff7acf7ebaef81a4a2940 Mon Sep 17 00:00:00 2001
+From: Peter Rajnoha <prajnoha@redhat.com>
+Date: Thu, 26 Mar 2026 16:34:04 +0100
+Subject: [PATCH 121/211] libdm: report: fix row sorting of percent fields
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+_row_compare was treating the sort_value of DM_REPORT_FIELD_TYPE_PERCENT
+fields as plain char pointer, but it is actually an integer. This
+caused incorrect sorting of these fields.
+
+For example, before this patch:
+
+  ❯  lvs -o lv_name,data_percent -O data_percent vg
+    lv_name data_percent
+    pool2   20.00
+    pool    100.00
+    lvol3   0.00
+    lvol4   0.00
+    lvol7   0.00
+    lvol6   1.95
+    lvol2   9.77
+
+With this patch applied:
+
+  ❯  lvs -o lv_name,data_percent -O data_percent vg
+    lv_name data_percent
+    lvol3   0.00
+    lvol4   0.00
+    lvol7   0.00
+    lvol6   1.95
+    lvol2   9.77
+    pool2   20.00
+    pool    100.00
+
+(cherry picked from commit 1e80cdad1e7e20825040e9a80ffeff39719d5ca8)
+---
+ libdm/libdm-report.c | 7 ++++---
+ 1 file changed, 4 insertions(+), 3 deletions(-)
+
+diff --git a/libdm/libdm-report.c b/libdm/libdm-report.c
+index f2f0774cd..6022fef8f 100644
+--- a/libdm/libdm-report.c
++++ b/libdm/libdm-report.c
+@@ -4623,9 +4623,10 @@ static int _row_compare(const void *a, const void *b)
+ 		sfa = (*rowa->sort_fields)[cnt];
+ 		sfb = (*rowb->sort_fields)[cnt];
+ 		if (sfa->props->flags &
+-		    ((DM_REPORT_FIELD_TYPE_NUMBER) |
+-		     (DM_REPORT_FIELD_TYPE_SIZE) |
+-		     (DM_REPORT_FIELD_TYPE_TIME))) {
++		    (DM_REPORT_FIELD_TYPE_NUMBER |
++		     DM_REPORT_FIELD_TYPE_SIZE |
++		     DM_REPORT_FIELD_TYPE_PERCENT |
++		     DM_REPORT_FIELD_TYPE_TIME)) {
+ 			const uint64_t numa =
+ 			    *(const uint64_t *) sfa->sort_value;
+ 			const uint64_t numb =
+-- 
+2.54.0
+

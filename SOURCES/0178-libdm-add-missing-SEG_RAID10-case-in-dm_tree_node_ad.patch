@@ -1,0 +1,33 @@
+From 4715197d27e6f096748a823daaaedd758ac3eab1 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Tue, 21 Apr 2026 15:32:54 +0200
+Subject: [PATCH 178/211] libdm: add missing SEG_RAID10 case in
+ dm_tree_node_add_null_area
+
+All other RAID-related switch statements in deptree (e.g.
+_emit_areas_line) include SEG_RAID10, but this one was missed.
+Without it, adding a null area for a missing RAID10 device
+fails with "unsupported segment type" even though the emit
+path handles it correctly.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit fbffdf6ad388c926f8a3f198536f08b50f5340b0)
+---
+ libdm/libdm-deptree.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/libdm/libdm-deptree.c b/libdm/libdm-deptree.c
+index 66396c4fd..1e3cfbff7 100644
+--- a/libdm/libdm-deptree.c
++++ b/libdm/libdm-deptree.c
+@@ -3919,6 +3919,7 @@ int dm_tree_node_add_null_area(struct dm_tree_node *node, uint64_t offset)
+ 	case SEG_RAID0:
+ 	case SEG_RAID0_META:
+ 	case SEG_RAID1:
++	case SEG_RAID10:
+ 	case SEG_RAID4:
+ 	case SEG_RAID5_N:
+ 	case SEG_RAID5_LA:
+-- 
+2.54.0
+

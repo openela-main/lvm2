@@ -1,0 +1,31 @@
+From 81b04fb6706d19fe9cc85cf7c7fbbe1e4a714b82 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Fri, 3 Apr 2026 10:05:12 +0200
+Subject: [PATCH 069/211] export: fix out-of-bounds access in _sectors_to_units
+
+The loop could increment i to DM_ARRAY_SIZE(_units) before
+exiting, causing out-of-bounds access on _units[i].
+However issue cannot be hit, since lvm2 supports only 8EiB.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit 4f1a29639abaa3ee7fd095116627b65c83e369ab)
+---
+ lib/format_text/export.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/lib/format_text/export.c b/lib/format_text/export.c
+index ccc3167ca..5c120f145 100644
+--- a/lib/format_text/export.c
++++ b/lib/format_text/export.c
+@@ -240,7 +240,7 @@ static int _sectors_to_units(uint64_t sectors, char *buffer, size_t s)
+ 	/* to convert to K */
+ 	d /= 2.0;
+ 
+-	for (i = 0; (d > 1024.0) && i < DM_ARRAY_SIZE(_units); ++i)
++	for (i = 0; (d > 1024.0) && i < DM_ARRAY_SIZE(_units) - 1; ++i)
+ 		d /= 1024.0;
+ 
+ 	return dm_snprintf(buffer, s, "# %g %s", d, _units[i]) > 0;
+-- 
+2.54.0
+

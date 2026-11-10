@@ -1,0 +1,32 @@
+From 4004d8adb51172eb03af7df9a13c7b705fce8b4c Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Tue, 21 Apr 2026 15:20:13 +0200
+Subject: [PATCH 179/211] libdm: fix undersized group_str buffer in
+ dm_stats_start_filemapd
+
+group_str[8] can only hold 7-digit numbers but is used to format
+a uint64_t group_id which can be up to 20 digits.  Increase to 24
+to accommodate the full range.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit 9fb8d23fd23db96c728793b0ab692c80620fc666)
+---
+ libdm/libdm-stats.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/libdm/libdm-stats.c b/libdm/libdm-stats.c
+index 6e6d63a8b..ee5e2a181 100644
+--- a/libdm/libdm-stats.c
++++ b/libdm/libdm-stats.c
+@@ -5048,7 +5048,7 @@ int dm_stats_start_filemapd(int fd, uint64_t group_id, const char *path,
+ 			    dm_filemapd_mode_t mode, unsigned foreground,
+ 			    unsigned verbose)
+ {
+-	char fd_str[8], group_str[8], fg_str[2], verb_str[2];
++	char fd_str[8], group_str[24], fg_str[2], verb_str[2];
+ 	const char *mode_str = _filemapd_mode_names[mode];
+ 	char *args[NR_FILEMAPD_ARGS + 1];
+ 	pid_t pid = 0;
+-- 
+2.54.0
+

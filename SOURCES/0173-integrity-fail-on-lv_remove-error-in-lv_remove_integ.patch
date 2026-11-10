@@ -1,0 +1,44 @@
+From 242dc229e2622a69a0a26d0b636bd1fbc027e7ae Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Fri, 17 Apr 2026 22:23:49 +0200
+Subject: [PATCH 173/211] integrity: fail on lv_remove error in
+ lv_remove_integrity_from_raid
+
+When lv_remove() of iorig or imeta fails, the code logged an error
+but continued to vg_write/vg_commit, persisting inconsistent metadata
+with orphaned sub-LVs, and returned success to the caller.
+
+Return failure immediately so the caller knows the operation did not
+complete and the inconsistent in-memory state is not persisted.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit 8ef94cc38df8fddf47ca5a42a64a8a5c88bf64c4)
+---
+ lib/metadata/integrity_manip.c | 8 ++++++--
+ 1 file changed, 6 insertions(+), 2 deletions(-)
+
+diff --git a/lib/metadata/integrity_manip.c b/lib/metadata/integrity_manip.c
+index 26b644266..5610f8236 100644
+--- a/lib/metadata/integrity_manip.c
++++ b/lib/metadata/integrity_manip.c
+@@ -325,11 +325,15 @@ int lv_remove_integrity_from_raid(struct logical_volume *lv, char **remove_image
+ 
+ 		log_debug("Removing unused integrity LVs %s %s", lv_iorig->name, lv_imeta->name);
+ 
+-		if (!lv_remove(lv_iorig))
++		if (!lv_remove(lv_iorig)) {
+ 			log_error("Failed to remove unused iorig LV %s.", lv_iorig->name);
++			return 0;
++		}
+ 
+-		if (!lv_remove(lv_imeta))
++		if (!lv_remove(lv_imeta)) {
+ 			log_error("Failed to remove unused imeta LV %s.", lv_imeta->name);
++			return 0;
++		}
+ 	}
+ 
+ 	if (!vg_write(vg) || !vg_commit(vg))
+-- 
+2.54.0
+

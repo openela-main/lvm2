@@ -1,0 +1,34 @@
+From cbe6880be9acbd9aa8281e5d1e7e0e935c203918 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Fri, 17 Apr 2026 21:36:11 +0200
+Subject: [PATCH 197/211] pool: fix fragile _pmspare suffix stripping
+
+Use strrchr and verify the suffix is exactly "_pmspare" instead of
+truncating at the first underscore via strchr, which would produce
+a wrong name if the original LV name contained underscores.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit 4192f7dafb842b385043244f03cbb0838ebc8aaa)
+---
+ lib/metadata/pool_manip.c | 5 +++--
+ 1 file changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/lib/metadata/pool_manip.c b/lib/metadata/pool_manip.c
+index eb081d978..c144b5ee3 100644
+--- a/lib/metadata/pool_manip.c
++++ b/lib/metadata/pool_manip.c
+@@ -904,8 +904,9 @@ int vg_remove_pool_metadata_spare(struct volume_group *vg)
+ 
+ 	/* Cut off suffix _pmspare */
+ 	if (!_dm_strncpy(new_name, lv->name, sizeof(new_name)) ||
+-	    !(c = strchr(new_name, '_'))) {
+-		log_error(INTERNAL_ERROR "LV %s has no suffix for pool metadata spare.",
++	    !(c = strrchr(new_name, '_')) ||
++	    strcmp(c, "_pmspare")) {
++		log_error(INTERNAL_ERROR "LV %s has no _pmspare suffix.",
+ 			  display_lvname(lv));
+ 		return 0;
+ 	}
+-- 
+2.54.0
+

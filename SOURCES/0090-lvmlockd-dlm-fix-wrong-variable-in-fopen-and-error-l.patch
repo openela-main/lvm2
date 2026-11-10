@@ -1,0 +1,44 @@
+From 4eb6ecf8f54b60f12c181a590e0eb32c19a4cd9b Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Fri, 3 Apr 2026 12:54:24 +0200
+Subject: [PATCH 090/211] lvmlockd-dlm: fix wrong variable in fopen and error
+ log
+
+1. get_local_nodeid() constructed per-entry path in 'path' but opened
+   'ls_comms_path' (the parent directory) instead, making local node ID
+   detection non-functional.
+
+2. read_cluster_name() logged fd (file descriptor) instead of rv
+   (the read error) on read failure.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit 4aa202dbe28fd2df9dc235a651cd7001b2904afb)
+---
+ daemons/lvmlockd/lvmlockd-dlm.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/daemons/lvmlockd/lvmlockd-dlm.c b/daemons/lvmlockd/lvmlockd-dlm.c
+index 7529ad327..ec3a3b3c5 100644
+--- a/daemons/lvmlockd/lvmlockd-dlm.c
++++ b/daemons/lvmlockd/lvmlockd-dlm.c
+@@ -113,7 +113,7 @@ static int read_cluster_name(char *clustername)
+ 
+ 	rv = read(fd, clustername, MAX_ARGS);
+ 	if (rv < 0) {
+-		log_error("read_cluster_name: cluster name read error %d, check dlm_controld", fd);
++		log_error("read_cluster_name: cluster name read error %d, check dlm_controld", rv);
+ 		goto out;
+ 	}
+ 	clustername[rv] = 0;
+@@ -247,7 +247,7 @@ static int get_local_nodeid(void)
+ 		snprintf(path, sizeof(path), "%s/%s/local",
+ 			 DLM_COMMS_PATH, de->d_name);
+ 
+-		if (!(file = fopen(ls_comms_path, "r")))
++		if (!(file = fopen(path, "r")))
+ 			continue;
+ 		str1 = fgets(line, sizeof(line), file);
+ 		if (fclose(file))
+-- 
+2.54.0
+

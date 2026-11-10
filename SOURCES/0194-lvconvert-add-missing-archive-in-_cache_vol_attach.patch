@@ -1,0 +1,33 @@
+From 721eb5f7d48b00d540a9233fcc64a6b54e3e27c4 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Sun, 19 Apr 2026 17:01:53 +0200
+Subject: [PATCH 194/211] lvconvert: add missing archive in _cache_vol_attach
+
+_cache_vol_attach modifies VG metadata (renames LV, creates
+cache, writes VG) but did not call archive() to create a
+metadata backup before changes, unlike the parallel function
+_cache_pool_attach which does.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit 4c3086347c1c89853271f9071d05d4bedf4adab7)
+---
+ tools/lvconvert.c | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/tools/lvconvert.c b/tools/lvconvert.c
+index 5c5597b50..0b3b4bad8 100644
+--- a/tools/lvconvert.c
++++ b/tools/lvconvert.c
+@@ -3643,6 +3643,9 @@ static int _cache_vol_attach(struct cmd_context *cmd,
+ 	if (!get_cache_params(cmd, &chunk_size, &cache_metadata_format, &cache_mode, &policy_name, &policy_settings))
+ 		goto_out;
+ 
++	if (!archive(lv->vg))
++		goto_out;
++
+ 	/*
+ 	 * lv/cache_lv keeps the same lockd lock it had before, the lock for
+ 	 * lv_fast is kept but is not used while it's attached, and
+-- 
+2.54.0
+

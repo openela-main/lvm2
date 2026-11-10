@@ -1,0 +1,36 @@
+From 8dd9169a9128aca196b2b53bd7ede956bc24cd70 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Fri, 3 Apr 2026 13:07:54 +0200
+Subject: [PATCH 140/211] lvm-exec: fix close error msg and null_fd == fd case
+
+1. Fix copy-paste error in log_sys_error: reported "dup2" instead of
+   "close" for the close(null_fd) call.
+
+2. Guard close(null_fd) with null_fd != fd check. When the target fd
+   was already closed, open("/dev/null") reuses the same fd number,
+   dup2 is a no-op, and unconditional close would undo the setup.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit 0139987d8d200ae2688fba2029af6c52f441f632)
+---
+ lib/misc/lvm-exec.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/lib/misc/lvm-exec.c b/lib/misc/lvm-exec.c
+index 37b392545..5ae33516c 100644
+--- a/lib/misc/lvm-exec.c
++++ b/lib/misc/lvm-exec.c
+@@ -136,8 +136,8 @@ static int _reopen_fd_to_null(int fd)
+ 
+ 	r = 1;
+ out:
+-	if (close(null_fd)) {
+-		log_sys_error("dup2", "");
++	if ((null_fd != fd) && close(null_fd)) {
++		log_sys_error("close", "/dev/null");
+ 		return 0;
+ 	}
+ 
+-- 
+2.54.0
+

@@ -1,0 +1,30 @@
+From 1ada320659c8c1879cecae817853b643e31b071a Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Fri, 3 Apr 2026 14:24:49 +0200
+Subject: [PATCH 094/211] cov: memlock: fix open() return value check
+
+open() returns -1 on error and 0 is a valid file descriptor.
+Using !() would incorrectly treat fd 0 as failure.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit 4c64e5b70ab9803f60ce2110c7f05367f98c3de9)
+---
+ lib/mm/memlock.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/lib/mm/memlock.c b/lib/mm/memlock.c
+index 8b45f10ee..0e43bf624 100644
+--- a/lib/mm/memlock.c
++++ b/lib/mm/memlock.c
+@@ -551,7 +551,7 @@ static void _lock_mem(struct cmd_context *cmd)
+ 			return;
+ 		}
+ 
+-		if (!(_maps_fd = open(_procselfmaps, O_RDONLY))) {
++		if ((_maps_fd = open(_procselfmaps, O_RDONLY)) < 0) {
+ 			log_sys_debug("open", _procselfmaps);
+ 			return;
+ 		}
+-- 
+2.54.0
+

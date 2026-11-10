@@ -1,0 +1,72 @@
+From 56e7c266bc2b6667481b589e230870c5086fb8cb Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Thu, 9 Apr 2026 21:34:07 +0200
+Subject: [PATCH 159/211] lv_manip: validate area_count against MAX_STRIPES
+
+Add _validate_area_count helper to prevent integer overflow in
+multiplication before allocating segment areas.
+
+Reported-by: Tony Asleson <tasleson@redhat.com>
+Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
+(cherry picked from commit 30c19ac8d2b86895332bef2c1892403c7ceab0c4)
+---
+ lib/metadata/lv_manip.c | 23 +++++++++++++++++++++--
+ 1 file changed, 21 insertions(+), 2 deletions(-)
+
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index 0fce14f21..72ab89211 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -1024,6 +1024,15 @@ static uint32_t _round_to_stripe_boundary(struct volume_group *vg, uint32_t exte
+ 	return new_extents;
+ }
+ 
++static int _validate_area_count(uint32_t area_count)
++{
++	if (area_count > MAX_STRIPES) {
++		log_error(INTERNAL_ERROR "area_count %u exceeds maximum %u.", area_count, MAX_STRIPES);
++		return_0;
++	}
++	return 1;
++}
++
+ /*
+  * All lv_segments get created here.
+  */
+@@ -1044,13 +1053,18 @@ struct lv_segment *alloc_lv_segment(const struct segment_type *segtype,
+ {
+ 	struct lv_segment *seg;
+ 	struct dm_pool *mem = lv->vg->vgmem;
+-	uint32_t areas_sz = area_count * sizeof(*seg->areas);
++	uint32_t areas_sz;
+ 
+ 	if (!segtype) {
+ 		log_error(INTERNAL_ERROR "alloc_lv_segment: Missing segtype.");
+ 		return NULL;
+ 	}
+ 
++	if (!_validate_area_count(area_count))
++		return_NULL;
++
++	areas_sz = area_count * sizeof(*seg->areas);
++
+ 	if (!(seg = dm_pool_zalloc(mem, sizeof(*seg))))
+ 		return_NULL;
+ 
+@@ -1354,7 +1368,12 @@ int set_lv_segment_area_lv(struct lv_segment *seg, uint32_t area_num,
+ int add_lv_segment_areas(struct lv_segment *seg, uint32_t new_area_count)
+ {
+ 	struct lv_segment_area *newareas;
+-	uint32_t areas_sz = new_area_count * sizeof(*newareas);
++	uint32_t areas_sz;
++
++	if (!_validate_area_count(new_area_count))
++		return_0;
++
++	areas_sz = new_area_count * sizeof(*newareas);
+ 
+ 	if (!(newareas = dm_pool_zalloc(seg->lv->vg->vgmem, areas_sz))) {
+ 		log_error("Failed to allocate widened LV segment for %s.",
+-- 
+2.54.0
+

@@ -1,0 +1,57 @@
+From 00b13dac560f293fa2a64b1e7e9dc0248bc88b45 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Thu, 26 Feb 2026 16:31:43 +0100
+Subject: [PATCH 117/211] lvresize: skip fs handling for CoW snapshot COW store
+ LVs
+
+The COW store LV has linear segments internally (it stores exception
+blocks), so lv_is_linear() returned true for it.  This caused the
+fsopt disable check to be skipped, and LVM incorrectly ran fs_get_info()
+on the snapshot device which presents the origin filesystem data.
+
+The result was a misleading error:
+  File system xfs found on fedora/root-snap.
+  File system size (9.00 GiB) is larger than the requested size (5.00 GiB).
+  File system reduce is required and not supported (xfs).
+
+Fix by explicitly excluding CoW snapshot LVs (lv_is_cow) from filesystem
+handling regardless of their underlying segment type.
+
+Fixes: https://gitlab.com/lvmteam/lvm2/-/issues/27
+Fixes: https://github.com/lvmteam/lvm2/issues/163
+
+TODO: might be worth to implemement -V options to allow resize
+of snapshot volume itself.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+(cherry picked from commit 99639a37fb73b4a1e044ec822a562fb4608dda0e)
+---
+ lib/metadata/lv_manip.c | 10 +++++++---
+ 1 file changed, 7 insertions(+), 3 deletions(-)
+
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index 783cd2c66..0fce14f21 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -7050,11 +7050,15 @@ int lv_resize(struct cmd_context *cmd, struct logical_volume *lv,
+ 
+ 	/*
+ 	 * Disable fsopt if LV type cannot hold a file system.
++	 * CoW snapshot LVs (the COW store) do not hold a filesystem even
++	 * though their segments are linear; the filesystem lives on the
++	 * origin LV and the COW store only holds exception blocks.
+ 	 */
+ 	if (lp->fsopt[0] &&
+-	    !(lv_is_linear(lv) || lv_is_striped(lv) || lv_is_raid(lv) ||
+-	      lv_is_mirror(lv) || lv_is_thin_volume(lv) || lv_is_vdo(lv) ||
+-	      lv_is_cache(lv) || lv_is_writecache(lv))) {
++	    (lv_is_cow(lv) ||
++	     !(lv_is_linear(lv) || lv_is_striped(lv) || lv_is_raid(lv) ||
++	       lv_is_mirror(lv) || lv_is_thin_volume(lv) || lv_is_vdo(lv) ||
++	       lv_is_cache(lv) || lv_is_writecache(lv)))) {
+ 		log_print_unless_silent("Ignoring fs resizing options for LV type %s.",
+ 					seg ? seg->segtype->name : "unknown");
+ 		lp->fsopt[0] = '\0';
+-- 
+2.54.0
+

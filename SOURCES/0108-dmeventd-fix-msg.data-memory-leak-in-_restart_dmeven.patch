@@ -1,0 +1,33 @@
+From 71cf345a9ece2419c8e9625f9bb99d41a11d3c50 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Fri, 3 Apr 2026 12:43:38 +0200
+Subject: [PATCH 108/211] dmeventd: fix msg.data memory leak in
+ _restart_dmeventd
+
+msg.data from GET_STATUS was not freed before the second daemon_talk()
+for GET_PARAMETERS, which zeroes the struct via memset, leaking the
+previous allocation.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit 9124508d1f692a7bd143e7b28a3ab89b4c8c270f)
+---
+ daemons/dmeventd/dmeventd.c | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/daemons/dmeventd/dmeventd.c b/daemons/dmeventd/dmeventd.c
+index 22a713b9a..0c3880787 100644
+--- a/daemons/dmeventd/dmeventd.c
++++ b/daemons/dmeventd/dmeventd.c
+@@ -2203,6 +2203,9 @@ static int _restart_dmeventd(struct dm_event_fifos *fifos)
+ 		message += strlen(message) + 1;
+ 	}
+ 
++	free(msg.data);
++	msg.data = NULL;
++
+ 	if (version >= 2) {
+ 		if (daemon_talk(fifos, &msg, DM_EVENT_CMD_GET_PARAMETERS, "-", "-", 0, 0)) {
+ 			fprintf(stderr, "Failed to acquire parameters from old dmeventd.\n");
+-- 
+2.54.0
+

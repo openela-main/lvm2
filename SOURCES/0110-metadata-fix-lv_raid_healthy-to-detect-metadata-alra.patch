@@ -1,0 +1,214 @@
+From 6c03e5fd5c875aa29ad761aa1cd4aa764849b026 Mon Sep 17 00:00:00 2001
+From: Peter Rajnoha <prajnoha@redhat.com>
+Date: Thu, 5 Feb 2026 17:09:43 +0100
+Subject: [PATCH 110/211] metadata: fix lv_raid_healthy to detect metadata
+ alrady updated to match device state
+
+Consider a RAID LV where one of the legs goes missing.
+
+There is a difference between these two:
+
+  A) transient device failure
+    1) A RAID LV has underlying PV representing a leg missing.
+    2) The missing leg is replaced by error target.
+    3) LVM metadata are not updated yet, just transient error (vgreduce not called).
+    4) The missing PV is present again.
+    5) A message is reported when getting LV RAID health status (for e.g. lvs):
+       "WARNING: RaidLV vg/lv needs to be refreshed!"
+    6) After using lvchange --refresh vg/lv, the RAID LV is refreshed
+       and the error targets for previously missing leg is mapped onto
+       the actual PV again.
+
+  B) non-transient device failure
+    1) A RAID LV has underlying PV representing a leg missing.
+    2) The missing PV is reduced (vgreduce called).
+    3) LVM metadata are updated.
+    4) The missing leg is present again.
+    5) Inconsistent metadata is detected, the VG is made consistent first,
+       removes the actual leg from the old PV (vgck --updatemetadata vg).
+    6) The message "WARNING: RaidLV vg/lv needs to be repaired!" is reported.
+    7) After using lvconvert --repair vg/lv, the RAID LV is repaired and
+       the error targets for previously missing leg is mapped onto the
+       free PV.
+
+Before, lv_raid_healthy could not differentiate between A) and B).
+
+Now, lv_raid_healthy sets 'raid_need_t *need' output arguments where the value is one of:
+
+  - RAID_NEED_ERROR (an error occurred while trying to acquire the healthy status)
+  - RAID_NEED_REFRESH (refresh is needed for transient failure)
+  - RAID_NEED_REPAIR (repair is needed for non-transient failure)
+  - RAID_NEED_REFRESH_OR_REPAIR (either refresh or repair, can't determine)
+
+(cherry picked from commit 6104a78a87bbdc2d4a84791ea45c3df18422a28c)
+---
+ lib/metadata/lv.c | 87 ++++++++++++++++++++++++++++++++++++++++-------
+ lib/metadata/lv.h |  9 ++++-
+ 2 files changed, 83 insertions(+), 13 deletions(-)
+
+diff --git a/lib/metadata/lv.c b/lib/metadata/lv.c
+index c7b213067..d201244a7 100644
+--- a/lib/metadata/lv.c
++++ b/lib/metadata/lv.c
+@@ -1230,13 +1230,17 @@ static int lv_raid_integrity_image_in_sync(const struct logical_volume *lv_iorig
+  * _lv_raid_healthy
+  * @lv: A RAID_IMAGE, RAID_META, or RAID logical volume.
+  *
+- * Returns: 1 if healthy, 0 if device is not health
++ * Returns:
++ *   1 if LV of RAID type healthy
++ *   0 if LV of RAID type not healthy ('need' set appropriately if not NULL)
+  */
+-int lv_raid_healthy(const struct logical_volume *lv)
++int lv_raid_healthy(const struct logical_volume *lv, raid_need_t *need)
+ {
+ 	unsigned s;
+ 	char *raid_health;
++	size_t raid_health_len;
+ 	struct lv_segment *seg, *raid_seg = NULL;
++	raid_need_t r_need = RAID_NEED_ERROR;
+ 
+ 	/*
+ 	 * If the LV is not active locally,
+@@ -1247,7 +1251,7 @@ int lv_raid_healthy(const struct logical_volume *lv)
+ 
+ 	if (!lv_is_raid_type(lv)) {
+ 		log_error(INTERNAL_ERROR "%s is not of RAID type", lv->name);
+-		return 0;
++		goto out_need;
+ 	}
+ 
+ 	if (lv_is_raid(lv))
+@@ -1257,20 +1261,55 @@ int lv_raid_healthy(const struct logical_volume *lv)
+ 
+ 	if (!raid_seg) {
+ 		log_error("Failed to find RAID segment for %s", lv->name);
+-		return 0;
++		goto out_need;
+ 	}
+ 
+ 	if (!seg_is_raid(raid_seg)) {
+ 		log_error(INTERNAL_ERROR "%s on %s is not a RAID segment.",
+ 			  raid_seg->lv->name, lv->name);
+-		return 0;
++		goto out_need;
+ 	}
+ 
+-	if (!lv_raid_dev_health(raid_seg->lv, &raid_health))
+-		return_0;
++	if (!lv_raid_dev_health(raid_seg->lv, &raid_health)) {
++		stack;
++		goto out_need;
++	}
+ 
+-	if (lv_is_raid(lv))
+-		return (strchr(raid_health, 'D')) ? 0 : 1;
++	raid_health_len = strlen(raid_health);
++
++	if (lv_is_raid(lv)) {
++		if (raid_seg->area_count == raid_health_len) {
++			/*
++			 * Counts match - positions correspond.
++			 * Check each leg - only report unhealthy if a device is down
++			 * but the metadata expects it to be on a real device (not error segment).
++			 * If a device shows 'D' but the corresponding image LV is virtual
++			 * (error segment from vgreduce --removemissing), that's expected and
++			 * doesn't need a refresh.
++			 */
++			for (s = 0; s < raid_seg->area_count; s++) {
++				if (raid_health[s] == 'D') {
++					if (lv_is_virtual(seg_lv(raid_seg, s)))
++						r_need = RAID_NEED_REPAIR;
++					else
++						r_need = RAID_NEED_REFRESH;
++					goto out_need;
++				}
++			}
++			return 1;
++		}
++
++		/*
++		 * Counts don't match (reshape in progress) - can't reliably
++		 * correlate health positions with metadata, fall back to
++		 * behavior where any 'D' means unhealthy.
++		 */
++		if (strchr(raid_health, 'D')) {
++			r_need = RAID_NEED_REFRESH_OR_REPAIR;
++			goto out_need;
++		}
++		return 1;
++	}
+ 
+ 	/* Find out which sub-LV this is. */
+ 	for (s = 0; s < raid_seg->area_count; s++)
+@@ -1281,13 +1320,37 @@ int lv_raid_healthy(const struct logical_volume *lv)
+ 		log_error(INTERNAL_ERROR
+ 			  "sub-LV %s was not found in raid segment",
+ 			  lv->name);
+-		return 0;
++		goto out_need;
+ 	}
+ 
+-	if (raid_health[s] == 'D')
+-		return 0;
++	if (raid_seg->area_count == raid_health_len) {
++		/* Counts match - positions correspond */
++		/* If sub-LV is virtual (error segment), 'D' is expected - not unhealthy */
++		if (raid_health[s] == 'D') {
++			if (lv_is_virtual(lv))
++				r_need = RAID_NEED_REPAIR;
++			else
++				r_need = RAID_NEED_REFRESH;
++			goto out_need;
++		}
++		return 1;
++	}
+ 
++	/*
++	 * Counts don't match (reshape in progress) - can't reliably
++	 * correlate health position with sub-LV, fall back to
++	 * behavior where any 'D' means unhealthy.
++	 */
++	if (strchr(raid_health, 'D')) {
++		r_need = RAID_NEED_REFRESH_OR_REPAIR;
++		goto out_need;
++	}
+ 	return 1;
++
++out_need:
++	if (need)
++		*need = r_need;
++	return 0;
+ }
+ 
+ /* Helper: check for any sub LVs after a disk removing reshape */
+diff --git a/lib/metadata/lv.h b/lib/metadata/lv.h
+index 0596ed86b..3bf9d4211 100644
+--- a/lib/metadata/lv.h
++++ b/lib/metadata/lv.h
+@@ -139,7 +139,6 @@ const struct logical_volume *lv_lock_holder(const struct logical_volume *lv);
+ const struct logical_volume *lv_committed(const struct logical_volume *lv);
+ int lv_mirror_image_in_sync(const struct logical_volume *lv);
+ int lv_raid_image_in_sync(const struct logical_volume *lv);
+-int lv_raid_healthy(const struct logical_volume *lv);
+ const char *lvseg_name(const struct lv_segment *seg);
+ uint64_t lvseg_start(const struct lv_segment *seg);
+ struct dm_list *lvseg_devices(struct dm_pool *mem, const struct lv_segment *seg);
+@@ -153,6 +152,14 @@ char *lvseg_seg_le_ranges_str(struct dm_pool *mem, const struct lv_segment *seg)
+ struct dm_list *lvseg_seg_metadata_le_ranges(struct dm_pool *mem, const struct lv_segment *seg);
+ char *lvseg_seg_metadata_le_ranges_str(struct dm_pool *mem, const struct lv_segment *seg);
+ 
++typedef enum {
++	RAID_NEED_ERROR,
++	RAID_NEED_REFRESH,
++	RAID_NEED_REPAIR,
++	RAID_NEED_REFRESH_OR_REPAIR, /* can't determine */
++} raid_need_t;
++int lv_raid_healthy(const struct logical_volume *lv, raid_need_t *need);
++
+ /* LV kernel properties */
+ int lv_kernel_major(const struct logical_volume *lv);
+ int lv_kernel_minor(const struct logical_volume *lv);
+-- 
+2.54.0
+

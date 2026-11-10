@@ -1,0 +1,41 @@
+From 3075f9ed8f06136ed8eea5137880ec90adfe38d0 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Fri, 17 Apr 2026 20:28:11 +0200
+Subject: [PATCH 172/211] raid: fix missing failure return after reshape space
+ allocation error
+
+When lv_extend() fails in _lv_alloc_reshape_space(), the cleanup
+function _lv_alloc_reshape_post_extend() restores saved state,
+but on success execution falls through to the code path that
+assumes the allocation succeeded.
+
+The bug originates from commit f1b78665 which had
+"return _lv_alloc_reshape_post_extend()" - returning the cleanup
+result (1=success) as the function result, masking the allocation
+failure. A later cleanup commit 1d69fc7c5 converted this to
+"if (!...) return_0;" style but missed that fallthrough now
+continues into the success path.
+
+Add the missing "return 0;" after successful cleanup.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit 64c70d9a1718b93358414b070d0fd63de4838eaa)
+---
+ lib/metadata/raid_manip.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/lib/metadata/raid_manip.c b/lib/metadata/raid_manip.c
+index 99c71e967..a30917fb6 100644
+--- a/lib/metadata/raid_manip.c
++++ b/lib/metadata/raid_manip.c
+@@ -1599,6 +1599,7 @@ static int _lv_alloc_reshape_space(struct logical_volume *lv,
+ 				  display_lvname(lv));
+ 			if (!_lv_alloc_reshape_post_extend(lv, segtype_sav, stripe_size_sav, lv_size_cur))
+ 				return_0;
++			return 0;
+ 		}
+ 
+ 		/* pay attention to lv_extend maybe having allocated more because of layout specific rounding */
+-- 
+2.54.0
+

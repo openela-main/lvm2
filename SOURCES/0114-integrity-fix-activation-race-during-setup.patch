@@ -1,0 +1,36 @@
+From a61fbb2bb54a29d03a00175c7e124c6ebe2e536a Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Thu, 2 Oct 2025 15:54:12 +0200
+Subject: [PATCH 114/211] integrity: fix activation race during setup
+
+Add synchronization after deactivate_lv() to prevent races between
+deactivation and subsequent activation using the same udev cookie.
+
+This ensures proper ordering when wiping prepared integrity metadata
+devices during RAID integrity setup, affecting both active and inactive
+code paths.
+
+(cherry picked from commit 42e3a8705ec2911e256e14e541a2c97f5b404e15)
+---
+ lib/metadata/integrity_manip.c | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/lib/metadata/integrity_manip.c b/lib/metadata/integrity_manip.c
+index e03d422b2..26b644266 100644
+--- a/lib/metadata/integrity_manip.c
++++ b/lib/metadata/integrity_manip.c
+@@ -685,7 +685,10 @@ int lv_add_integrity_to_raid(struct logical_volume *lv, struct integrity_setting
+ 		goto bad;
+ 	}
+ 
+-        if (!r)
++	if (!sync_local_dev_names(cmd))
++		stack;
++
++	if (!r)
+ 		goto bad;
+ 
+ 	/*
+-- 
+2.54.0
+

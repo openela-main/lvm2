@@ -1,0 +1,139 @@
+From ec6b806b893bedda0356b825f9d775f546debbae Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Mon, 29 Sep 2025 14:03:42 +0200
+Subject: [PATCH 113/211] integrity: fix adding integrity to RAID
+
+Fix several issues in integrity addition to RAID logical volumes and
+improve error handling and cleanup:
+
+Synchronization and activation fixes:
+- Add sync_local_dev_names() before LV activation to handle potential
+  udev deactivation in-flight from metadata device wiping
+- Consolidate deactivate_lv() calls to avoid code duplication in
+  _set_integrity_block_size() error path
+
+Missing segment relationship:
+- Add missing add_seg_to_segs_using_this_lv() call for imeta LV to
+  properly establish segment relationships
+
+Enhanced error recovery:
+- Improve error path cleanup in case integrity addition fails
+
+(cherry picked from commit c33233cb88961a51e0effad02510f5f01bb930d4)
+---
+ lib/metadata/integrity_manip.c | 59 ++++++++++++++++++++++++++--------
+ 1 file changed, 45 insertions(+), 14 deletions(-)
+
+diff --git a/lib/metadata/integrity_manip.c b/lib/metadata/integrity_manip.c
+index be2d458b3..e03d422b2 100644
+--- a/lib/metadata/integrity_manip.c
++++ b/lib/metadata/integrity_manip.c
+@@ -515,7 +515,7 @@ int lv_add_integrity_to_raid(struct logical_volume *lv, struct integrity_setting
+ 	struct logical_volume *imeta_lvs[DEFAULT_RAID_MAX_IMAGES];
+ 	struct cmd_context *cmd = lv->vg->cmd;
+ 	struct volume_group *vg = lv->vg;
+-	struct logical_volume *lv_image, *lv_imeta;
++	struct logical_volume *lv_image, *lv_imeta, *lv_iorig;
+ 	struct lv_segment *seg_top, *seg_image;
+ 	struct pv_list *pvl;
+ 	const struct segment_type *segtype;
+@@ -526,6 +526,7 @@ int lv_add_integrity_to_raid(struct logical_volume *lv, struct integrity_setting
+ 	int lbs_4k = 0, lbs_512 = 0, lbs_unknown = 0;
+ 	int pbs_4k = 0, pbs_512 = 0, pbs_unknown = 0;
+ 	int is_active;
++	int r;
+ 
+ 	memset(imeta_lvs, 0, sizeof(imeta_lvs));
+ 
+@@ -659,6 +660,8 @@ int lv_add_integrity_to_raid(struct logical_volume *lv, struct integrity_setting
+ 	}
+ 
+ 	if (!is_active) {
++		if (!sync_local_dev_names(cmd))
++			stack;
+ 		/* checking block size of fs on the lv requires the lv to be active */
+ 		if (!activate_lv(cmd, lv)) {
+ 			log_error("Failed to activate LV to check block size %s", display_lvname(lv));
+@@ -673,19 +676,18 @@ int lv_add_integrity_to_raid(struct logical_volume *lv, struct integrity_setting
+ 	 * integrity block size chosen based on device logical block size and
+ 	 * file system block size.
+ 	 */
+-	if (!_set_integrity_block_size(cmd, lv, is_active, settings, lbs_4k, lbs_512, pbs_4k, pbs_512)) {
+-		if (!is_active && !deactivate_lv(cmd, lv))
+-			stack;
+-		goto_bad;
+-	}
+ 
+-	if (!is_active) {
+-		if (!deactivate_lv(cmd, lv)) {
+-			log_error("Failed to deactivate LV after checking block size %s", display_lvname(lv));
+-			goto bad;
+-		}
++	if (!(r = _set_integrity_block_size(cmd, lv, is_active, settings, lbs_4k, lbs_512, pbs_4k, pbs_512)))
++		stack;
++
++	if (!is_active && !deactivate_lv(cmd, lv)) {
++		log_error("Failed to deactivate LV %s after checking block size.", display_lvname(lv));
++		goto bad;
+ 	}
+ 
++        if (!r)
++		goto bad;
++
+ 	/*
+ 	 * For each rimage, move its segments to a new rimage_iorig and give
+ 	 * the rimage a new integrity segment.
+@@ -727,6 +729,8 @@ int lv_add_integrity_to_raid(struct logical_volume *lv, struct integrity_setting
+ 		seg_image->integrity_data_sectors = lv_image->size;
+ 		seg_image->integrity_meta_dev = lv_imeta;
+ 		seg_image->integrity_recalculate = 1;
++		if (!add_seg_to_segs_using_this_lv(lv_imeta, seg_image))
++			goto_bad;
+ 
+ 		memcpy(&seg_image->integrity_settings, settings, sizeof(struct integrity_settings));
+ 		set = &seg_image->integrity_settings;
+@@ -801,11 +805,38 @@ bad:
+ 		for (s = 0; s < DEFAULT_RAID_MAX_IMAGES; s++) {
+ 			if (!imeta_lvs[s])
+ 				continue;
+-			if (!lv_remove(imeta_lvs[s]))
+-				log_error("New integrity metadata LV may require manual removal.");
++
++			lv_image = seg_lv(seg_top, s);
++			seg_image = first_seg(lv_image);
++			lv_iorig = seg_lv(seg_image, 0);
++			if (lv_image->status & INTEGRITY) {
++				if (!remove_layer_from_lv(lv_image, lv_iorig) ||
++				    !remove_seg_from_segs_using_this_lv(seg_image->integrity_meta_dev,
++									seg_image)) {
++					log_error("Aborting. Cannot remove integrity layer from LV %s.", display_lvname(lv_image));
++					return 0;
++				}
++
++				lv_image->status &= ~INTEGRITY;
++				imeta_lvs[s]->status &= ~INTEGRITY_METADATA;
++
++				lv_set_visible(imeta_lvs[s]);
++				lv_set_visible(lv_iorig);
++
++				if (!lv_remove(lv_iorig)) {
++					log_error("Aborting. Cannot remove new integrity origin LV %s.",
++						  display_lvname(lv_iorig));
++					return 0;
++				}
++			}
++			if (!lv_remove(imeta_lvs[s])) {
++				log_error("Aborting. Cannot remove new integrity metadata LV %s.",
++					  display_lvname(imeta_lvs[s]));
++				return 0;
++			}
+ 		}
+ 	}
+-			       
++
+ 	if (!vg_write(vg) || !vg_commit(vg))
+ 		log_error("New integrity metadata LV may require manual removal.");
+ 
+-- 
+2.54.0
+

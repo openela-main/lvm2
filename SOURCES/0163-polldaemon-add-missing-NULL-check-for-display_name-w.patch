@@ -1,0 +1,38 @@
+From 098fdeeb08e6573d83faafc2c2fd2d25623b9940 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Sun, 19 Apr 2026 17:21:39 +0200
+Subject: [PATCH 163/211] polldaemon: add missing NULL check for display_name
+ when aborting
+
+_lvmpolld_poll_vg was missing the NULL check for id.display_name
+that _poll_vg has at lines 351-355. When aborting with a NULL
+display_name, the code would pass NULL to lvmpolld_poll_init.
+
+Add the same error check as the parallel _poll_vg function.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit 19d8da0395f34b52ab3ac5f336cd4157be9722fe)
+---
+ tools/polldaemon.c | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/tools/polldaemon.c b/tools/polldaemon.c
+index 605c90779..f5d04311e 100644
+--- a/tools/polldaemon.c
++++ b/tools/polldaemon.c
+@@ -499,6 +499,12 @@ static int _lvmpolld_init_poll_vg(struct cmd_context *cmd, const char *vgname,
+ 		if (!id.display_name && !lpdp->parms->aborting)
+ 			continue;
+ 
++		if (!id.display_name) {
++			log_error("Device name for LV %s not found in metadata.",
++				  display_lvname(lv));
++			return ECMD_FAILED;
++		}
++
+ 		id.vg_name = lv->vg->name;
+ 		id.lv_name = lv->name;
+ 
+-- 
+2.54.0
+

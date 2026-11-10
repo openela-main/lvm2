@@ -1,0 +1,52 @@
+From 2742b532fbe93dc2d19725031ebc85cdbcac36f5 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Fri, 3 Apr 2026 10:16:17 +0200
+Subject: [PATCH 134/211] bcache: fix flush orphaning locked dirty blocks
+
+bcache_flush used _list_pop to remove blocks from the dirty list
+before checking ref_count. Blocks still locked (e.g. superblock)
+were popped but never re-added to any list, orphaning them.
+
+Switch to dm_list_iterate_items_gen_safe matching the pattern
+used by _writeback(). _issue_write() internally moves written
+blocks from dirty to io_pending via dm_list_move(), while locked
+blocks are skipped and remain on the dirty list.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit b81b48881d4af2bc28dff257ccbf583b129b9204)
+---
+ lib/device/bcache.c | 18 +++++++++---------
+ 1 file changed, 9 insertions(+), 9 deletions(-)
+
+diff --git a/lib/device/bcache.c b/lib/device/bcache.c
+index c61f7a5d5..afa0315fd 100644
+--- a/lib/device/bcache.c
++++ b/lib/device/bcache.c
+@@ -1294,15 +1294,15 @@ bool bcache_flush(struct bcache *cache)
+ 	// try and rewrite everything.
+ 	dm_list_splice(&cache->dirty, &cache->errored);
+ 
+-	while (!dm_list_empty(&cache->dirty)) {
+-		struct block *b = dm_list_item(_list_pop(&cache->dirty), struct block);
+-		if (b->ref_count || _test_flags(b, BF_IO_PENDING)) {
+-			// The superblock may well be still locked.
+-			continue;
+-		}
+-
+-		_issue_write(b);
+-	}
++	/*
++	 * _writeback() uses safe iteration and skips locked blocks
++	 * (ref_count > 0).  _issue_write() moves written blocks from
++	 * dirty to io_pending via dm_list_move() in _issue_low_level().
++	 * BF_IO_PENDING cannot occur here - _issue_low_level() moves
++	 * the block off dirty when setting that flag, and _complete_io()
++	 * clears it before moving to errored/clean.
++	 */
++	_writeback(cache, cache->nr_cache_blocks);
+ 
+ 	_wait_all(cache);
+ 
+-- 
+2.54.0
+

@@ -1,0 +1,40 @@
+From 338c45f3128680ca511c4c92402999bcbe8df6b1 Mon Sep 17 00:00:00 2001
+From: Peter Rajnoha <prajnoha@redhat.com>
+Date: Tue, 10 Feb 2026 11:21:51 +0100
+Subject: [PATCH 150/211] lvmlockd: check if sanlock lv is not partial before
+ trying to activate
+
+If the sanlock lv is partial, we can't execute lockd operations, like 'lock start'.
+The activate_lv would check if the lv is partial or not, but it would provide
+a misleading hint in this case:
+
+  "Refusing activation of partial LV <vg/lv>.  Use '--activationmode partial' to override."
+
+Instead, check for partial sanlock lv early and provide this message instead:
+
+  "Cannot use sanlock lv <vg>/<lv> with missing PVs."
+
+(cherry picked from commit 365b9768dfc542689424a1840a208229cf43b25d)
+---
+ lib/locking/lvmlockd.c | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/lib/locking/lvmlockd.c b/lib/locking/lvmlockd.c
+index 68dea52e0..af827e49e 100644
+--- a/lib/locking/lvmlockd.c
++++ b/lib/locking/lvmlockd.c
+@@ -782,6 +782,11 @@ static int _handle_sanlock_lv(struct cmd_context *cmd, struct volume_group *vg)
+ 
+ static int _activate_sanlock_lv(struct cmd_context *cmd, struct volume_group *vg)
+ {
++	if (lv_is_partial(vg->sanlock_lv)) {
++		log_error("Cannot use sanlock lv %s/%s with missing PVs.", vg->name, vg->sanlock_lv->name);
++		return 0;
++	}
++
+ 	if (!activate_lv(cmd, vg->sanlock_lv)) {
+ 		log_error("Failed to activate sanlock lv %s/%s", vg->name, vg->sanlock_lv->name);
+ 		return 0;
+-- 
+2.54.0
+

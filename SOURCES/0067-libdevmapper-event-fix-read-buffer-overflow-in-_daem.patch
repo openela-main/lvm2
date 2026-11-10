@@ -1,0 +1,33 @@
+From 724efc360fb2f54611bbb56adfed56e0699de880 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Fri, 3 Apr 2026 12:38:57 +0200
+Subject: [PATCH 067/211] libdevmapper-event: fix read() buffer overflow in
+ _daemon_read
+
+read() was called with full 'size' instead of remaining 'size - bytes',
+so after a partial read, it could write past the end of the buffer.
+
+The server-side counterpart in dmeventd.c correctly uses 'size - bytes'.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit 17ae34da124c96922b266ab7accdbcfdc11791b4)
+---
+ daemons/dmeventd/libdevmapper-event.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/daemons/dmeventd/libdevmapper-event.c b/daemons/dmeventd/libdevmapper-event.c
+index 485f04605..36f119261 100644
+--- a/daemons/dmeventd/libdevmapper-event.c
++++ b/daemons/dmeventd/libdevmapper-event.c
+@@ -249,7 +249,7 @@ static int _daemon_read(struct dm_event_fifos *fifos,
+ 			goto bad;
+ 		}
+ 
+-		ret = read(fifos->server, buf + bytes, size);
++		ret = read(fifos->server, buf + bytes, size - bytes);
+ 		if (ret < 0) {
+ 			if ((errno == EINTR) || (errno == EAGAIN))
+ 				continue;
+-- 
+2.54.0
+

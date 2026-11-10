@@ -1,0 +1,41 @@
+From 7b33f39ef2f674d9ffc7f01c3d22bb9baca7ac6f Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Thu, 9 Apr 2026 21:33:58 +0200
+Subject: [PATCH 161/211] config: fix strtoll error checking
+
+Add proper validation of strtoll conversion by checking endptr
+to detect incomplete conversions and trailing characters.
+
+Reported-by: Tony Asleson <tasleson@redhat.com>
+Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
+(cherry picked from commit 591a1c9310506124685cacc75aa338e31a148a06)
+---
+ libdm/libdm-config.c | 5 +++--
+ 1 file changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/libdm/libdm-config.c b/libdm/libdm-config.c
+index 25cfa268c..3ecf29816 100644
+--- a/libdm/libdm-config.c
++++ b/libdm/libdm-config.c
+@@ -725,6 +725,7 @@ static struct dm_config_value *_type(struct parser *p)
+ 	/* [+-]{0,1}[0-9]+ | [0-9]*\.[0-9]* | ".*" */
+ 	struct dm_config_value *v;
+ 	const char *str;
++	char *endptr;
+ 	size_t len;
+ 
+ 	switch (p->t) {
+@@ -733,8 +734,8 @@ static struct dm_config_value *_type(struct parser *p)
+ 			break;
+ 		v->type = DM_CFG_INT;
+ 		errno = 0;
+-		v->v.i = strtoll(p->tb, NULL, 0);	/* FIXME: check error */
+-		if (errno) {
++		v->v.i = strtoll(p->tb, &endptr, 0);
++		if (errno || (endptr == p->tb) || (endptr != p->te)) {
+ 			if (errno == ERANGE && p->key &&
+ 			    strcmp("creation_time", p->key) == 0) {
+ 				/* Due to a bug in some older 32bit builds (<2.02.169),
+-- 
+2.54.0
+

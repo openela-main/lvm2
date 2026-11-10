@@ -1,0 +1,34 @@
+From d324d870e7409d2c3a84b26b37c13b60dd331869 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Fri, 3 Apr 2026 20:32:03 +0200
+Subject: [PATCH 092/211] daemon-client: fix swapped parameters in log_debug
+
+Line 31-32: Fixed swapped parameters in debug message. The format
+string suggests "%s: Opening daemon socket to %s" where the first %s
+is the daemon name and the second %s is the socket path. The arguments
+were swapped (i.socket, i.path) when they should be (i.path, i.socket)
+according to the daemon_info struct definition where path is the daemon
+binary and socket is the socket path.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit a47d90285a1172f37a713ab0969d4c8b87c314e6)
+---
+ libdaemon/client/daemon-client.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/libdaemon/client/daemon-client.c b/libdaemon/client/daemon-client.c
+index 9ee88fa69..14edee63e 100644
+--- a/libdaemon/client/daemon-client.c
++++ b/libdaemon/client/daemon-client.c
+@@ -28,7 +28,7 @@ daemon_handle daemon_open(daemon_info i)
+ 	struct sockaddr_un sockaddr = { .sun_family = AF_UNIX };
+ 
+ 	log_debug("%s: Opening daemon socket to %s for protocol %s version %d.",
+-		  i.socket, i.path, i.protocol, i.protocol_version);
++		  i.path, i.socket, i.protocol, i.protocol_version);
+ 
+ 	if ((h.socket_fd = socket(PF_UNIX, SOCK_STREAM /* | SOCK_NONBLOCK */, 0)) < 0) {
+ 		h.error = errno;
+-- 
+2.54.0
+

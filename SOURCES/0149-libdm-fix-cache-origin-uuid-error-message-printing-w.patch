@@ -1,0 +1,31 @@
+From aff798f2816e323163da9878031ba8f3f0385a26 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Tue, 10 Feb 2026 13:11:43 +0100
+Subject: [PATCH 149/211] libdm: fix cache origin uuid error message printing
+ wrong variable
+
+The error message for missing cache origin was printing metadata_uuid
+instead of origin_uuid.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit 045f941798f06f88121aac44a4e9a19f97de1a30)
+---
+ libdm/libdm-deptree.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/libdm/libdm-deptree.c b/libdm/libdm-deptree.c
+index cfb57854d..2fdd9fa07 100644
+--- a/libdm/libdm-deptree.c
++++ b/libdm/libdm-deptree.c
+@@ -3490,7 +3490,7 @@ DM_EXPORT_NEW_SYMBOL(int, dm_tree_node_add_cache_target, 1_02_138)
+ 	if (!(seg->origin = dm_tree_find_node_by_uuid(node->dtree,
+ 						      origin_uuid))) {
+ 		log_error("Missing cache's origin uuid %s.",
+-			  metadata_uuid);
++			  origin_uuid);
+ 		return 0;
+ 	}
+ 	if (!_link_tree_nodes(node, seg->origin))
+-- 
+2.54.0
+

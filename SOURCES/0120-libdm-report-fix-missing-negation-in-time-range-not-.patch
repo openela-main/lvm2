@@ -1,0 +1,32 @@
+From 103e03c497d82b7338780b25549852c9345d0fb8 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Fri, 3 Apr 2026 12:06:47 +0200
+Subject: [PATCH 120/211] libdm: report: fix missing negation in time range
+ not-equal
+
+The NOT-EQUAL case for time comparison was returning the same
+expression as EQUAL when a range was specified, missing the
+negation. The int and double comparison functions have it correct.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit f3ffd13dd1d91559812579b63779d91559467968)
+---
+ libdm/libdm-report.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/libdm/libdm-report.c b/libdm/libdm-report.c
+index 87c588c3c..f2f0774cd 100644
+--- a/libdm/libdm-report.c
++++ b/libdm/libdm-report.c
+@@ -1731,7 +1731,7 @@ static int _cmp_field_time(struct dm_report *rh,
+ 		case FLD_CMP_EQUAL:
+ 			return range ? ((val >= sel1) && (val <= sel2)) : val == sel1;
+ 		case FLD_CMP_NOT|FLD_CMP_EQUAL:
+-			return range ? ((val >= sel1) && (val <= sel2)) : val != sel1;
++			return range ? !((val >= sel1) && (val <= sel2)) : val != sel1;
+ 		case FLD_CMP_TIME|FLD_CMP_GT:
+ 			if (_check_value_is_strictly_reserved(rh, field_num, DM_REPORT_FIELD_TYPE_TIME, &val, fs))
+ 				return 0;
+-- 
+2.54.0
+

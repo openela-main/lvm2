@@ -1,0 +1,43 @@
+From 159c89d0d33161e18dd75a53891528747313c62e Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Fri, 3 Apr 2026 18:09:34 +0200
+Subject: [PATCH 141/211] lvmlockctl: fix close error msg and null_fd == fd
+ case
+
+Add missing null_fd != fd guards in _reopen_fd_to_null to match
+lib/misc/lvm-exec.c implementation. Without these guards, if
+open("/dev/null") returns the same fd number as the target fd
+(e.g., fd 0 is already closed so open returns 0), the function
+would incorrectly close the just-opened fd before dup2.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit f5ca64812df94d7816f06cfa383a0b06086105e1)
+---
+ daemons/lvmlockd/lvmlockctl.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/daemons/lvmlockd/lvmlockctl.c b/daemons/lvmlockd/lvmlockctl.c
+index e36293260..63b7f77c6 100644
+--- a/daemons/lvmlockd/lvmlockctl.c
++++ b/daemons/lvmlockd/lvmlockctl.c
+@@ -726,7 +726,7 @@ static int _reopen_fd_to_null(int fd)
+ 		return 0;
+ 	}
+ 
+-	if (close(fd)) {
++	if ((null_fd != fd) && close(fd)) {
+ 		log_error("close error fd %d %d", fd, errno);
+ 		goto out;
+ 	}
+@@ -738,7 +738,7 @@ static int _reopen_fd_to_null(int fd)
+ 
+ 	r = 1;
+ out:
+-	if (close(null_fd)) {
++	if ((null_fd != fd) && close(null_fd)) {
+ 		log_error("close error fd %d %d", null_fd, errno);
+ 		return 0;
+ 	}
+-- 
+2.54.0
+

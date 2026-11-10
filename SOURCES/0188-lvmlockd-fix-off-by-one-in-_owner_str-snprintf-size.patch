@@ -1,0 +1,30 @@
+From 2fb5690a170a93ab185202d69673cd99bedfdf9d Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Sun, 19 Apr 2026 13:35:33 +0200
+Subject: [PATCH 188/211] lvmlockd: fix off-by-one in _owner_str snprintf size
+
+snprintf already NUL-terminates within the given size, so
+passing sizeof()-1 wastes one byte of the buffer.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit ad69fff126f7ff7c19a666bdc95822b0fc79b734)
+---
+ lib/locking/lvmlockd.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/lib/locking/lvmlockd.c b/lib/locking/lvmlockd.c
+index af827e49e..c74a9a1d3 100644
+--- a/lib/locking/lvmlockd.c
++++ b/lib/locking/lvmlockd.c
+@@ -149,7 +149,7 @@ static char *_owner_str(struct owner *owner)
+ 
+ 	/* Use a --lockopt setting to print all owner details? */
+ 
+-	snprintf(log_owner_str, sizeof(log_owner_str)-1, " (host_id %u)", owner->host_id);
++	snprintf(log_owner_str, sizeof(log_owner_str), " (host_id %u)", owner->host_id);
+ 	return log_owner_str;
+ }
+ 
+-- 
+2.54.0
+

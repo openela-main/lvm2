@@ -1,0 +1,63 @@
+From 84bff8f98ed84b1cec5cf05df73d0b761332d29b Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Sun, 19 Apr 2026 16:41:27 +0200
+Subject: [PATCH 170/211] lvchange: fix swapped printf args and wrong
+ arg_long_option_name variable
+
+Fix two log_verbose calls where display_lvname(lv) and the
+flag string were passed in wrong order, producing messages
+like "Changing activation skip flag to vg/lv for LV enabled."
+
+Also fix two default cases in the properties loop that passed
+loop index i instead of opt_enum to arg_long_option_name,
+which would print the wrong option name in the error message.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit f1a67e95fa58fc7d046198f210854bf3fd011a9a)
+---
+ tools/lvchange.c | 8 ++++----
+ 1 file changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/tools/lvchange.c b/tools/lvchange.c
+index 0ccebd344..f2ed61fde 100644
+--- a/tools/lvchange.c
++++ b/tools/lvchange.c
+@@ -1163,7 +1163,7 @@ static int _lvchange_activation_skip(struct logical_volume *lv, uint32_t *mr)
+ 	lv_set_activation_skip(lv, 1, skip);
+ 
+ 	log_verbose("Changing activation skip flag to %s for LV %s.",
+-		    display_lvname(lv), skip ? "enabled" : "disabled");
++		    skip ? "enabled" : "disabled", display_lvname(lv));
+ 
+ 	/* Request caller to commit+backup metadata */
+ 	*mr |= MR_COMMIT;
+@@ -1185,7 +1185,7 @@ static int _lvchange_autoactivation(struct logical_volume *lv, uint32_t *mr)
+ 		lv->status &= ~LV_NOAUTOACTIVATE;
+ 
+ 	log_verbose("Changing autoactivation flag to %s for LV %s.",
+-		    display_lvname(lv), aa_no_arg ? "no" : "yes");
++		    aa_no_arg ? "no" : "yes", display_lvname(lv));
+ 
+ 	/* Request caller to commit+backup metadata */
+ 	*mr |= MR_COMMIT;
+@@ -1457,7 +1457,7 @@ static int _lvchange_properties_single(struct cmd_context *cmd,
+ 
+ 		default:
+ 			log_error(INTERNAL_ERROR "Failed to check for option %s",
+-				  arg_long_option_name(i));
++				  arg_long_option_name(opt_enum));
+ 		}
+ 	}
+ 
+@@ -1527,7 +1527,7 @@ static int _lvchange_properties_single(struct cmd_context *cmd,
+ 			break;
+ 		default:
+ 			log_error(INTERNAL_ERROR "Failed to check for option %s",
+-				  arg_long_option_name(i));
++				  arg_long_option_name(opt_enum));
+ 		}
+ 
+ 		/* Display any logical volume change unless already displayed in step 1. */
+-- 
+2.54.0
+

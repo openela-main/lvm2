@@ -1,0 +1,61 @@
+From af3088f447aace9e6e87de388aa2da5dd6273c40 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Wed, 22 Oct 2025 16:44:09 +0200
+Subject: [PATCH 111/211] lv_manip: detect insufficient space for RAID with
+ split metadata
+
+When approx_alloc reduces allocation and we have RAID/mirror with
+split metadata (alloc_and_split_meta), verify that we allocated at
+least 1 extent per data area.
+
+If total_area_len < area_count, the integer division during parallel
+area allocation (area_len = max_to_allocate / ah->area_multiple) results
+in area_len=0 for individual data areas. This causes those areas to be
+skipped (empty allocation), creating RAID image LVs with no segments.
+
+This create invalid metadata with LVs without segments.
+
+Example:
+- Need 52 extents total (4 data areas x 13 extents)
+- Metadata allocated: 4 extents (4 rmeta x 1 extent each)
+- Only 1 extent remains for data
+- Result: area_len = 1/4 = 0, all data areas get empty allocation
+
+Fix by failing allocation early with clear error message instead of
+creating corrupted RAID LVs that trigger internal errors.
+
+Resolves: https://issues.redhat.com/browse/RHEL-116884
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+(cherry picked from commit d2715e01f585c55f76215002db470c752ad208e3)
+---
+ lib/metadata/lv_manip.c | 13 +++++++++++++
+ 1 file changed, 13 insertions(+)
+
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index 61816bd8c..42e3f2489 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -3494,6 +3494,19 @@ static int _allocate(struct alloc_handle *ah,
+ 				  lv ? lv->name : "");
+ 			goto out;
+ 		}
++		/*
++		 * For RAID/mirror with split metadata, verify we allocated
++		 * at least 1 extent per data area. If total_area_len is less
++		 * than area_count, integer division during allocation would
++		 * result in some areas getting 0 extents, creating LVs with
++		 * no segments which triggers internal errors during vg_write.
++		 */
++		if (ah->alloc_and_split_meta && ah->total_area_len < ah->area_count) {
++			log_error("Insufficient suitable allocatable extents for logical volume %s: "
++				  "%u extents found but at least %u required (1 extent per data image).",
++				  lv ? lv->name : "", ah->total_area_len, ah->area_count);
++			goto out;
++		}
+ 		log_verbose("Found fewer %sallocatable extents "
+ 			    "for logical volume %s than requested: using %" PRIu32 " extents (reduced by %u).",
+ 			    can_split ? "" : "contiguous ",
+-- 
+2.54.0
+

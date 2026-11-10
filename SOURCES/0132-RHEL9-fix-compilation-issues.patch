@@ -1,0 +1,115 @@
+From 444317ac2c2c6d40271c1e4ced0c95726c925de5 Mon Sep 17 00:00:00 2001
+From: Marian Csontos <mcsontos@redhat.com>
+Date: Fri, 15 May 2026 10:34:34 +0200
+Subject: [PATCH 132/211] RHEL9: fix compilation issues
+
+---
+ lib/device/device_id.c | 18 +++++++++---------
+ lib/metadata/lv.c      |  2 +-
+ lib/report/report.c    |  2 +-
+ tools/reporter.c       |  2 +-
+ 4 files changed, 12 insertions(+), 12 deletions(-)
+
+diff --git a/lib/device/device_id.c b/lib/device/device_id.c
+index 91c998fe2..a83257e50 100644
+--- a/lib/device/device_id.c
++++ b/lib/device/device_id.c
+@@ -847,19 +847,19 @@ char *device_id_system_read(struct cmd_context *cmd, struct device *dev, uint16_
+ 	case DEV_ID_TYPE_MPATH_UUID:
+ 		if (!dev_dm_uuid(cmd, dev, sysbuf, sizeof(sysbuf)))
+ 			stack;
+-		if (sysbuf[0] && !dm_uuid_has_prefix(sysbuf, "mpath-"))
++		if (sysbuf[0] && !_dm_uuid_has_prefix(sysbuf, "mpath-"))
+ 			sysbuf[0] = '\0';
+                 break;
+ 	case DEV_ID_TYPE_CRYPT_UUID:
+ 		if (!dev_dm_uuid(cmd, dev, sysbuf, sizeof(sysbuf)))
+ 			stack;
+-		if (sysbuf[0] && !dm_uuid_has_prefix(sysbuf, "CRYPT-"))
++		if (sysbuf[0] && !_dm_uuid_has_prefix(sysbuf, "CRYPT-"))
+ 			sysbuf[0] = '\0';
+                 break;
+ 	case DEV_ID_TYPE_LVMLV_UUID:
+ 		if (!dev_dm_uuid(cmd, dev, sysbuf, sizeof(sysbuf)))
+ 			stack;
+-		if (sysbuf[0] && !dm_uuid_has_prefix(sysbuf, "LVM-"))
++		if (sysbuf[0] && !_dm_uuid_has_prefix(sysbuf, "LVM-"))
+ 			sysbuf[0] = '\0';
+                 break;
+ 	case DEV_ID_TYPE_MD_UUID:
+@@ -2547,17 +2547,17 @@ static void _replace_incorrect_dm_idtype(struct dev_use *du)
+ 		return;
+ 
+ 	/* Use the IDNAME value to determine the correct IDTYPE. */
+-	if (dm_uuid_has_prefix(du->idname, "mpath-") && (du->idtype != DEV_ID_TYPE_MPATH_UUID)) {
++	if (_dm_uuid_has_prefix(du->idname, "mpath-") && (du->idtype != DEV_ID_TYPE_MPATH_UUID)) {
+ 		log_debug("replace incorrect mpath device id type for %u %s", du->idtype, du->idname);
+ 		du->idtype = DEV_ID_TYPE_MPATH_UUID;
+ 		return;
+ 	}
+-	if (dm_uuid_has_prefix(du->idname, "CRYPT-") && (du->idtype != DEV_ID_TYPE_CRYPT_UUID)) {
++	if (_dm_uuid_has_prefix(du->idname, "CRYPT-") && (du->idtype != DEV_ID_TYPE_CRYPT_UUID)) {
+ 		log_debug("replace incorrect crypt device id type for %u %s", du->idtype, du->idname);
+ 		du->idtype = DEV_ID_TYPE_CRYPT_UUID;
+ 		return;
+ 	}
+-	if (dm_uuid_has_prefix(du->idname, "LVM-") && (du->idtype != DEV_ID_TYPE_LVMLV_UUID)) {
++	if (_dm_uuid_has_prefix(du->idname, "LVM-") && (du->idtype != DEV_ID_TYPE_LVMLV_UUID)) {
+ 		log_debug("replace incorrect lvmlv device id type for %u %s", du->idtype, du->idname);
+ 		du->idtype = DEV_ID_TYPE_LVMLV_UUID;
+ 		return;
+@@ -2681,9 +2681,9 @@ static int _match_du_to_dev(struct cmd_context *cmd, struct dev_use *du, struct
+ 	 * by updating du->idtype to have the correct idtype based on the
+ 	 * idname dm prefix.
+ 	 */
+-	if (((du->idtype == DEV_ID_TYPE_MPATH_UUID) && !dm_uuid_has_prefix(du->idname, "mpath-")) ||
+-	    ((du->idtype == DEV_ID_TYPE_CRYPT_UUID) && !dm_uuid_has_prefix(du->idname, "CRYPT-")) ||
+-	    ((du->idtype == DEV_ID_TYPE_LVMLV_UUID) && !dm_uuid_has_prefix(du->idname, "LVM")))
++	if (((du->idtype == DEV_ID_TYPE_MPATH_UUID) && !_dm_uuid_has_prefix(du->idname, "mpath-")) ||
++	    ((du->idtype == DEV_ID_TYPE_CRYPT_UUID) && !_dm_uuid_has_prefix(du->idname, "CRYPT-")) ||
++	    ((du->idtype == DEV_ID_TYPE_LVMLV_UUID) && !_dm_uuid_has_prefix(du->idname, "LVM")))
+ 		_replace_incorrect_dm_idtype(du);
+ 
+ 	/*
+diff --git a/lib/metadata/lv.c b/lib/metadata/lv.c
+index 7476cef8d..0917cdd4e 100644
+--- a/lib/metadata/lv.c
++++ b/lib/metadata/lv.c
+@@ -1552,7 +1552,7 @@ char *lv_attr_dup_with_info_and_seg_status(struct dm_pool *mem, const struct lv_
+ 
+ 		if (!activation())
+ 			repstr[8] = 'X';	/* Unknown */
+-		else if (!lv_raid_healthy(lv))
++		else if (!lv_raid_healthy(lv, NULL))
+ 			repstr[8] = 'r';  /* RAID needs 'r'efresh */
+ 		else if (lv_is_raid(lv)) {
+ 			if (lv_raid_mismatch_count(lv, &n) && n)
+diff --git a/lib/report/report.c b/lib/report/report.c
+index 049accf41..ab0675f69 100644
+--- a/lib/report/report.c
++++ b/lib/report/report.c
+@@ -4005,7 +4005,7 @@ static int _lvhealthstatus_disp(struct dm_report *rh, struct dm_pool *mem,
+ 	else if (lv_is_raid_type(lv)) {
+ 		if (!activation())
+ 			health = "unknown";
+-		else if (!lv_raid_healthy(lv))
++		else if (!lv_raid_healthy(lv, NULL))
+ 			health = "refresh needed";
+ 		else if (lv_is_raid(lv)) {
+ 			if (lv_raid_mismatch_count(lv, &n) && n)
+diff --git a/tools/reporter.c b/tools/reporter.c
+index e88b8fa72..f4255680c 100644
+--- a/tools/reporter.c
++++ b/tools/reporter.c
+@@ -155,7 +155,7 @@ static int _check_merging_origin(const struct logical_volume *lv,
+ 
+ static void _cond_warn_raid_volume_health(struct cmd_context *cmd, const struct logical_volume *lv)
+ {
+-	if (lv_is_raid(lv) && !lv_raid_healthy(lv) && !lv_is_partial(lv))
++	if (lv_is_raid(lv) && !lv_raid_healthy(lv, NULL) && !lv_is_partial(lv))
+ 		log_warn("WARNING: RaidLV %s needs to be refreshed!  See character 'r' at position 9 in the RaidLV's attributes%s.", display_lvname(lv),
+ 			 arg_is_set(cmd, all_ARG) ? " and its SubLV(s)" : " and also its SubLV(s) with option '-a'");
+ }
+-- 
+2.54.0
+

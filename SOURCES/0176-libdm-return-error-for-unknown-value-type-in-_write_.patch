@@ -1,0 +1,31 @@
+From 3c407234b27a57803a073a8d170cced508c6fe2b Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Tue, 21 Apr 2026 15:51:16 +0200
+Subject: [PATCH 176/211] libdm: return error for unknown value type in
+ _write_value
+
+The default case logged an error but fell through to return 1
+(success), making serialization silently produce incomplete output.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit 51ba4ec56e34fdac37ce02c4e74baef49e000560)
+---
+ libdm/libdm-config.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/libdm/libdm-config.c b/libdm/libdm-config.c
+index 0f1b7a6bc..4eb28f79a 100644
+--- a/libdm/libdm-config.c
++++ b/libdm/libdm-config.c
+@@ -352,7 +352,7 @@ static int _write_value(struct config_output *out, const struct dm_config_value
+ 
+ 	default:
+ 		log_error("_write_value: Unknown value type: %d", v->type);
+-
++		return 0;
+ 	}
+ 
+ 	return 1;
+-- 
+2.54.0
+

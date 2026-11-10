@@ -1,0 +1,35 @@
+From 8501f437d4c0790c65d7b18525390baa3b168f47 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Sun, 19 Apr 2026 15:14:09 +0200
+Subject: [PATCH 193/211] lvcreate: fix recovery rate check when max is unset
+
+Without the guard, specifying only --minrecoveryrate without
+--maxrecoveryrate caused max_recovery_rate (defaulting to 0, meaning
+no limit) to be incorrectly capped to min_recovery_rate.
+
+Match the logic used in lvchange and merge validation which both
+check max_recovery_rate is non-zero before comparing.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit 969ba3c562dbe65cf52c81a51bf700e551329881)
+---
+ tools/lvcreate.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/tools/lvcreate.c b/tools/lvcreate.c
+index ef6875f55..e9a242ccb 100644
+--- a/tools/lvcreate.c
++++ b/tools/lvcreate.c
+@@ -594,7 +594,8 @@ static int _read_raid_params(struct cmd_context *cmd,
+ 		lp->min_recovery_rate = arg_uint_value(cmd, minrecoveryrate_ARG, 0) / 2;
+ 		lp->max_recovery_rate = arg_uint_value(cmd, maxrecoveryrate_ARG, 0) / 2;
+ 
+-		if (lp->min_recovery_rate > lp->max_recovery_rate) {
++		if (lp->max_recovery_rate &&
++		    lp->min_recovery_rate > lp->max_recovery_rate) {
+ 			log_print_unless_silent("Minimum recovery rate cannot be higher than maximum, adjusting.");
+ 			lp->max_recovery_rate = lp->min_recovery_rate;
+ 		}
+-- 
+2.54.0
+

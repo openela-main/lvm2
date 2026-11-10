@@ -1,0 +1,32 @@
+From 58d413836eab837f113dfd741c999719d9e3ca16 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Wed, 1 Apr 2026 20:33:27 +0200
+Subject: [PATCH 073/211] cov: device_id: fix NULL dereference in _dev_has_id
+
+Add NULL check for idname parameter before strcmp() call.
+The function could crash when called with NULL idname from
+device_ids_check_serial() if du->idname was unexpectedly NULL.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit 035d0bf5b8e044198f4233e42f3f8f9de011c297)
+---
+ lib/device/device_id.c | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/lib/device/device_id.c b/lib/device/device_id.c
+index 4bb92cb09..6ec8f43ba 100644
+--- a/lib/device/device_id.c
++++ b/lib/device/device_id.c
+@@ -1199,6 +1199,9 @@ static int _dev_has_id(struct device *dev, uint16_t idtype, const char *idname)
+ {
+ 	struct dev_id *id;
+ 
++	if (!idname)
++		return 0;
++
+ 	dm_list_iterate_items(id, &dev->ids) {
+ 		if (id->idtype != idtype)
+ 			continue;
+-- 
+2.54.0
+

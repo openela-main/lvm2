@@ -1,0 +1,44 @@
+From bbc86311afbcc9ecb04d84948b83df1a5f583c9b Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Sun, 19 Apr 2026 11:43:21 +0200
+Subject: [PATCH 187/211] lvmlockd: fix lockspace use after mutex unlock in
+ work_init_vg
+
+The log_error at the EEXIST check accessed ls->name and
+ls->vg_name after releasing lockspaces_mutex. Another thread
+could free the lockspace between the unlock and the access.
+
+Move the log_error before the mutex unlock so the lockspace
+struct is accessed only while the lock is held.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit 149bce1bfda1506e88dc5c6efd2388c1dec7c428)
+---
+ daemons/lvmlockd/lvmlockd-core.c | 8 ++++----
+ 1 file changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/daemons/lvmlockd/lvmlockd-core.c b/daemons/lvmlockd/lvmlockd-core.c
+index 406c88396..a551e55fc 100644
+--- a/daemons/lvmlockd/lvmlockd-core.c
++++ b/daemons/lvmlockd/lvmlockd-core.c
+@@ -3691,13 +3691,13 @@ static int work_init_vg(struct action *act)
+ 			break;
+ 		}
+ 	}
+-	pthread_mutex_unlock(&lockspaces_mutex);
+-
+-	if (rv == -EEXIST) {
++	if (rv == -EEXIST)
+ 		log_error("Existing lockspace name %s matches new %s VG names %s %s",
+ 			  ls->name, ls_name, ls->vg_name, act->vg_name);
++	pthread_mutex_unlock(&lockspaces_mutex);
++
++	if (rv == -EEXIST)
+ 		return rv;
+-	}
+ 
+ 	if (act->lm_type == LD_LM_SANLOCK)
+ 		rv = lm_init_vg_sanlock(ls_name, act->vg_name, act->flags, act->vg_args, act->align_mb);
+-- 
+2.54.0
+

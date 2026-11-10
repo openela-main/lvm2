@@ -1,0 +1,32 @@
+From 6bbf2f55027d9a4db50572c514fb6a37cd988431 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Fri, 3 Apr 2026 14:37:02 +0200
+Subject: [PATCH 098/211] cov: lv: fix off-by-one in
+ _sublvs_remove_after_reshape
+
+The backward loop 'for (s = area_count-1; s; s--)' never checked
+area index 0.  While area 0 is unlikely to be marked for removal
+after reshape, use a standard forward loop for clarity.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit ba2fef12d6351347e0bd2ab6cef950d47617a727)
+---
+ lib/metadata/lv.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/lib/metadata/lv.c b/lib/metadata/lv.c
+index 2ecc4cf4e..c7b213067 100644
+--- a/lib/metadata/lv.c
++++ b/lib/metadata/lv.c
+@@ -1296,7 +1296,7 @@ static int _sublvs_remove_after_reshape(const struct logical_volume *lv)
+ 	uint32_t s;
+ 	struct lv_segment *seg = first_seg(lv);
+ 
+-	for (s = seg->area_count -1; s; s--)
++	for (s = 0; s < seg->area_count; s++)
+ 		if (seg_lv(seg, s)->status & LV_REMOVE_AFTER_RESHAPE)
+ 			return 1;
+ 
+-- 
+2.54.0
+

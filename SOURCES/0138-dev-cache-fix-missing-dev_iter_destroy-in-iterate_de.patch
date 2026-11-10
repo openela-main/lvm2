@@ -1,0 +1,37 @@
+From 8ae8f80d5234875e22a753b664f8ffa77754fb20 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Fri, 3 Apr 2026 09:04:35 +0200
+Subject: [PATCH 138/211] dev-cache: fix missing dev_iter_destroy in
+ iterate_devs_for_index
+
+Add missing dev_iter_destroy() call before return in
+_dev_cache_iterate_devs_for_index().
+
+The leak only occurs on the udev scanning path - the non-udev sysfs
+fallback (_dev_cache_iterate_sysfs_for_index) reads sysfs directly
+without using an iterator.  Since the function is called once per
+command, the leak is small (iterator struct + values array), which
+explains why it was not caught in normal testing.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit 9d98bf8a448a58d56417daa127b8cd5002184c00)
+---
+ lib/device/dev-cache.c | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/lib/device/dev-cache.c b/lib/device/dev-cache.c
+index 24a4d91c5..8f9ef1bd7 100644
+--- a/lib/device/dev-cache.c
++++ b/lib/device/dev-cache.c
+@@ -912,6 +912,8 @@ static int _dev_cache_iterate_devs_for_index(struct cmd_context *cmd)
+ 		if (!_index_dev_by_vgid_and_lvid(cmd, dev))
+ 			r = 0;
+ 
++	dev_iter_destroy(iter);
++
+ 	return r;
+ }
+ 
+-- 
+2.54.0
+

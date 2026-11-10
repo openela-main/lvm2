@@ -1,0 +1,62 @@
+From 884d5e0dd0afca46d2f72b9448a6fa9e1cddf1c1 Mon Sep 17 00:00:00 2001
+From: Mike Gilbert <floppym@gentoo.org>
+Date: Fri, 13 Feb 2026 21:47:12 -0500
+Subject: [PATCH 144/211] bcache: report libaio errors properly
+
+io_getevents and io_destroy return a negative error value instead of
+setting errno.
+
+Bug: https://bugs.gentoo.org/970017
+(cherry picked from commit 512a3944893af8c1d4ce69c69d2ae587aebf2b08)
+---
+ lib/device/bcache.c | 12 +++++++-----
+ 1 file changed, 7 insertions(+), 5 deletions(-)
+
+diff --git a/lib/device/bcache.c b/lib/device/bcache.c
+index 915db250c..2ecad6376 100644
+--- a/lib/device/bcache.c
++++ b/lib/device/bcache.c
+@@ -40,9 +40,9 @@ static int *_fd_table = NULL;
+ 
+ //----------------------------------------------------------------
+ 
+-static void log_sys_warn(const char *call)
++static void log_sys_warn(const char *call, int err)
+ {
+-	log_warn("WARNING: %s failed: %s.", call, strerror(errno));
++	log_warn("WARNING: %s failed: %s.", call, strerror(err));
+ }
+ 
+ // Assumes the list is not empty.
+@@ -141,6 +141,7 @@ static struct async_engine *_to_async(struct io_engine *e)
+ 
+ static void _async_destroy(struct io_engine *ioe)
+ {
++	int r;
+ 	struct async_engine *e = _to_async(ioe);
+ 
+ 	_cb_set_destroy(e->cbs);
+@@ -155,8 +156,9 @@ static void _async_destroy(struct io_engine *ioe)
+ 			log_debug_devs("Skipping AIO context destroy for different pid.");
+ 		else {
+ 			log_debug_devs("Destroy AIO context.");
+-			if (io_destroy(e->aio_context)) // really slow (~40ms)
+-				log_sys_warn("io_destroy");
++			r = io_destroy(e->aio_context); // really slow (~40ms)
++			if (r < 0)
++				log_sys_warn("io_destroy", -r);
+ 		}
+ 	}
+ 
+@@ -331,7 +333,7 @@ static bool _async_wait(struct io_engine *ioe, io_complete_fn fn)
+ 	r = io_getevents(e->aio_context, 1, MAX_EVENT, event, NULL);
+ 
+ 	if (r < 0) {
+-		log_sys_warn("io_getevents");
++		log_sys_warn("io_getevents", -r);
+ 		return false;
+ 	}
+ 
+-- 
+2.54.0
+

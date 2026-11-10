@@ -1,0 +1,35 @@
+From 5a9623ddea7094bb7fd3dc1124a495be9762bf67 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Wed, 1 Apr 2026 20:56:58 +0200
+Subject: [PATCH 080/211] cov: config: check for size overflow in
+ config_file_read_fd
+
+Add overflow check for size + size2 before buffer allocation.
+On 32-bit systems, the size_t addition could wrap, allocating
+a small buffer followed by a large read into it.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit f9dfc2223ccf94e3e9589d8249f48a658a214339)
+---
+ lib/config/config.c | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/lib/config/config.c b/lib/config/config.c
+index 53d6fc9a0..9cc010e46 100644
+--- a/lib/config/config.c
++++ b/lib/config/config.c
+@@ -513,6 +513,11 @@ int config_file_read_fd(struct dm_config_tree *cft, struct device *dev, dev_io_r
+ 
+ 	/* Ensure there is extra '\0' after end of buffer since we pass
+ 	 * buffer to functions like strtoll() */
++	if (size + size2 < size) {
++		log_error("Metadata buffer size overflow.");
++		return 0;
++	}
++
+ 	if (!(buf = zalloc(size + size2 + 1))) {
+ 		log_error("Failed to allocate circular buffer.");
+ 		return 0;
+-- 
+2.54.0
+

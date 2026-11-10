@@ -1,0 +1,43 @@
+From c51e71383068fc61ebfc8a241509454cda48c3fd Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Fri, 3 Apr 2026 12:04:54 +0200
+Subject: [PATCH 119/211] libdm: stats: fix bitwise AND and use escaped
+ aux_data
+
+Fix two bugs:
+- Histogram parsing used bitwise & instead of logical && to check
+  for unexpected characters, causing some chars to be missed.
+- stats_create message used unescaped aux_data instead of
+  aux_data_escaped, defeating the escaping done just above.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit 55f9f953c663a3f3545c6afe73e9d2d43ce7dcf1)
+---
+ libdm/libdm-stats.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/libdm/libdm-stats.c b/libdm/libdm-stats.c
+index 53c3c5480..6e6d63a8b 100644
+--- a/libdm/libdm-stats.c
++++ b/libdm/libdm-stats.c
+@@ -1248,7 +1248,7 @@ static int _stats_parse_histogram(struct dm_pool *mem, char *hist_str,
+ 
+ 			if (*c == ':')
+ 				c++;
+-			else if (*c & (*c != '\n'))
++			else if (*c && (*c != '\n'))
+ 				/* Expected ':', '\n', or NULL. */
+ 				goto badchar;
+ 
+@@ -2060,7 +2060,7 @@ static int _stats_create_region(struct dm_stats *dms, uint64_t *region_id,
+ 			" %s %s %s", (start || len) ? range : "-",
+ 			(step < 0) ? "/" : "",
+ 			(uint64_t)llabs(step),
+-			opt_args, program_id, aux_data) < 0) {
++			opt_args, program_id, aux_data_escaped) < 0) {
+ 		err = "message";
+ 		goto_bad;
+ 	}
+-- 
+2.54.0
+

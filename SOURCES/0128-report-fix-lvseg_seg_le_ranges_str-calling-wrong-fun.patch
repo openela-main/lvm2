@@ -1,0 +1,31 @@
+From 9e70f14abecee521f3036d0a8bca90646f8f83c2 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Fri, 3 Apr 2026 08:34:15 +0200
+Subject: [PATCH 128/211] report: fix lvseg_seg_le_ranges_str calling wrong
+ function
+
+lvseg_seg_le_ranges_str() was calling lvseg_seg_pe_ranges() instead
+of lvseg_seg_le_ranges(), missing the report_mark_hidden_devices flag.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit 826632ee8890fd9305f270f6c3ee09ad4fd8422c)
+---
+ lib/metadata/lv.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/lib/metadata/lv.c b/lib/metadata/lv.c
+index 164ad7aba..7476cef8d 100644
+--- a/lib/metadata/lv.c
++++ b/lib/metadata/lv.c
+@@ -188,7 +188,7 @@ char *lvseg_seg_le_ranges_str(struct dm_pool *mem, const struct lv_segment *seg)
+ {
+ 	struct dm_list *list;
+ 
+-	if (!(list = lvseg_seg_pe_ranges(mem, seg)))
++	if (!(list = lvseg_seg_le_ranges(mem, seg)))
+ 		return_NULL;
+ 
+ 	return str_list_to_str(mem, list, seg->lv->vg->cmd->report_list_item_separator);
+-- 
+2.54.0
+

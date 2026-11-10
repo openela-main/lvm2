@@ -1,0 +1,129 @@
+From 0c5fb9c14a75042620ddd43de513f1a1119e60be Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Fri, 3 Apr 2026 21:37:54 +0200
+Subject: [PATCH 063/211] cov: libdm: fix TOCTOU race in
+ _sysfs_find_kernel_name
+
+Remove stat() check before opendir() to eliminate TOCTOU race.
+Instead, call opendir() directly and check errno:
+- ENOTDIR: silently skip (path is not a directory)
+- Other errors: log with log_sys_debug()
+
+This simplifies the code and eliminates the race condition.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit f2f410e28db30a37e70fb7b2920ea1bd95d96d15)
+---
+ libdm/libdm-common.c | 80 +++++++++++++++++++++-----------------------
+ 1 file changed, 38 insertions(+), 42 deletions(-)
+
+diff --git a/libdm/libdm-common.c b/libdm/libdm-common.c
+index e4fdbbf05..21bdd826e 100644
+--- a/libdm/libdm-common.c
++++ b/libdm/libdm-common.c
+@@ -1906,7 +1906,6 @@ static int _sysfs_find_kernel_name(uint32_t major, uint32_t minor, char *buf, si
+ 	char path[PATH_MAX];
+ 	struct dirent *dirent, *dirent_dev;
+ 	DIR *d, *d_dev;
+-	struct stat st;
+ 	int r = 0, sz;
+ 
+ 	if (!*_sysfs_dir ||
+@@ -1938,56 +1937,53 @@ static int _sysfs_find_kernel_name(uint32_t major, uint32_t minor, char *buf, si
+ 		}
+ 
+ 		path[sz - 4] = 0; /* strip /dev from end of path string */
+-		if (stat(path, &st))
++
++		/* let's assume there is no tree-complex device in past systems */
++		if (!(d_dev = opendir(path))) {
++			/* Silently skip non-directories, log other errors */
++			if (errno != ENOTDIR)
++				log_sys_debug("opendir", path);
+ 			continue;
++		}
+ 
+-		if (S_ISDIR(st.st_mode)) {
++		while ((dirent_dev = readdir(d_dev))) {
++			name_dev = dirent_dev->d_name;
++
++			/* skip known ignorable paths */
++			if (!strcmp(name_dev, ".") || !strcmp(name_dev, "..") ||
++			    !strcmp(name_dev, "bdi") ||
++			    !strcmp(name_dev, "dev") ||
++			    !strcmp(name_dev, "device") ||
++			    !strcmp(name_dev, "holders") ||
++			    !strcmp(name_dev, "integrity") ||
++			    !strcmp(name_dev, "loop") ||
++			    !strcmp(name_dev, "queue") ||
++			    !strcmp(name_dev, "md") ||
++			    !strcmp(name_dev, "mq") ||
++			    !strcmp(name_dev, "power") ||
++			    !strcmp(name_dev, "removable") ||
++			    !strcmp(name_dev, "slave") ||
++			    !strcmp(name_dev, "slaves") ||
++			    !strcmp(name_dev, "subsystem") ||
++			    !strcmp(name_dev, "trace") ||
++			    !strcmp(name_dev, "uevent"))
++				continue;
+ 
+-			/* let's assume there is no tree-complex device in past systems */
+-			if (!(d_dev = opendir(path))) {
+-				log_sys_debug("opendir", path);
++			if (dm_snprintf(path, sizeof(path), "%sblock/%s/%s/dev",
++					_sysfs_dir, name, name_dev) == -1) {
++				log_warn("Couldn't create path for %s/%s.", name, name_dev);
+ 				continue;
+ 			}
+ 
+-			while ((dirent_dev = readdir(d_dev))) {
+-				name_dev = dirent_dev->d_name;
+-
+-				/* skip known ignorable paths */
+-				if (!strcmp(name_dev, ".") || !strcmp(name_dev, "..") ||
+-				    !strcmp(name_dev, "bdi") ||
+-				    !strcmp(name_dev, "dev") ||
+-				    !strcmp(name_dev, "device") ||
+-				    !strcmp(name_dev, "holders") ||
+-				    !strcmp(name_dev, "integrity") ||
+-				    !strcmp(name_dev, "loop") ||
+-				    !strcmp(name_dev, "queue") ||
+-				    !strcmp(name_dev, "md") ||
+-				    !strcmp(name_dev, "mq") ||
+-				    !strcmp(name_dev, "power") ||
+-				    !strcmp(name_dev, "removable") ||
+-				    !strcmp(name_dev, "slave") ||
+-				    !strcmp(name_dev, "slaves") ||
+-				    !strcmp(name_dev, "subsystem") ||
+-				    !strcmp(name_dev, "trace") ||
+-				    !strcmp(name_dev, "uevent"))
+-					continue;
+-
+-				if (dm_snprintf(path, sizeof(path), "%sblock/%s/%s/dev",
+-						_sysfs_dir, name, name_dev) == -1) {
+-					log_warn("Couldn't create path for %s/%s.", name, name_dev);
+-					continue;
+-				}
+-
+-				if (_sysfs_get_dev_major_minor(path, major, minor)) {
+-					r = dm_strncpy(buf, name_dev, buf_size);
+-					break; /* found */
+-				}
++			if (_sysfs_get_dev_major_minor(path, major, minor)) {
++				r = dm_strncpy(buf, name_dev, buf_size);
++				break; /* found */
+ 			}
++		}
+ 
+-			if (closedir(d_dev))
+-				log_sys_debug("closedir", name);
++		if (closedir(d_dev))
++			log_sys_debug("closedir", name);
+ 		}
+-	}
+ 
+ 	if (closedir(d))
+ 		log_sys_debug("closedir", path);
+-- 
+2.54.0
+

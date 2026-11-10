@@ -1,0 +1,30 @@
+From f91776679e0c0191ebfe198ee7d3fba806dc44ad Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Sun, 19 Apr 2026 16:59:39 +0200
+Subject: [PATCH 166/211] vgimportclone: fix VG lock leak on second lock_vol
+ failure
+
+When locking old_vgname failed, the already-acquired lock on
+new_vgname was not released before goto out.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit 20d9142c3b9769d967a18d51b7a4787b89c2f855)
+---
+ tools/vgimportclone.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/tools/vgimportclone.c b/tools/vgimportclone.c
+index f1852cda2..76c8e0d7f 100644
+--- a/tools/vgimportclone.c
++++ b/tools/vgimportclone.c
+@@ -465,6 +465,7 @@ retry_name:
+ 
+ 	if (!lock_vol(cmd, vp.old_vgname, LCK_VG_WRITE, NULL)) {
+ 		log_error("Can't get lock for VG name %s", vp.old_vgname);
++		unlock_vg(cmd, NULL, vp.new_vgname);
+ 		goto out;
+ 	}
+ 
+-- 
+2.54.0
+

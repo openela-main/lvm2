@@ -1,0 +1,80 @@
+From f62fa4b34736978650523e2ffed0d6d0acb249a1 Mon Sep 17 00:00:00 2001
+From: Peter Rajnoha <prajnoha@redhat.com>
+Date: Thu, 26 Mar 2026 12:42:32 +0100
+Subject: [PATCH 122/211] libdm: fix row sorting for string list fields
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+_row_compare was treating the sort_value of DM_REPORT_FIELD_TYPE_STRING_LIST
+fields as a plain char pointer, but it is actually a pointer to
+struct str_list_sort_value. This caused strcmp to compare the raw bytes
+of the struct (starting with a pointer) instead of the actual string
+content, producing effectively random sort order for string list fields.
+
+Fix by extracting the display string (sortval->value) from
+str_list_sort_value before comparing with strcmp.
+
+For example, before this patch:
+
+  ❯  lvs -o lv_name,lv_layout -O lv_layout vg
+    lv_name lv_layout
+    lvol5   raid,raid1
+    lvol4   thin,sparse
+    lvol3   thin,sparse
+    lvol2   thin,sparse
+    lvol0   raid,raid1
+    pool    thin,pool
+
+With this patch applied:
+
+  ❯  lvs -o lv_name,lv_layout -O lv_layout vg
+    lv_name lv_layout
+    lvol0   raid,raid1
+    lvol5   raid,raid1
+    pool    thin,pool
+    lvol2   thin,sparse
+    lvol3   thin,sparse
+    lvol4   thin,sparse
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+(cherry picked from commit 424e995f6daeb56eeccec4b3d54d151d4e259040)
+---
+ libdm/libdm-report.c | 20 +++++++++++++++-----
+ 1 file changed, 15 insertions(+), 5 deletions(-)
+
+diff --git a/libdm/libdm-report.c b/libdm/libdm-report.c
+index 6022fef8f..13bc9a1e5 100644
+--- a/libdm/libdm-report.c
++++ b/libdm/libdm-report.c
+@@ -4640,12 +4640,22 @@ static int _row_compare(const void *a, const void *b)
+ 			} else {	/* FLD_DESCENDING */
+ 				return (numa < numb) ? 1 : -1;
+ 			}
++		} else if (sfa->props->flags & DM_REPORT_FIELD_TYPE_STRING_LIST) {
++			int cmp = strcmp(((const struct str_list_sort_value *) sfa->sort_value)->value,
++					((const struct str_list_sort_value *) sfb->sort_value)->value);
++
++			if (!cmp)
++				continue;
++
++			if (sfa->props->flags & FLD_ASCENDING) {
++				return (cmp > 0) ? 1 : -1;
++			} else {	/* FLD_DESCENDING */
++				return (cmp < 0) ? 1 : -1;
++			}
+ 		} else {
+-			/* DM_REPORT_FIELD_TYPE_STRING
+-			 * DM_REPORT_FIELD_TYPE_STRING_LIST */
+-			const char *stra = (const char *) sfa->sort_value;
+-			const char *strb = (const char *) sfb->sort_value;
+-			int cmp = strcmp(stra, strb);
++			/* DM_REPORT_FIELD_TYPE_STRING and others */
++			int cmp = strcmp((const char *) sfa->sort_value,
++					(const char *) sfb->sort_value);
+ 
+ 			if (!cmp)
+ 				continue;
+-- 
+2.54.0
+

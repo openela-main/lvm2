@@ -1,0 +1,51 @@
+From 8302dcc16a39c477171ed7a56d13080db0b3c6e8 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Tue, 21 Apr 2026 13:50:49 +0200
+Subject: [PATCH 164/211] toollib: fix memory leak in process_each_label
+ duplicate handling
+
+process_each_label() used malloc() to allocate device_list entries
+for the process_duplicates list.  These allocations were never freed,
+causing a memory leak when a duplicate PV device was reported.
+
+The leak is triggered when two block devices share the same PV UUID
+and one is classified as an "unused duplicate" by lvmcache.  For
+example:
+
+  pvcreate /dev/sda
+  dd if=/dev/sda of=/dev/sdb bs=4k count=2
+  pvs -o name /dev/sda /dev/sdb
+
+The dd copies the PV label (including PVID) to the second device.
+During label_scan, lvmcache picks one device as preferred and puts
+the other in _unused_duplicates.  When process_each_label() iterates
+the argv list, it detects the unused duplicate and allocates a
+device_list entry with malloc(), but never frees it.
+
+Replace malloc() with dm_pool_zalloc(cmd->mem, ...) to use the
+command memory pool, consistent with all other device_list allocations
+in the codebase (lvmcache.c, label.c).  The pool is freed
+automatically when the command finishes.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit 63340783c81d1d453ea7ce419033c90f01fb22ed)
+---
+ tools/toollib.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/tools/toollib.c b/tools/toollib.c
+index b9fa67446..916aa6856 100644
+--- a/tools/toollib.c
++++ b/tools/toollib.c
+@@ -1850,7 +1850,7 @@ int process_each_label(struct cmd_context *cmd, int argc, char **argv,
+ 					log_error("No physical volume label read from %s.", argv[opt]);
+ 					ret_max = ECMD_FAILED;
+ 				} else {
+-					if (!(devl = malloc(sizeof(*devl))))
++					if (!(devl = dm_pool_zalloc(cmd->mem, sizeof(*devl))))
+ 						return_0;
+ 					devl->dev = dev;
+ 					dm_list_add(&process_duplicates, &devl->list);
+-- 
+2.54.0
+

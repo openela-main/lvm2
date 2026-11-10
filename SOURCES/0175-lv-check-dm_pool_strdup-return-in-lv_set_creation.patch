@@ -1,0 +1,33 @@
+From bc855407bd841206443eef82023c18212514f1cf Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Mon, 20 Apr 2026 21:38:02 +0200
+Subject: [PATCH 175/211] lv: check dm_pool_strdup return in lv_set_creation
+
+When hostname is provided but dm_pool_strdup fails, lv->hostname
+is set to NULL and the function returns 1 (success), so the caller
+believes hostname was set. Return failure instead.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit b3936fccda11821cdc0b37e0c7146fb189f1916a)
+---
+ lib/metadata/lv.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/lib/metadata/lv.c b/lib/metadata/lv.c
+index 0917cdd4e..90a0c9e86 100644
+--- a/lib/metadata/lv.c
++++ b/lib/metadata/lv.c
+@@ -1633,8 +1633,8 @@ int lv_set_creation(struct logical_volume *lv,
+ 		}
+ 
+ 		lv->hostname = _utsname.nodename;
+-	} else
+-		lv->hostname = dm_pool_strdup(lv->vg->vgmem, hostname);
++	} else if (!(lv->hostname = dm_pool_strdup(lv->vg->vgmem, hostname)))
++		return_0;
+ 
+ 	lv->timestamp = timestamp ? : (uint64_t) time(NULL);
+ 
+-- 
+2.54.0
+

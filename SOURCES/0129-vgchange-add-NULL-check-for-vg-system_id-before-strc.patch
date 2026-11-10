@@ -1,0 +1,31 @@
+From 84f108796ba80141465c035de75d36ac52a08b23 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Fri, 3 Apr 2026 11:42:41 +0200
+Subject: [PATCH 129/211] vgchange: add NULL check for vg->system_id before
+ strcmp
+
+vg->system_id can be NULL (set in vg.c and metadata.c), so
+strcmp without a NULL check may cause undefined behavior.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit 0e95d6933e2901e765a34d849f70ad718af66cf5)
+---
+ tools/vgchange.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/tools/vgchange.c b/tools/vgchange.c
+index deefbfe6d..2ffd73ca1 100644
+--- a/tools/vgchange.c
++++ b/tools/vgchange.c
+@@ -559,7 +559,7 @@ static int _vgchange_system_id(struct cmd_context *cmd, struct volume_group *vg)
+ 		return 0;
+ 	}
+ 
+-	if (!strcmp(vg->system_id, system_id)) {
++	if (vg->system_id && !strcmp(vg->system_id, system_id)) {
+ 		log_error("Volume Group system ID is already \"%s\".", vg->system_id);
+ 		return 0;
+ 	}
+-- 
+2.54.0
+

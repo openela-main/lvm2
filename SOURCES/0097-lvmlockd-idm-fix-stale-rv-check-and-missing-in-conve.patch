@@ -1,0 +1,44 @@
+From 437fa65fa0438d92c44e9ee647d1cee6cfdf416d Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Fri, 3 Apr 2026 12:55:14 +0200
+Subject: [PATCH 097/211] lvmlockd-idm: fix stale rv check and missing & in
+ convert
+
+1. lm_lock_idm() checked stale 'rv' instead of 'rdi->op.mode' after
+   to_idm_mode(), so invalid lock modes were never caught.
+
+2. lm_convert_idm() passed vb_timestamp value as pointer (missing &),
+   causing ilm_write_lvb() to read from an arbitrary address.
+   The correct pattern with & is used in lm_unlock_idm().
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit 0a04cb3d1f1cf377c1f49453d90381ca25857957)
+---
+ daemons/lvmlockd/lvmlockd-idm.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/daemons/lvmlockd/lvmlockd-idm.c b/daemons/lvmlockd/lvmlockd-idm.c
+index bfba4f59b..92c7e56ab 100644
+--- a/daemons/lvmlockd/lvmlockd-idm.c
++++ b/daemons/lvmlockd/lvmlockd-idm.c
+@@ -547,7 +547,7 @@ int lm_lock_idm(struct lockspace *ls, struct resource *r, int ld_mode,
+ 	}
+ 
+ 	rdi->op.mode = to_idm_mode(ld_mode);
+-	if (rv < 0) {
++	if (rdi->op.mode < 0) {
+ 		log_error("lock_idm invalid mode %d", ld_mode);
+ 		return -EINVAL;
+ 	}
+@@ -725,7 +725,7 @@ int lm_convert_idm(struct lockspace *ls, struct resource *r,
+ 
+ 	if (rdi->vb && r_version && (r->mode == LD_LK_EX)) {
+ 		rv = ilm_write_lvb(lmi->sock, &rdi->id,
+-				   (char *)rdi->vb_timestamp, sizeof(uint64_t));
++				   (char *)&rdi->vb_timestamp, sizeof(uint64_t));
+ 		if (rv < 0) {
+ 			log_error("S %s R %s convert_idm write lvb error %d",
+ 				  ls->name, r->name, rv);
+-- 
+2.54.0
+

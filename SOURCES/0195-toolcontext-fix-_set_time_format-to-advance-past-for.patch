@@ -1,0 +1,34 @@
+From f668263eb9fd769af988da3b4b62cb6b021ea28b Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Sat, 18 Apr 2026 21:44:51 +0200
+Subject: [PATCH 195/211] toolcontext: fix _set_time_format to advance past
+ format specifier
+
+After validating a %-format sequence, p_fmt was not advanced past
+the format character. On the next loop iteration the same character
+was re-processed via the isprint() branch. For most specifiers this
+was merely inefficient, but for "%%" it caused false rejection:
+the second '%' re-entered the format branch, read '\0', and failed
+validation - even though "%%" is a valid strftime literal-percent.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit 380f712bb50b3ad4882c1acda2e24250560b6c27)
+---
+ lib/commands/toolcontext.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/lib/commands/toolcontext.c b/lib/commands/toolcontext.c
+index 30fc5d4f2..2c8d6896d 100644
+--- a/lib/commands/toolcontext.c
++++ b/lib/commands/toolcontext.c
+@@ -538,6 +538,7 @@ static const char *_set_time_format(struct cmd_context *cmd)
+ 				}
+ 				if (!chars_to_check[i])
+ 					goto_bad;
++				p_fmt++;
+ 			}
+ 			else if (isprint(c))
+ 				p_fmt++;
+-- 
+2.54.0
+

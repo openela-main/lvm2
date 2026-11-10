@@ -1,0 +1,30 @@
+From 895b49acb8fd5a10d0bb7ae243fe430386aee0a2 Mon Sep 17 00:00:00 2001
+From: Mike Gilbert <floppym@gentoo.org>
+Date: Fri, 13 Feb 2026 22:03:32 -0500
+Subject: [PATCH 145/211] bcache: retry io_getevents on EINTR
+
+Bug: https://bugs.gentoo.org/970017
+(cherry picked from commit 791a842dea11808d647c1a605ca244d0fc1cdf5d)
+---
+ lib/device/bcache.c | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/lib/device/bcache.c b/lib/device/bcache.c
+index 2ecad6376..4c91402c4 100644
+--- a/lib/device/bcache.c
++++ b/lib/device/bcache.c
+@@ -330,7 +330,10 @@ static bool _async_wait(struct io_engine *ioe, io_complete_fn fn)
+ 	struct async_engine *e = _to_async(ioe);
+ 
+ 	memset(&event, 0, sizeof(event));
+-	r = io_getevents(e->aio_context, 1, MAX_EVENT, event, NULL);
++
++	do {
++		r = io_getevents(e->aio_context, 1, MAX_EVENT, event, NULL);
++	} while (r == -EINTR);
+ 
+ 	if (r < 0) {
+ 		log_sys_warn("io_getevents", -r);
+-- 
+2.54.0
+

@@ -1,0 +1,32 @@
+From 12de2eed0e6bcf34f3f019b53fd7a412299ca429 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Fri, 3 Apr 2026 12:41:41 +0200
+Subject: [PATCH 135/211] dmeventd: fix inverted systemd activation env var
+ check
+
+strcmp(e, "1") returns 0 (false) when strings match, so the condition
+was setting _systemd_activation when env var was NOT "1" and skipping
+it when it WAS "1" -- the exact opposite of the intended behavior.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit 6c0aad9e0f8e844eeae4350d79ba2674c7c4342d)
+---
+ daemons/dmeventd/dmeventd.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/daemons/dmeventd/dmeventd.c b/daemons/dmeventd/dmeventd.c
+index 0c3880787..1ae5ef629 100644
+--- a/daemons/dmeventd/dmeventd.c
++++ b/daemons/dmeventd/dmeventd.c
+@@ -2233,7 +2233,7 @@ static int _restart_dmeventd(struct dm_event_fifos *fifos)
+ 	}
+ 
+ 	if (!_systemd_activation &&
+-	    ((e = getenv(SD_ACTIVATION_ENV_VAR_NAME)) && strcmp(e, "1")))
++	    ((e = getenv(SD_ACTIVATION_ENV_VAR_NAME)) && !strcmp(e, "1")))
+ 		_systemd_activation = 1;
+ 
+ 	fini_fifos(fifos);
+-- 
+2.54.0
+

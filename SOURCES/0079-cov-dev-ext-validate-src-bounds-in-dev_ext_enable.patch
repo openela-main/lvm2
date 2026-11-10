@@ -1,0 +1,35 @@
+From 4341180f04be061e991fa40f215f000069c54243 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Wed, 1 Apr 2026 22:33:49 +0200
+Subject: [PATCH 079/211] cov: dev-ext: validate src bounds in dev_ext_enable
+
+Check that src is within _ext_registry array bounds before
+using it as index. Prevents out of bounds access if src has
+an unexpected value.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit 9cbc486bdc838612c7e3381bb8c198bede81ca77)
+---
+ lib/device/dev-ext.c | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/lib/device/dev-ext.c b/lib/device/dev-ext.c
+index 8f0f519b5..8521b6e0b 100644
+--- a/lib/device/dev-ext.c
++++ b/lib/device/dev-ext.c
+@@ -140,6 +140,12 @@ int dev_ext_release(struct device *dev)
+ 
+ int dev_ext_enable(struct device *dev, dev_ext_t src)
+ {
++	if (src >= DEV_EXT_NUM) {
++		log_error(INTERNAL_ERROR "%s: Invalid external source [%d].",
++			   dev_name(dev), src);
++		return 0;
++	}
++
+ 	if (dev->ext.enabled && (dev->ext.src != src) && !dev_ext_release(dev)) {
+ 		log_error("%s: Failed to enable external handle [%s].",
+ 			   dev_name(dev), _ext_registry[src].name); 
+-- 
+2.54.0
+

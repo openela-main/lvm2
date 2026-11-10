@@ -1,0 +1,30 @@
+From 9ed020b671833bc27368b5de220aaf992991dcb4 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Fri, 3 Apr 2026 11:29:14 +0200
+Subject: [PATCH 107/211] lvm: null correct field after freeing log_rh
+
+After dm_report_free(log_rh), the code was nulling report_group
+(already handled above) instead of log_rh.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit 9e13c72a8d8273195b27fe9c54dc643e51a5a383)
+---
+ tools/lvm.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/tools/lvm.c b/tools/lvm.c
+index b0bbdd8f2..47c03170a 100644
+--- a/tools/lvm.c
++++ b/tools/lvm.c
+@@ -363,7 +363,7 @@ report_log:
+ 
+ 	if (cmd->cmd_report.log_rh) {
+ 		dm_report_free(cmd->cmd_report.log_rh);
+-		cmd->cmd_report.report_group = NULL;
++		cmd->cmd_report.log_rh = NULL;
+ 	}
+ 
+ 	return 0;
+-- 
+2.54.0
+

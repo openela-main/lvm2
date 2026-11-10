@@ -1,0 +1,31 @@
+From afeb1a290bb97ac6a917edbc0df0c163c5f37258 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Tue, 21 Apr 2026 15:52:06 +0200
+Subject: [PATCH 174/211] libdm: preserve format_flags in _clone_config_value
+
+The format_flags field was not copied when cloning config values,
+causing cloned trees to lose formatting metadata (octal, no-quotes,
+extra-spaces, array flags) affecting dm_config_flatten and all
+dm_config_clone_node callers.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit e904079d3bdfd5efe921c4ffc11b28a40882863c)
+---
+ libdm/libdm-config.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/libdm/libdm-config.c b/libdm/libdm-config.c
+index 25b206dbd..0f1b7a6bc 100644
+--- a/libdm/libdm-config.c
++++ b/libdm/libdm-config.c
+@@ -1431,6 +1431,7 @@ static struct dm_config_value *_clone_config_value(struct dm_pool *mem,
+ 	}
+ 
+ 	new_cv->type = v->type;
++	new_cv->format_flags = v->format_flags;
+ 
+ 	if (v->next && !(new_cv->next = _clone_config_value(mem, v->next)))
+ 		return_NULL;
+-- 
+2.54.0
+

@@ -1,0 +1,28 @@
+From c92aa21b94f6c48fdbe6143e6bb72fa2d91d4467 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Fri, 17 Apr 2026 00:10:25 +0200
+Subject: [PATCH 183/211] dmeventd: treat ENODEV same as ENXIO in event wait
+
+Handle ENODEV in _event_wait() to properly detach monitoring
+when a device disappears, instead of entering a retry loop.
+
+(cherry picked from commit 87d3190f5ffd6217166a9cec8f8261f83d89f10e)
+---
+ daemons/dmeventd/dmeventd.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/daemons/dmeventd/dmeventd.c b/daemons/dmeventd/dmeventd.c
+index 1ae5ef629..b28b1e78d 100644
+--- a/daemons/dmeventd/dmeventd.c
++++ b/daemons/dmeventd/dmeventd.c
+@@ -912,6 +912,7 @@ static int _event_wait(struct thread_status *thread)
+ 			dm_task_set_event_nr(thread->wait_task, info.event_nr);
+ 	} else {
+ 		switch (dm_task_get_errno(thread->wait_task)) {
++		case ENODEV:
+ 		case ENXIO:
+ disappeared:
+ 			log_error("%s disappeared, detaching.",
+-- 
+2.54.0
+

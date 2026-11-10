@@ -1,0 +1,47 @@
+From 32ef78b9921da0cda3cd7c9512f6d4b0eee43c62 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Wed, 22 Apr 2026 13:52:52 +0200
+Subject: [PATCH 182/211] dmeventd: reject zero-length daemon response
+
+When the daemon sends a response with size == 0, _daemon_read
+returned success with msg->data == NULL.  The caller then passed
+the NULL pointer to _check_message_id which dereferences it via
+sscanf.  Treat zero-length payload as invalid since a valid
+response always carries at least pid:seqnr.  Also check msg->data
+in daemon_talk to make the NULL guard visible to static analysis.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit 963a72e83e33bc777e6494dfffdeec451fbf9671)
+---
+ daemons/dmeventd/libdevmapper-event.c | 8 +++++---
+ 1 file changed, 5 insertions(+), 3 deletions(-)
+
+diff --git a/daemons/dmeventd/libdevmapper-event.c b/daemons/dmeventd/libdevmapper-event.c
+index 36f119261..67fe61939 100644
+--- a/daemons/dmeventd/libdevmapper-event.c
++++ b/daemons/dmeventd/libdevmapper-event.c
+@@ -263,8 +263,10 @@ static int _daemon_read(struct dm_event_fifos *fifos,
+ 			msg->cmd = ntohl(header[0]);
+ 			bytes = 0;
+ 
+-			if (!(size = msg->size = ntohl(header[1])))
+-				break;
++			if (!(size = msg->size = ntohl(header[1]))) {
++				log_error("Missing event server response data.");
++				goto bad;
++			}
+ 
+ 			if (!(buf = msg->data = malloc(msg->size))) {
+ 				log_error("Unable to allocate message data.");
+@@ -389,7 +391,7 @@ int daemon_talk(struct dm_event_fifos *fifos,
+ 		free(msg->data);
+ 		msg->data = NULL;
+ 
+-		if (!_daemon_read(fifos, msg)) {
++		if (!_daemon_read(fifos, msg) || !msg->data) {
+ 			stack;
+ 			return -EIO;
+ 		}
+-- 
+2.54.0
+

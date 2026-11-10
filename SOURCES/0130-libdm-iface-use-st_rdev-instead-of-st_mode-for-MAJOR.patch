@@ -1,0 +1,34 @@
+From 6adbfc16d1b8ba3d15bb7dc5d0e1998bb75349a5 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Fri, 3 Apr 2026 11:59:23 +0200
+Subject: [PATCH 130/211] libdm: iface: use st_rdev instead of st_mode for
+ MAJOR/MINOR
+
+The log message was extracting major/minor from buf.st_mode
+(file type/permissions) instead of buf.st_rdev (device number).
+The comparison on line above correctly uses buf.st_rdev.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit 42fb34bcf836c3356bf8f23d24bac2fe34d35346)
+---
+ libdm/ioctl/libdm-iface.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/libdm/ioctl/libdm-iface.c b/libdm/ioctl/libdm-iface.c
+index 3a3060475..4bbb40a7d 100644
+--- a/libdm/ioctl/libdm-iface.c
++++ b/libdm/ioctl/libdm-iface.c
+@@ -278,8 +278,8 @@ static int _control_exists(const char *control, uint32_t major, uint32_t minor)
+ 
+ 	if (major && buf.st_rdev != MKDEV(major, minor)) {
+ 		log_verbose("%s: Wrong device number: (%u, %u) instead of "
+-			    "(%u, %u)", control,
+-			    MAJOR(buf.st_mode), MINOR(buf.st_mode),
++			    "(%u, %u).", control,
++			    MAJOR(buf.st_rdev), MINOR(buf.st_rdev),
+ 			    major, minor);
+ 		return _control_unlink(control);
+ 	}
+-- 
+2.54.0
+

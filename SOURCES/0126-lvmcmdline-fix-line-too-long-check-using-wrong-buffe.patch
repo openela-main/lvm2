@@ -1,0 +1,32 @@
+From 0ecb57749f1bb0971510bf4c1a1692d0a4a51525 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Fri, 3 Apr 2026 11:12:02 +0200
+Subject: [PATCH 126/211] lvmcmdline: fix line-too-long check using wrong
+ buffer index
+
+The expression buffer[sizeof(buffer) - 1] - 2 performed arithmetic
+on the char value at the last position instead of indexing position
+sizeof(buffer) - 2 to check for newline.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit 79eca4f6a5061c9ec4f544122edd341799d38ec6)
+---
+ tools/lvmcmdline.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
+index 2ecdbd164..df11f57ab 100644
+--- a/tools/lvmcmdline.c
++++ b/tools/lvmcmdline.c
+@@ -3526,7 +3526,7 @@ static int _run_script(struct cmd_context *cmd, int argc, char **argv)
+ 			}
+ 		}
+ 		if ((strlen(buffer) == sizeof(buffer) - 1)
+-		    && (buffer[sizeof(buffer) - 1] - 2 != '\n')) {
++		    && (buffer[sizeof(buffer) - 2] != '\n')) {
+ 			buffer[50] = '\0';
+ 			log_error("Line too long (max 255) beginning: %s",
+ 				  buffer);
+-- 
+2.54.0
+

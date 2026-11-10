@@ -1,0 +1,74 @@
+From 247ca0605f7d0602666abe0cb3d45fb02ebac4a7 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Thu, 16 Apr 2026 00:52:57 +0200
+Subject: [PATCH 156/211] lvmpolld: replace asserts with proper error handling
+
+Replace assert(read_single_line()) with if-continue - assert with
+side effects compiles out with NDEBUG, silently skipping pipe reads
+and leaving data->line stale for subsequent log calls.
+
+Replace assert(type < POLL_TYPE_MAX) with proper bounds check
+returning EINVAL - assert vanishes with NDEBUG allowing
+out-of-bounds array access.
+
+Check devicesfile strdup failure in pdlv_create() - the allocation
+was not validated unlike all other fields in the struct.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit d0c1a22ce823e54eec42e6d2888b20dbcb8306a2)
+---
+ daemons/lvmpolld/lvmpolld-core.c       | 9 ++++++---
+ daemons/lvmpolld/lvmpolld-data-utils.c | 3 ++-
+ 2 files changed, 8 insertions(+), 4 deletions(-)
+
+diff --git a/daemons/lvmpolld/lvmpolld-core.c b/daemons/lvmpolld/lvmpolld-core.c
+index 65ac18ab5..8ede78597 100644
+--- a/daemons/lvmpolld/lvmpolld-core.c
++++ b/daemons/lvmpolld/lvmpolld-core.c
+@@ -269,7 +269,8 @@ static int poll_for_output(struct lvmpolld_lv *pdlv, struct lvmpolld_thread_data
+ 		if (fds[0].revents & POLLIN) {
+ 			DEBUGLOG(pdlv->ls, "%s: %s", PD_LOG_PREFIX, "caught input data in STDOUT");
+ 
+-			assert(read_single_line(data, 0)); /* may block indef. anyway */
++			if (!read_single_line(data, 0))
++				continue; /* may block indef. anyway */
+ 			INFO(pdlv->ls, "%s: PID %d: %s: '%s'", LVM2_LOG_PREFIX,
+ 			     pdlv->cmd_pid, "STDOUT", data->line);
+ 		} else if (fds[0].revents) {
+@@ -287,7 +288,8 @@ static int poll_for_output(struct lvmpolld_lv *pdlv, struct lvmpolld_thread_data
+ 			DEBUGLOG(pdlv->ls, "%s: %s", PD_LOG_PREFIX,
+ 				 "caught input data in STDERR");
+ 
+-			assert(read_single_line(data, 1)); /* may block indef. anyway */
++			if (!read_single_line(data, 1))
++				continue; /* may block indef. anyway */
+ 			WARN(pdlv->ls, "%s: PID %d: %s: '%s'", LVM2_LOG_PREFIX,
+ 			     pdlv->cmd_pid, "STDERR", data->line);
+ 		} else if (fds[1].revents) {
+@@ -628,7 +630,8 @@ static response poll_init(client_handle h, struct lvmpolld_state *ls, request re
+ 	const char *devicesfile = daemon_request_str(req, LVMPD_PARM_DEVICESFILE, NULL);
+ 	unsigned abort_polling = daemon_request_int(req, LVMPD_PARM_ABORT, 0);
+ 
+-	assert(type < POLL_TYPE_MAX);
++	if (type >= POLL_TYPE_MAX)
++		return reply(LVMPD_RESP_EINVAL, REASON_ILLEGAL_ABORT_REQUEST);
+ 
+ 	if (abort_polling && type != PVMOVE)
+ 		return reply(LVMPD_RESP_EINVAL, REASON_ILLEGAL_ABORT_REQUEST);
+diff --git a/daemons/lvmpolld/lvmpolld-data-utils.c b/daemons/lvmpolld/lvmpolld-data-utils.c
+index 8a4c6f8b0..111a0f2b9 100644
+--- a/daemons/lvmpolld/lvmpolld-data-utils.c
++++ b/daemons/lvmpolld/lvmpolld-data-utils.c
+@@ -121,7 +121,8 @@ struct lvmpolld_lv *pdlv_create(struct lvmpolld_state *ls, const char *id,
+ 		.init_rq_count = 1
+ 	}, *pdlv = (struct lvmpolld_lv *) malloc(sizeof(struct lvmpolld_lv));
+ 
+-	if (!pdlv || !tmp.lvmpolld_id || !tmp.lvname || !tmp.lvm_system_dir_env || !tmp.sinterval)
++	if (!pdlv || !tmp.lvmpolld_id || !tmp.lvname || !tmp.lvm_system_dir_env || !tmp.sinterval ||
++	    (devicesfile && !tmp.devicesfile))
+ 		goto err;
+ 
+ 	tmp.lvid = _get_lvid(tmp.lvmpolld_id, sysdir);
+-- 
+2.54.0
+

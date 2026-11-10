@@ -1,0 +1,38 @@
+From 0422a2b75e62db3f0bfafd1e4511db8c0ddcc358 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Thu, 9 Apr 2026 21:47:51 +0200
+Subject: [PATCH 202/205] polldaemon: cleanup bcache before background poll
+ exit
+
+Add lvmcache_destroy and label_scan_destroy before _exit in
+background polling child to close file descriptors to PV devices.
+
+Commit 7d71dac86 removed bcache cleanup from the poll loop to
+avoid AIO context teardown overhead, but the background child
+was still exiting via _exit without any cleanup, leaving file
+descriptors open. This caused teardown failures with "Device
+or resource busy" on slower systems (RHEL 7).
+
+Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
+(cherry picked from commit e4f26d8ede2799e734bd8b1edc009dde5ac5b669)
+---
+ tools/polldaemon.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/tools/polldaemon.c b/tools/polldaemon.c
+index f5d04311e..168f031cd 100644
+--- a/tools/polldaemon.c
++++ b/tools/polldaemon.c
+@@ -685,7 +685,8 @@ static int _poll_daemon(struct cmd_context *cmd, struct poll_operation_id *id,
+ 		 * because it will redundantly continue performing the
+ 		 * caller's task (that the parent already performed)
+ 		 */
+-		/* FIXME Attempt proper cleanup */
++		lvmcache_destroy(cmd, 1, 0);
++		label_scan_destroy(cmd);
+ 		_exit(lvm_return_code(ret));
+ 	}
+ 
+-- 
+2.54.0
+

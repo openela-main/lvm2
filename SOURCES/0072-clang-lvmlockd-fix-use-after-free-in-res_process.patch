@@ -1,0 +1,40 @@
+From fae11decdb12d9da660748bb181063dde5200d1f Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Tue, 24 Mar 2026 21:31:49 +0100
+Subject: [PATCH 072/211] clang: lvmlockd: fix use-after-free in res_process
+
+add_client_result() may call free_action(act) when LD_AF_NO_CLIENT
+flag is set. The subsequent access of act->op to check for
+LD_OP_DISABLE is then a use-after-free. Save the op value before
+passing act to add_client_result().
+
+Found by clang scan-build.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit 3095302e97b9c48f2df4296a449e5ee76580f103)
+---
+ daemons/lvmlockd/lvmlockd-core.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/daemons/lvmlockd/lvmlockd-core.c b/daemons/lvmlockd/lvmlockd-core.c
+index f7340ff3e..b3960feb7 100644
+--- a/daemons/lvmlockd/lvmlockd-core.c
++++ b/daemons/lvmlockd/lvmlockd-core.c
+@@ -1989,12 +1989,13 @@ static void res_process(struct lockspace *ls, struct resource *r,
+ 
+ 	list_for_each_entry_safe(act, safe, &r->actions, list) {
+ 		if (act->op == LD_OP_ENABLE || act->op == LD_OP_DISABLE) {
++			int is_disable = (act->op == LD_OP_DISABLE);
+ 			rv = res_able(ls, r, act);
+ 			act->result = rv;
+ 			list_del(&act->list);
+ 			add_client_result(act);
+ 
+-			if (!rv && act->op == LD_OP_DISABLE) {
++			if (!rv && is_disable) {
+ 				log_debug("%s:%s free disabled", ls->name, r->name);
+ 				goto r_free;
+ 			}
+-- 
+2.54.0
+

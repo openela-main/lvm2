@@ -1,0 +1,64 @@
+From 483caa0b663c8b1b180967856f495bae5fe978a2 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Thu, 16 Apr 2026 11:55:40 +0200
+Subject: [PATCH 154/211] lib: add missing NULL checks to prevent dereference
+ crashes
+
+cache_manip: check cn->v before dereferencing in cache_set_policy
+and cache_vol_set_params - a config section node has NULL value.
+
+label: check scan_bcache in dev_invalidate_bytes and dev_invalidate,
+matching the guard already present in peer functions.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit 36fe3bfb26dced3bd33018f4d820dd895f5a4074)
+---
+ lib/label/label.c          | 4 ++++
+ lib/metadata/cache_manip.c | 4 ++--
+ 2 files changed, 6 insertions(+), 2 deletions(-)
+
+diff --git a/lib/label/label.c b/lib/label/label.c
+index 12a825c62..d114c8e42 100644
+--- a/lib/label/label.c
++++ b/lib/label/label.c
+@@ -1940,11 +1940,15 @@ bool dev_write_bytes(struct device *dev, uint64_t start, size_t len, void *data)
+ 
+ bool dev_invalidate_bytes(struct device *dev, uint64_t start, size_t len)
+ {
++	if (!scan_bcache)
++		return true;
+ 	return bcache_invalidate_bytes(scan_bcache, dev->bcache_di, start, len);
+ }
+ 
+ void dev_invalidate(struct device *dev)
+ {
++	if (!scan_bcache)
++		return;
+ 	bcache_invalidate_di(scan_bcache, dev->bcache_di);
+ }
+ 
+diff --git a/lib/metadata/cache_manip.c b/lib/metadata/cache_manip.c
+index fecf56919..7bf0a2255 100644
+--- a/lib/metadata/cache_manip.c
++++ b/lib/metadata/cache_manip.c
+@@ -858,7 +858,7 @@ int cache_set_policy(struct lv_segment *lvseg, const char *name,
+ restart: /* remove any 'default" nodes */
+ 	cn = seg->policy_settings ? seg->policy_settings->child : NULL;
+ 	while (cn) {
+-		if (cn->v->type == DM_CFG_STRING && !strcmp(cn->v->v.str, "default")) {
++		if (cn->v && cn->v->type == DM_CFG_STRING && !strcmp(cn->v->v.str, "default")) {
+ 			dm_config_remove_node(seg->policy_settings, cn);
+ 			goto restart;
+ 		}
+@@ -1157,7 +1157,7 @@ int cache_vol_set_params(struct cmd_context *cmd,
+   restart: /* remove any 'default" nodes */
+ 	cn = policy_settings ? policy_settings->child : NULL;
+ 	while (cn) {
+-		if (cn->v->type == DM_CFG_STRING && !strcmp(cn->v->v.str, "default")) {
++		if (cn->v && cn->v->type == DM_CFG_STRING && !strcmp(cn->v->v.str, "default")) {
+ 			dm_config_remove_node(policy_settings, cn);
+ 			goto restart;
+ 		}
+-- 
+2.54.0
+

@@ -1,0 +1,32 @@
+From 304e2acd7b40c9ebbebca1af474f5f7ba6b8a73e Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Fri, 3 Apr 2026 12:01:35 +0200
+Subject: [PATCH 066/211] libdm: dbg_malloc: fix buffer overflow in
+ dm_realloc_aux
+
+memcpy used the old allocation size (mb->length) unconditionally.
+When shrinking (new size < old size), this overflows the new buffer.
+Copy the minimum of old and new sizes.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit 767157754b694035d051093861cad5b9ac3494e7)
+---
+ libdm/mm/dbg_malloc.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/libdm/mm/dbg_malloc.c b/libdm/mm/dbg_malloc.c
+index 96d2311d5..c6a9ae3ed 100644
+--- a/libdm/mm/dbg_malloc.c
++++ b/libdm/mm/dbg_malloc.c
+@@ -212,7 +212,7 @@ void *dm_realloc_aux(void *p, unsigned int s, const char *file, int line)
+ 	r = dm_malloc_aux_debug(s, file, line);
+ 
+ 	if (r && p) {
+-		memcpy(r, p, mb->length);
++		memcpy(r, p, (s < mb->length) ? s : mb->length);
+ 		dm_free_aux(p);
+ 	}
+ 
+-- 
+2.54.0
+

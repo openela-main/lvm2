@@ -1,0 +1,31 @@
+From fc9e8b150de592d14cc6e9777e099a7d2f71b5c8 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Fri, 3 Apr 2026 14:05:59 +0200
+Subject: [PATCH 105/211] lvmpolld: fix STDOUT/STDERR copy-paste error in poll
+ warning
+
+The fds[1] block handles STDERR but the error message said "STDOUT",
+copy-pasted from the fds[0] block above.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit 56a6ff90b8701564170b79153be1870fc3f90670)
+---
+ daemons/lvmpolld/lvmpolld-core.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/daemons/lvmpolld/lvmpolld-core.c b/daemons/lvmpolld/lvmpolld-core.c
+index ff47e1fbc..65ac18ab5 100644
+--- a/daemons/lvmpolld/lvmpolld-core.c
++++ b/daemons/lvmpolld/lvmpolld-core.c
+@@ -294,7 +294,7 @@ static int poll_for_output(struct lvmpolld_lv *pdlv, struct lvmpolld_thread_data
+ 			if (fds[1].revents & POLLHUP)
+ 				DEBUGLOG(pdlv->ls, "%s: %s", PD_LOG_PREFIX, "caught err POLLHUP");
+ 			else
+-				WARN(pdlv->ls, "%s: %s", PD_LOG_PREFIX, "poll for command's STDOUT failed");
++				WARN(pdlv->ls, "%s: %s", PD_LOG_PREFIX, "poll for command's STDERR failed");
+ 
+ 			fds[1].fd = -1;
+ 			fds_count--;
+-- 
+2.54.0
+

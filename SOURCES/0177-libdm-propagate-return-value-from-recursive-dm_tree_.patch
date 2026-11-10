@@ -1,0 +1,34 @@
+From aa8700f60ddaf5e4efe2063e6238d8626cdb41a4 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Tue, 21 Apr 2026 15:36:07 +0200
+Subject: [PATCH 177/211] libdm: propagate return value from recursive
+ dm_tree_children_use_uuid
+
+The recursive call to dm_tree_children_use_uuid had its return
+value ignored, so UUID prefix matches found in grandchildren
+(or deeper) were silently lost.  This caused pv_uses_vg circular
+dependency detection to miss multi-level DM stacking scenarios.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit c24bc3973e73d9b0edc9325d42fffc99e92f8361)
+---
+ libdm/libdm-deptree.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/libdm/libdm-deptree.c b/libdm/libdm-deptree.c
+index 2fdd9fa07..66396c4fd 100644
+--- a/libdm/libdm-deptree.c
++++ b/libdm/libdm-deptree.c
+@@ -3042,7 +3042,8 @@ int dm_tree_children_use_uuid(struct dm_tree_node *dnode,
+ 			return 1;
+ 
+ 		if (dm_tree_node_num_children(child, 0))
+-			dm_tree_children_use_uuid(child, uuid_prefix, uuid_prefix_len);
++			if (dm_tree_children_use_uuid(child, uuid_prefix, uuid_prefix_len))
++				return 1;
+ 	}
+ 
+ 	return 0;
+-- 
+2.54.0
+

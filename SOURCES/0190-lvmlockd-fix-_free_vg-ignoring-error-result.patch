@@ -1,0 +1,33 @@
+From c488a31560b7083d2cc74a4afdad0662136182a2 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Sun, 19 Apr 2026 13:26:32 +0200
+Subject: [PATCH 190/211] lvmlockd: fix _free_vg ignoring error result
+
+_free_vg() computes ret based on the lvmlockd result but
+unconditionally returns 1, silently swallowing all errors
+from _free_vg_dlm() and _free_vg_idm() callers.
+
+Return ret instead.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit fd6ca1376b3af4077e1e9ecf088c534cfe97f84d)
+---
+ lib/locking/lvmlockd.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/lib/locking/lvmlockd.c b/lib/locking/lvmlockd.c
+index c74a9a1d3..c4754c789 100644
+--- a/lib/locking/lvmlockd.c
++++ b/lib/locking/lvmlockd.c
+@@ -1136,7 +1136,7 @@ static int _free_vg(struct cmd_context *cmd, struct volume_group *vg)
+ 
+ 	daemon_reply_destroy(reply);
+ 
+-	return 1;
++	return ret;
+ }
+ 
+ static int _free_vg_dlm(struct cmd_context *cmd, struct volume_group *vg)
+-- 
+2.54.0
+

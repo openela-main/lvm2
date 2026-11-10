@@ -1,0 +1,36 @@
+From c0bd6195c00ef6d0e620c61ab05464424329a2e1 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Thu, 26 Feb 2026 21:57:52 +0100
+Subject: [PATCH 116/211] snapshot: reject resize of merging CoW snapshot
+
+A snapshot that is in the process of merging back into its origin
+cannot be resized - the kernel runs a snapshot-merge target during
+the merge and resizing the COW store while the merge is in progress
+is not supported and could corrupt the operation.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+(cherry picked from commit 152b0fe2ca6c5ac5482332b9352098a6f78d7d61)
+---
+ lib/metadata/lv_manip.c | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index 4397f0bc2..783cd2c66 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -5870,6 +5870,12 @@ static int _lv_resize_check_type(struct logical_volume *lv,
+ {
+ 	struct lv_segment *seg;
+ 
++	if (lv_is_merging_cow(lv)) {
++		log_error("Cannot resize merging snapshot %s.",
++			  display_lvname(lv));
++		return 0;
++	}
++
+ 	if (lv_is_origin(lv)) {
+ 		if (lp->resize == LV_REDUCE) {
+ 			log_error("Snapshot origin volumes cannot be reduced in size yet.");
+-- 
+2.54.0
+

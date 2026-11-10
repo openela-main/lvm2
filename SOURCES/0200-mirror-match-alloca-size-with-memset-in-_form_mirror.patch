@@ -1,0 +1,30 @@
+From 92f312fb4792d0b7b0691c7a658d577ad7ea6038 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Sat, 18 Apr 2026 01:56:53 +0200
+Subject: [PATCH 200/211] mirror: match alloca size with memset in _form_mirror
+
+alloca allocated mirrors + 1 slots but memset only zeroed mirrors.
+The extra slot was never accessed, so allocate exactly mirrors.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit 246f8e663a81e71a3f194324806d8a3a0346b9a5)
+---
+ lib/metadata/mirror.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/lib/metadata/mirror.c b/lib/metadata/mirror.c
+index aee95a6bf..e9e13fdb5 100644
+--- a/lib/metadata/mirror.c
++++ b/lib/metadata/mirror.c
+@@ -1627,7 +1627,7 @@ static int _form_mirror(struct cmd_context *cmd, struct alloc_handle *ah,
+ 	/*
+ 	 * create mirror image LVs
+ 	 */
+-	img_lvs = alloca(sizeof(*img_lvs) * (mirrors + 1));
++	img_lvs = alloca(sizeof(*img_lvs) * mirrors);
+ 	memset(img_lvs, 0, sizeof(*img_lvs) * mirrors);
+ 
+ 	if (!_create_mimage_lvs(ah, mirrors, stripes, stripe_size, lv, img_lvs, log))
+-- 
+2.54.0
+

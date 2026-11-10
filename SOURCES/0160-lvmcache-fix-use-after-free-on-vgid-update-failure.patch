@@ -1,0 +1,30 @@
+From af71204b76908cdc13ccfd36e8171a440f492df8 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Thu, 16 Apr 2026 11:56:10 +0200
+Subject: [PATCH 160/211] lvmcache: fix use-after-free on vgid update failure
+
+When _lvmcache_update_vgid fails after vginfo was already inserted
+into _vgname_hash, the error path frees vginfo without removing it
+from the hash, leaving a dangling pointer.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit 58ab3ef97891ab334137e271e9bc5f46acf7265a)
+---
+ lib/cache/lvmcache.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/lib/cache/lvmcache.c b/lib/cache/lvmcache.c
+index 4c95db7db..2da7c81ce 100644
+--- a/lib/cache/lvmcache.c
++++ b/lib/cache/lvmcache.c
+@@ -1876,6 +1876,7 @@ static int _lvmcache_update_vgname(struct cmd_context *cmd,
+ 		}
+ 
+ 		if (!_lvmcache_update_vgid(NULL, vginfo, vgid)) {
++			dm_hash_remove(_vgname_hash, vgname);
+ 			free(vginfo->vgname);
+ 			free(vginfo);
+ 			return_0;
+-- 
+2.54.0
+

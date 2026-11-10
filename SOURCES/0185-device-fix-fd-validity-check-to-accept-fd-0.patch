@@ -1,0 +1,40 @@
+From a63978a57d202ba5ec7b2afb9e6f6729bcc16941 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Sun, 19 Apr 2026 20:04:06 +0200
+Subject: [PATCH 185/211] device: fix fd validity check to accept fd 0
+
+File descriptor 0 is valid; the check should be fd < 0 to detect
+uninitialized bcache_fd (-1), not fd <= 0 which incorrectly rejects
+fd 0.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit 15b6ed433e273d008bad6ca845ca69f41896cc0c)
+---
+ lib/device/dev-io.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/lib/device/dev-io.c b/lib/device/dev-io.c
+index ab00ba677..efac37b3e 100644
+--- a/lib/device/dev-io.c
++++ b/lib/device/dev-io.c
+@@ -99,7 +99,7 @@ static int _dev_get_size_dev(struct device *dev, uint64_t *size)
+ 		return 1;
+ 	}
+ 
+-	if (fd <= 0) {
++	if (fd < 0) {
+ 		if (!dev_open_readonly_quiet(dev))
+ 			return_0;
+ 		fd = dev_fd(dev);
+@@ -202,7 +202,7 @@ int dev_get_direct_block_sizes(struct device *dev, unsigned int *physical_block_
+ 		return 1;
+ 	}
+ 
+-	if (fd <= 0) {
++	if (fd < 0) {
+ 		if (!dev_open_readonly_quiet(dev))
+ 			return 0;
+ 		fd = dev_fd(dev);
+-- 
+2.54.0
+

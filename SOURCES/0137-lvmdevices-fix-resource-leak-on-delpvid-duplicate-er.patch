@@ -1,0 +1,30 @@
+From 2a3765160281eda24e7a1aaa5089f86bc49fc688 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Fri, 3 Apr 2026 11:35:25 +0200
+Subject: [PATCH 137/211] lvmdevices: fix resource leak on delpvid duplicate
+ error path
+
+When a duplicate PVID was found, du was already removed from the
+list but never freed before goto bad, leaking the structure.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit d0f9bf1c9f4438a369087edf6e51147b844ae336)
+---
+ tools/lvmdevices.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/tools/lvmdevices.c b/tools/lvmdevices.c
+index 65399c96c..78ff70455 100644
+--- a/tools/lvmdevices.c
++++ b/tools/lvmdevices.c
+@@ -1010,6 +1010,7 @@ int lvmdevices(struct cmd_context *cmd, int argc, char **argv)
+ 		if ((du2 = get_du_for_pvid(cmd, pvid))) {
+ 			log_error("Multiple devices file entries for PVID %s (%s %s), remove by device name.",
+ 				  pvid, du->devname, du2->devname);
++			free_du(du);
+ 			goto bad;
+ 		}
+ 
+-- 
+2.54.0
+

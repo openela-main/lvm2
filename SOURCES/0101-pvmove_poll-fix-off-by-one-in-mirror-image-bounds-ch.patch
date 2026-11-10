@@ -1,0 +1,33 @@
+From 8c0234432df5df88076b487a249ccc8c067171c1 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Sat, 21 Mar 2026 23:46:44 +0100
+Subject: [PATCH 101/211] pvmove_poll: fix off-by-one in mirror image bounds
+ check
+
+_is_pvmove_image_removable uses > instead of >= to validate
+mimage_to_remove against area_count.  Since area indices are
+0-based, index == area_count is out of bounds and would cause
+seg_lv to access past the areas array.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit 9dd36a05c11f9fec8f5896a77b626a4a19fac9d0)
+---
+ tools/pvmove_poll.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/tools/pvmove_poll.c b/tools/pvmove_poll.c
+index 58687ebdc..65e242ae9 100644
+--- a/tools/pvmove_poll.c
++++ b/tools/pvmove_poll.c
+@@ -35,7 +35,7 @@ static int _is_pvmove_image_removable(struct logical_volume *mimage_lv,
+ 		return 0;
+ 	}
+ 
+-	if (mimage_to_remove > mirror_seg->area_count) {
++	if (mimage_to_remove >= mirror_seg->area_count) {
+ 		log_error(INTERNAL_ERROR "Mirror image %" PRIu32 " not found in segment",
+ 			  mimage_to_remove);
+ 		return 0;
+-- 
+2.54.0
+

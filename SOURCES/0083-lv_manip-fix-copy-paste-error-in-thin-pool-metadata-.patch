@@ -1,0 +1,31 @@
+From c78d380024e6972dac5ea79aa2989cd2276c5c5a Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Fri, 3 Apr 2026 21:28:49 +0200
+Subject: [PATCH 083/211] lv_manip: fix copy-paste error in thin pool metadata
+ extend
+
+Assigning poolmetadata_sign to lp_meta.size instead of lp_meta.sign,
+overwriting previously set size value.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit eea1ea49fb41352cf4f1fe59784dc08bc1669024)
+---
+ lib/metadata/lv_manip.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index 201836d73..61816bd8c 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -6803,7 +6803,7 @@ int lv_resize(struct cmd_context *cmd, struct logical_volume *lv,
+ 		_setup_params_for_extend_metadata(lv_meta, &lp_meta);
+ 		if (lp->poolmetadata_size) {
+ 			lp_meta.size = lp->poolmetadata_size;
+-			lp_meta.size = lp->poolmetadata_sign;
++			lp_meta.sign = lp->poolmetadata_sign;
+ 			lp->poolmetadata_size = 0;
+ 			lp->poolmetadata_sign = SIGN_NONE;
+ 		}
+-- 
+2.54.0
+

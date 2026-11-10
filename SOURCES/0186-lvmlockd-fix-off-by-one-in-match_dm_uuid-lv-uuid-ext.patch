@@ -1,0 +1,36 @@
+From 780adf132a5e80ddf5e57cbac5d9dadeddff9eb5 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Sun, 19 Apr 2026 11:58:35 +0200
+Subject: [PATCH 186/211] lvmlockd: fix off-by-one in match_dm_uuid lv uuid
+ extraction
+
+The loop extracting the LV UUID from the DM UUID string copied
+33 characters (positions 36-68) instead of the correct 32
+(positions 36-67). The DM UUID format is "LVM-" (4) +
+vg_uuid (32) + lv_uuid (32), so the LV UUID occupies positions
+36 through 67. The extra byte at position 68 could be a layer
+separator '-' or null terminator, causing spurious match failures
+for LVs with DM layer suffixes during lock adoption.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit a492a9c66482a4e95910ff0db2e655eed6245114)
+---
+ daemons/lvmlockd/lvmlockd-core.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/daemons/lvmlockd/lvmlockd-core.c b/daemons/lvmlockd/lvmlockd-core.c
+index b3960feb7..406c88396 100644
+--- a/daemons/lvmlockd/lvmlockd-core.c
++++ b/daemons/lvmlockd/lvmlockd-core.c
+@@ -5641,7 +5641,7 @@ static int match_dm_uuid(char *dm_uuid, char *lv_lock_uuid)
+ 		j++;
+ 	}
+ 
+-	for (i = 36, j = 0; i < 69; i++) {
++	for (i = 36, j = 0; i < 68; i++) {
+ 		buf2[j] = dm_uuid[i];
+ 		j++;
+ 	}
+-- 
+2.54.0
+

@@ -1,0 +1,32 @@
+From 3b3354722e74cbb238fedc5e508a7b0f4559ba97 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Sun, 19 Apr 2026 19:36:08 +0200
+Subject: [PATCH 181/211] libdm: fix dm_pool_strndup over-allocation
+
+dm_pool_strndup allocated n + 1 bytes regardless of actual
+string length, wasting pool memory when the string is shorter
+than n. Allocate len + 1 instead, matching strndup semantics
+where only the needed bytes are reserved.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit 2b0fb7d970347485de7df163da0ac631ffac1918)
+---
+ libdm/mm/pool.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/libdm/mm/pool.c b/libdm/mm/pool.c
+index 9b3f2d2df..ad487c174 100644
+--- a/libdm/mm/pool.c
++++ b/libdm/mm/pool.c
+@@ -61,7 +61,7 @@ char *dm_pool_strndup(struct dm_pool *p, const char *str, size_t n)
+ {
+ 	size_t slen = strlen(str);
+ 	size_t len = (slen < n) ? slen : n;
+-	char *ret = dm_pool_alloc(p, n + 1);
++	char *ret = dm_pool_alloc(p, len + 1);
+ 
+ 	if (ret) {
+ 		ret[len] = '\0';
+-- 
+2.54.0
+

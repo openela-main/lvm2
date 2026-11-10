@@ -1,0 +1,37 @@
+From 18a1e4c8f486eacde276de49a75241578865c9e8 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Tue, 24 Mar 2026 21:38:48 +0100
+Subject: [PATCH 076/211] clang: metadata: add NULL check for pva in
+ _alloc_parallel_area
+
+The allocator's gap-filling logic can leave alloc_state areas
+with NULL pva in certain edge cases. Add a defensive NULL check
+before dereferencing pva->map->pv to avoid a potential NULL
+pointer dereference.
+
+Found by clang scan-build.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit 52319437d50614f782640eb43a29d56d5af98eda)
+---
+ lib/metadata/lv_manip.c | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index 7296f5e66..201836d73 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -2151,6 +2151,10 @@ static int _alloc_parallel_area(struct alloc_handle *ah, uint32_t max_to_allocat
+ 		}
+ 
+ 		pva = alloc_state->areas[s + ix_log_skip].pva;
++		if (!pva) {
++			log_error("Missing PV area for parallel allocation.");
++			return 0;
++		}
+ 		if (ah->alloc_and_split_meta && !ah->split_metadata_is_allocated) {
+ 			/*
+ 			 * The metadata area goes at the front of the allocated
+-- 
+2.54.0
+

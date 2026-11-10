@@ -1,0 +1,157 @@
+From 8357e30d9e50d08c6a0fa6ba4cc93b7b2f2450b4 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Thu, 16 Apr 2026 01:36:02 +0200
+Subject: [PATCH 204/205] libdaemon: harden I/O and fix crash paths
+
+- Replace select() with poll() in buffer_read/buffer_write to avoid
+  stack buffer overflow when fd >= FD_SETSIZE (1024).
+- Add DAEMON_MAX_MSG_SIZE (16 MiB) limit to buffer_read to prevent
+  unbounded allocation from malicious or buggy peer.
+- Add NULL check in daemon_reply_int() and daemon_reply_str() to
+  prevent crash when response config tree is not available, matching
+  the server-side daemon_request_int/str pattern.
+- Fix NULL dereference on res.cft->root in _client_thread when
+  handler returns neither buffer nor config tree.
+- Fix res.cft leak on serialization failure in _client_thread.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit 4ede3345aca466b5aa0541be6483a5ac58f7b7b9)
+---
+ libdaemon/client/daemon-client.h |  4 ++++
+ libdaemon/client/daemon-io.c     | 23 +++++++++++++++--------
+ libdaemon/server/daemon-server.c | 14 +++++++++-----
+ 3 files changed, 28 insertions(+), 13 deletions(-)
+
+diff --git a/libdaemon/client/daemon-client.h b/libdaemon/client/daemon-client.h
+index e1671a792..f6763dce5 100644
+--- a/libdaemon/client/daemon-client.h
++++ b/libdaemon/client/daemon-client.h
+@@ -98,11 +98,15 @@ void daemon_reply_destroy(daemon_reply r);
+ 
+ static inline int64_t daemon_reply_int(daemon_reply r, const char *path, int64_t def)
+ {
++	if (!r.cft)
++		return def;
+ 	return dm_config_find_int64(r.cft->root, path, def);
+ }
+ 
+ static inline const char *daemon_reply_str(daemon_reply r, const char *path, const char *def)
+ {
++	if (!r.cft)
++		return def;
+ 	return dm_config_find_str_allow_empty(r.cft->root, path, def);
+ }
+ 
+diff --git a/libdaemon/client/daemon-io.c b/libdaemon/client/daemon-io.c
+index 6b7437ecc..e26dc1dec 100644
+--- a/libdaemon/client/daemon-io.c
++++ b/libdaemon/client/daemon-io.c
+@@ -17,6 +17,13 @@
+ #include "daemon-io.h"
+ 
+ #include <errno.h>
++/* 
++ * #include <unistd.h>
++ */
++#include <poll.h>
++
++/* Maximum incoming message size (16 MiB) to prevent unbounded allocation */
++#define DAEMON_MAX_MSG_SIZE (16 * 1024 * 1024)
+ 
+ /*
+  * Read a single message from a (socket) filedescriptor. Messages are delimited
+@@ -27,6 +34,7 @@
+  * See also write_buffer about blocking (read_buffer has identical behaviour).
+  */
+ int buffer_read(int fd, struct buffer *buffer) {
++	struct pollfd pfd = { .fd = fd, .events = POLLIN };
+ 	int result;
+ 
+ 	if (!buffer_realloc(buffer, 32)) /* ensure we have some space */
+@@ -41,6 +49,10 @@ int buffer_read(int fd, struct buffer *buffer) {
+ 				buffer->mem[buffer->used] = 0;
+ 				break; /* success, we have the full message now */
+ 			}
++			if (buffer->used > DAEMON_MAX_MSG_SIZE) {
++				errno = EOVERFLOW;
++				return 0;
++			}
+ 			if ((buffer->allocated - buffer->used < 32) &&
+ 			    !buffer_realloc(buffer, 1024))
+ 				return 0;
+@@ -49,11 +61,8 @@ int buffer_read(int fd, struct buffer *buffer) {
+ 			return 0; /* we should never encounter EOF here */
+ 		} else if (result < 0 && (errno == EAGAIN ||
+ 					  errno == EINTR || errno == EIO)) {
+-			fd_set in;
+-			FD_ZERO(&in);
+-			FD_SET(fd, &in);
+ 			/* ignore the result, this is just a glorified sleep */
+-			select(FD_SETSIZE, &in, NULL, NULL, NULL);
++			poll(&pfd, 1, -1);
+ 		} else if (result < 0)
+ 			return 0;
+ 	}
+@@ -67,6 +76,7 @@ int buffer_read(int fd, struct buffer *buffer) {
+  */
+ int buffer_write(int fd, const struct buffer *buffer) {
+ 	static const struct buffer _terminate = { .mem = (char *) "\n##\n", .used = 4 };
++	struct pollfd pfd = { .fd = fd, .events = POLLOUT };
+ 	const struct buffer *use;
+ 	int done, written, result;
+ 
+@@ -78,11 +88,8 @@ int buffer_write(int fd, const struct buffer *buffer) {
+ 				written += result;
+ 			else if (result < 0 && (errno == EAGAIN ||
+ 						errno == EINTR || errno == EIO)) {
+-				fd_set out;
+-				FD_ZERO(&out);
+-				FD_SET(fd, &out);
+ 				/* ignore the result, this is just a glorified sleep */
+-				select(FD_SETSIZE, NULL, &out, NULL, NULL);
++				poll(&pfd, 1, -1);
+ 			} else if (result < 0)
+ 				return 0; /* too bad */
+ 		}
+diff --git a/libdaemon/server/daemon-server.c b/libdaemon/server/daemon-server.c
+index bb52857ce..76d3506cc 100644
+--- a/libdaemon/server/daemon-server.c
++++ b/libdaemon/server/daemon-server.c
+@@ -443,6 +443,7 @@ static void *_client_thread(void *state)
+ 	thread_state *ts = state;
+ 	request req;
+ 	response res;
++	int r = 1;
+ 
+ 	buffer_init(&req.buffer);
+ 
+@@ -462,11 +463,9 @@ static void *_client_thread(void *state)
+ 		if (res.error == EPROTO) /* Not a builtin, delegate to the custom handler. */
+ 			res = ts->s.handler(ts->s, ts->client, req);
+ 
+-		if (!res.buffer.mem) {
+-			if (!dm_config_write_node(res.cft->root, buffer_line, &res.buffer))
+-				goto fail;
+-			if (!buffer_append(&res.buffer, "\n\n"))
+-				goto fail;
++		if (!res.buffer.mem && res.cft) {
++			r = dm_config_write_node(res.cft->root, buffer_line, &res.buffer) &&
++			    buffer_append(&res.buffer, "\n\n");
+ 			dm_config_destroy(res.cft);
+ 		}
+ 
+@@ -474,6 +473,11 @@ static void *_client_thread(void *state)
+ 			dm_config_destroy(req.cft);
+ 		buffer_destroy(&req.buffer);
+ 
++		if (!r) {
++			buffer_destroy(&res.buffer);
++			goto fail;
++		}
++
+ 		daemon_log_multi(ts->s.log, DAEMON_LOG_WIRE, "-> ", res.buffer.mem);
+ 		buffer_write(ts->client.socket_fd, &res.buffer);
+ 
+-- 
+2.54.0
+

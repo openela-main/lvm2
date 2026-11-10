@@ -1,0 +1,47 @@
+From 88153f40e5d2ff1eda0c577e6ea7cc5595125c3c Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Sun, 19 Apr 2026 20:32:27 +0200
+Subject: [PATCH 165/211] lvmpolld: fix pthread_attr leak in
+ spawn_detached_thread
+
+If pthread_attr_setdetachstate() fails, pthread_attr_destroy() was
+never called, leaking the attribute object.
+
+Also, if pthread_create() succeeded but pthread_attr_destroy() failed,
+the function returned failure, causing the caller to destroy the pdlv
+that the already-running thread was using.
+
+Fix by always destroying the attr after use and not letting
+pthread_attr_destroy() failure override the pthread_create() result.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit 4b0cd2157261715d35ade6cf0f6033b71128c389)
+---
+ daemons/lvmpolld/lvmpolld-core.c | 7 ++++---
+ 1 file changed, 4 insertions(+), 3 deletions(-)
+
+diff --git a/daemons/lvmpolld/lvmpolld-core.c b/daemons/lvmpolld/lvmpolld-core.c
+index 8ede78597..3966754d1 100644
+--- a/daemons/lvmpolld/lvmpolld-core.c
++++ b/daemons/lvmpolld/lvmpolld-core.c
+@@ -604,13 +604,14 @@ static int spawn_detached_thread(struct lvmpolld_lv *pdlv)
+ 	if (pthread_attr_init(&attr) != 0)
+ 		return 0;
+ 
+-	if (pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED) != 0)
++	if (pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED) != 0) {
++		pthread_attr_destroy(&attr);
+ 		return 0;
++	}
+ 
+ 	r = pthread_create(&pdlv->tid, &attr, fork_and_poll, (void *)pdlv);
+ 
+-	if (pthread_attr_destroy(&attr) != 0)
+-		return 0;
++	pthread_attr_destroy(&attr);
+ 
+ 	return !r;
+ }
+-- 
+2.54.0
+

@@ -1,0 +1,66 @@
+From 80d6b94863e6f49f38e16090ca2067c8f640c0cc Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Thu, 16 Apr 2026 11:56:00 +0200
+Subject: [PATCH 153/211] lib: fix buffer overflows in device_id and GPT
+ parsing
+
+device_id: use dm_snprintf in device_ids_write to handle
+truncation safely.
+
+dev-type: validate GPT partition entry size before iterating.
+A crafted disk with sz_entry=0 causes ~4 billion loop iterations.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit 8f39af43dd8d78ad99c1801cb0a2f0d1f5d2a19d)
+---
+ lib/device/dev-type.c  |  6 ++++++
+ lib/device/device_id.c | 13 ++++++-------
+ 2 files changed, 12 insertions(+), 7 deletions(-)
+
+diff --git a/lib/device/dev-type.c b/lib/device/dev-type.c
+index 4c1040c9f..5c6717f01 100644
+--- a/lib/device/dev-type.c
++++ b/lib/device/dev-type.c
+@@ -612,6 +612,12 @@ static int _has_gpt_partition_table(struct device *dev)
+ 	nr_entries = le32_to_cpu(gpt_header.nr_part_entries);
+ 	sz_entry = le32_to_cpu(gpt_header.sz_part_entry);
+ 
++	if (sz_entry < sizeof(gpt_part_entry)) {
++		log_debug("GPT partition entry size %u too small on %s.",
++			  sz_entry, dev_name(dev));
++		return 0;
++	}
++
+ 	for (i = 0; i < nr_entries; i++) {
+ 		if (!dev_read_bytes(dev, entries_start + (uint64_t)i * sz_entry,
+ 				    sizeof(gpt_part_entry), &gpt_part_entry))
+diff --git a/lib/device/device_id.c b/lib/device/device_id.c
+index a83257e50..73306558b 100644
+--- a/lib/device/device_id.c
++++ b/lib/device/device_id.c
+@@ -1830,16 +1830,15 @@ int device_ids_write(struct cmd_context *cmd)
+ 
+ 	t = time(NULL);
+ 
+-	if ((fc_bytes = snprintf(fc, sizeof(fc),
+-			    "# LVM uses devices listed in this file.\n" \
+-			    "# Created by LVM command %s%s pid %d at %s" \
+-			    "# HASH=%u\n",
+-			    cmd->name, cmd->device_ids_auto_import ? " (auto)" : "",
+-			    getpid(), ctime(&t), hash)) < 0) {
++	if ((fc_bytes = dm_snprintf(fc, sizeof(fc),
++				    "# LVM uses devices listed in this file.\n"
++				    "# Created by LVM command %s%s pid %d at %s"
++				    "# HASH=%u\n",
++				    cmd->name, cmd->device_ids_auto_import ? " (auto)" : "",
++				    getpid(), ctime(&t), hash)) < 0) {
+ 		log_warn("Failed to write buffer for devices file content.");
+ 		goto out;
+ 	}
+-	fc[fc_bytes] = '\0';
+ 
+ 	if (fputs(fc, fp) < 0) {
+ 		log_warn("Failed to write devices file header.");
+-- 
+2.54.0
+

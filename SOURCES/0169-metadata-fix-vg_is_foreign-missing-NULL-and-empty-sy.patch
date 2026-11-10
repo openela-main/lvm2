@@ -1,0 +1,36 @@
+From ce30b61208a5468bf165194cbf38615aea4b45fd Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Mon, 20 Apr 2026 20:50:03 +0200
+Subject: [PATCH 169/211] metadata: fix vg_is_foreign missing NULL and empty
+ system_id check
+
+vg_is_foreign() did not guard against NULL or empty vg->system_id,
+inconsistent with is_system_id_allowed() which correctly handles both.
+
+A NULL system_id (after vg_set_system_id or vg_create) would crash
+in strcmp. An empty system_id (VGs without system_id in metadata)
+would incorrectly classify the VG as foreign.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit 60fd17428512ec529d25691583f092c62d11ba98)
+---
+ lib/metadata/metadata.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/lib/metadata/metadata.c b/lib/metadata/metadata.c
+index ab037fd06..ccc49659a 100644
+--- a/lib/metadata/metadata.c
++++ b/lib/metadata/metadata.c
+@@ -4455,7 +4455,8 @@ int lv_on_pmem(struct logical_volume *lv)
+ 
+ int vg_is_foreign(struct volume_group *vg)
+ {
+-	return vg->cmd->system_id && strcmp(vg->system_id, vg->cmd->system_id);
++	return vg->cmd->system_id && vg->system_id && vg->system_id[0] &&
++	       strcmp(vg->system_id, vg->cmd->system_id);
+ }
+ 
+ void vg_write_commit_bad_mdas(struct cmd_context *cmd, struct volume_group *vg)
+-- 
+2.54.0
+

@@ -1,0 +1,38 @@
+From b95b1d3fb1a0eb132dbef466305bd33f78186a19 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Tue, 24 Mar 2026 21:31:58 +0100
+Subject: [PATCH 071/211] clang: lvmcache: fix use-after-free in
+ lvmcache_update_vg_from_read
+
+_drop_vginfo() detaches info from vginfo->infos and then frees
+vginfo if the infos list becomes empty. The next line accesses
+vginfo->outdated_infos which is use-after-free when the last PV
+info was just removed.
+
+Use _vginfo_detach_info() directly since we only need to unlink
+info from vginfo->infos without the conditional vginfo cleanup.
+
+Found by clang scan-build.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit 374ec4c76ed7ad596cf22f70fc8f447854c17e82)
+---
+ lib/cache/lvmcache.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/lib/cache/lvmcache.c b/lib/cache/lvmcache.c
+index 86d252e45..da9a55d09 100644
+--- a/lib/cache/lvmcache.c
++++ b/lib/cache/lvmcache.c
+@@ -2318,7 +2318,7 @@ void lvmcache_update_vg_from_read(struct volume_group *vg, int *incorrect_pv_cla
+ 		if (!_outdated_warning++)
+ 			log_warn("See vgck --updatemetadata to clear outdated metadata.");
+ 
+-		_drop_vginfo(info, vginfo); /* remove from vginfo->infos */
++		_vginfo_detach_info(info); /* remove from vginfo->infos */
+ 		dm_list_add(&vginfo->outdated_infos, &info->list);
+ 	}
+ 
+-- 
+2.54.0
+

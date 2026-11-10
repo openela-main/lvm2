@@ -1,0 +1,38 @@
+From b0923986c2a83db167169a01423dc87eb2b17f4f Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Mon, 20 Apr 2026 21:50:45 +0200
+Subject: [PATCH 168/211] cache: fix cache_check_for_warns reading wrong cache
+ mode for cachevol
+
+For cachevol-style caches, the cache mode is stored on the cache
+segment itself (seg->cache_mode), not on first_seg(seg->pool_lv).
+Every other function in cache_manip.c dispatches on
+lv_is_cache_vol(seg->pool_lv) to read the correct location, but
+cache_check_for_warns unconditionally read from the pool segment.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit 6d2c7e7875c1da2e0ebb43cff24d116cbe4f292d)
+---
+ lib/metadata/cache_manip.c | 5 +++--
+ 1 file changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/lib/metadata/cache_manip.c b/lib/metadata/cache_manip.c
+index 7bf0a2255..38c024c3b 100644
+--- a/lib/metadata/cache_manip.c
++++ b/lib/metadata/cache_manip.c
+@@ -164,9 +164,10 @@ int cache_set_cache_mode(struct lv_segment *seg, cache_mode_t mode)
+ void cache_check_for_warns(const struct lv_segment *seg)
+ {
+ 	struct logical_volume *origin_lv = seg_lv(seg, 0);
++	cache_mode_t mode = lv_is_cache_vol(seg->pool_lv) ?
++		seg->cache_mode : first_seg(seg->pool_lv)->cache_mode;
+ 
+-	if (lv_is_raid(origin_lv) &&
+-	    first_seg(seg->pool_lv)->cache_mode == CACHE_MODE_WRITEBACK)
++	if (lv_is_raid(origin_lv) && (mode == CACHE_MODE_WRITEBACK))
+ 		log_warn("WARNING: Data redundancy could be lost with writeback "
+ 			 "caching of raid logical volume!");
+ }
+-- 
+2.54.0
+

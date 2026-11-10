@@ -1,0 +1,43 @@
+From cb232e39db78f5a11a8aefd6502ffd394c90eed9 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Fri, 3 Apr 2026 11:08:44 +0200
+Subject: [PATCH 096/211] lvconvert: fix inverted proc_dir check and wrong
+ sizeof
+
+Fix two bugs:
+- The proc_dir emptiness check was inverted, skipping /proc/meminfo
+  reading when proc_dir was available instead of when it was empty.
+- memset used sizeof(cvname) instead of sizeof(format) to clear the
+  format buffer.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit 54ec1fefa043522e4d04152998b3d66a059defe2)
+---
+ tools/lvconvert.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/tools/lvconvert.c b/tools/lvconvert.c
+index 270bae7d0..7a17028e5 100644
+--- a/tools/lvconvert.c
++++ b/tools/lvconvert.c
+@@ -4538,7 +4538,7 @@ static int _lv_create_cachevol(struct cmd_context *cmd,
+ 	}
+ 
+ 	if (find_lv(vg, cvname)) {
+-		memset(format, 0, sizeof(cvname));
++		memset(format, 0, sizeof(format));
+ 		memset(cvname, 0, sizeof(cvname));
+ 		if (dm_snprintf(format, sizeof(format), "%s_cache%%d", lv->name) < 0) {
+ 			log_error("Failed to generate cachevol LV format.");
+@@ -6236,7 +6236,7 @@ static int _check_writecache_memory(struct cmd_context *cmd, struct logical_volu
+ 	unsigned long long proc_mem_kb = 0;
+ 	char proc_meminfo[PATH_MAX];
+ 
+-	if (*cmd->proc_dir)
++	if (!*cmd->proc_dir)
+ 		goto skip_proc;
+ 
+ 	if (dm_snprintf(proc_meminfo, sizeof(proc_meminfo),
+-- 
+2.54.0
+

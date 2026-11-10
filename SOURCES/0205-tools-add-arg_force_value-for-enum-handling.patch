@@ -1,0 +1,114 @@
+From 02d2b82426a82c6b36da69696914df84fd4d8254 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Thu, 10 Jul 2025 19:09:22 +0200
+Subject: [PATCH 205/205] tools: add arg_force_value() for enum handling
+
+Add arg_force_value() function that returns the correct force_t enum
+type, replacing direct string comparisons. Update lvconvert and
+pvremove to use this new function for better type safety.
+
+This is cleaner solution over just plain cast to force_t as we can
+validate force level in use.
+
+(cherry picked from commit adb8ca503b389da6d93ed6a1fc8a343bd56457fb)
+---
+ tools/lvconvert.c  |  8 ++++----
+ tools/lvmcmdline.c | 15 +++++++++++++++
+ tools/pvremove.c   |  2 +-
+ tools/tools.h      |  1 +
+ 4 files changed, 21 insertions(+), 5 deletions(-)
+
+diff --git a/tools/lvconvert.c b/tools/lvconvert.c
+index 0b3b4bad8..eb62c3ff4 100644
+--- a/tools/lvconvert.c
++++ b/tools/lvconvert.c
+@@ -3117,7 +3117,7 @@ static int _lvconvert_to_pool(struct cmd_context *cmd,
+ 		.activate = CHANGE_AN,
+ 		.do_zero = 1,
+ 		.do_wipe_signatures = _get_wipe_signatures(cmd),
+-		.force = arg_count(cmd, force_ARG),
++		.force = arg_force_value(cmd),
+ 		.yes = arg_count(cmd, yes_ARG),
+ 	};
+ 	int is_active;
+@@ -3384,7 +3384,7 @@ static int _lvconvert_to_pool(struct cmd_context *cmd,
+ 						  .do_wipe_signatures = 1,
+ 						  .is_metadata = 1,
+ 						  .yes = arg_count(cmd, yes_ARG),
+-						  .force = arg_count(cmd, force_ARG) } )) {
++						  .force = arg_force_value(cmd) } )) {
+ 				log_error("Aborting. Failed to wipe metadata lv.");
+ 				goto bad;
+ 			}
+@@ -5626,7 +5626,7 @@ static int _lvconvert_to_vdopool_single(struct cmd_context *cmd,
+ 		.do_zero = arg_int_value(cmd, zero_ARG, 1),
+ 		.do_wipe_signatures = _get_wipe_signatures(cmd),
+ 		.yes = arg_count(cmd, yes_ARG),
+-		.force = arg_count(cmd, force_ARG)
++		.force = arg_force_value(cmd)
+ 	};
+ 
+ 	if (vcp.lv_name) {
+@@ -5996,7 +5996,7 @@ static int _writecache_zero(struct cmd_context *cmd, struct logical_volume *lv)
+ 		.do_wipe_signatures = 1, /* optional, to print warning if clobbering something */
+ 		.do_zero = 1,            /* required for dm-writecache to work */
+ 		.yes = arg_count(cmd, yes_ARG),
+-		.force = arg_count(cmd, force_ARG)
++		.force = arg_force_value(cmd)
+ 	};
+ 	int ret;
+ 
+diff --git a/tools/lvmcmdline.c b/tools/lvmcmdline.c
+index df11f57ab..b88b972a3 100644
+--- a/tools/lvmcmdline.c
++++ b/tools/lvmcmdline.c
+@@ -379,6 +379,21 @@ percent_type_t arg_percent_value(const struct cmd_context *cmd, int a, const per
+ 	return arg_is_set(cmd, a) ? cmd->opt_arg_values[a].percent : def;
+ }
+ 
++force_t arg_force_value(const struct cmd_context *cmd)
++{
++	int f;
++
++	switch ((f = arg_count(cmd, force_ARG))) {
++	case 0: return PROMPT;
++	case 1: return DONT_PROMPT;
++	default:
++		log_debug("Changing force level %d to %d.",
++			  f, DONT_PROMPT_OVERRIDE);
++		/* fall through */
++	case 2: return DONT_PROMPT_OVERRIDE;
++	}
++}
++
+ int arg_count_increment(struct cmd_context *cmd, int a)
+ {
+ 	return cmd->opt_arg_values[a].count++;
+diff --git a/tools/pvremove.c b/tools/pvremove.c
+index 5c39ee0c7..4a69d50bb 100644
+--- a/tools/pvremove.c
++++ b/tools/pvremove.c
+@@ -29,7 +29,7 @@ int pvremove(struct cmd_context *cmd, int argc, char **argv)
+ 	pvcreate_params_set_defaults(&pp);
+ 
+ 	pp.is_remove = 1;
+-	pp.force = arg_count(cmd, force_ARG);
++	pp.force = arg_force_value(cmd);
+ 	pp.yes = arg_count(cmd, yes_ARG);
+ 	pp.pv_count = argc;
+ 	pp.pv_names = argv;
+diff --git a/tools/tools.h b/tools/tools.h
+index 8da653537..3e618912a 100644
+--- a/tools/tools.h
++++ b/tools/tools.h
+@@ -148,6 +148,7 @@ const void *arg_ptr_value(const struct cmd_context *cmd, int a, const void *def)
+ sign_t arg_sign_value(const struct cmd_context *cmd, int a, const sign_t def);
+ percent_type_t arg_percent_value(const struct cmd_context *cmd, int a, const percent_type_t def);
+ int arg_count_increment(struct cmd_context *cmd, int a);
++force_t arg_force_value(const struct cmd_context *cmd);
+ 
+ unsigned grouped_arg_count(const struct arg_values *av, int a);
+ unsigned grouped_arg_is_set(const struct arg_values *av, int a);
+-- 
+2.54.0
+

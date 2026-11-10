@@ -1,0 +1,49 @@
+From 8a05f2db20f70a91822dbbdc79169f39d6fc368c Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Fri, 3 Apr 2026 13:27:24 +0200
+Subject: [PATCH 103/211] online: fix buffer pointer in write loop
+
+The buffer is small enough that partial writes are unlikely, but
+use a separate char pointer to correctly advance the write position
+since buf is a stack array and cannot use pointer arithmetic.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit bb429948514e9cfd18791afbb934fa04020634c2)
+---
+ lib/device/online.c | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/lib/device/online.c b/lib/device/online.c
+index 302b3d2d7..b5dfa29cb 100644
+--- a/lib/device/online.c
++++ b/lib/device/online.c
+@@ -247,6 +247,7 @@ int online_pvid_file_create(struct cmd_context *cmd, struct device *dev, const c
+ {
+ 	char path[PATH_MAX];
+ 	char buf[MAX_PVID_FILE_SIZE] = { 0 };
++	char *bufp;
+ 	char file_vgname[NAME_LEN];
+ 	char file_devname[NAME_LEN];
+ 	char devname[NAME_LEN];
+@@ -302,8 +303,9 @@ int online_pvid_file_create(struct cmd_context *cmd, struct device *dev, const c
+ 		return 0;
+ 	}
+ 
++	bufp = buf;
+ 	while (len > 0) {
+-		rv = write(fd, buf, len);
++		rv = write(fd, bufp, len);
+ 		if (rv < 0) {
+ 			/* file exists so it still works in part */
+ 			log_warn("Cannot write online file for %s to %s error %d",
+@@ -312,6 +314,7 @@ int online_pvid_file_create(struct cmd_context *cmd, struct device *dev, const c
+ 				log_sys_debug("close", path);
+ 			return 1;
+ 		}
++		bufp += rv;
+ 		len -= rv;
+ 	}
+ 
+-- 
+2.54.0
+

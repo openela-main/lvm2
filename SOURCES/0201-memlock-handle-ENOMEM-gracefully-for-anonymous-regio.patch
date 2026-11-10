@@ -1,0 +1,44 @@
+From 26ec1446e3c2ea7e8587d46430c88d3069a871d3 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Thu, 9 Apr 2026 16:07:39 +0200
+Subject: [PATCH 201/211] memlock: handle ENOMEM gracefully for anonymous
+ regions
+
+Anonymous memory regions (thread stacks, heap) can fail mlock with ENOMEM
+when trying to lock uncommitted pages - /proc/self/maps shows the full
+reserved size (e.g., 8MB stack), but only committed pages can be locked.
+
+Handle ENOMEM gracefully for anonymous regions to lock committed pages
+while tolerating failures on the uncommitted portion. Thread stacks MUST
+be locked to prevent swap-related deadlocks on overloaded systems.
+
+Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>
+(cherry picked from commit 6b0782c5351816a8e580d31ccfdeae1f10eacfad)
+---
+ lib/mm/memlock.c | 10 ++++++++++
+ 1 file changed, 10 insertions(+)
+
+diff --git a/lib/mm/memlock.c b/lib/mm/memlock.c
+index 0e43bf624..435c2e20e 100644
+--- a/lib/mm/memlock.c
++++ b/lib/mm/memlock.c
+@@ -302,6 +302,16 @@ static int _maps_line(const struct dm_config_node *cn, lvmlock_t lock,
+ 
+ 	if (lock == LVM_MLOCK) {
+ 		if (mlock((const void*)from, sz) < 0) {
++			/*
++			 * Anonymous regions (thread stacks, heap) can fail with ENOMEM
++			 * when trying to lock uncommitted pages. This is expected - only
++			 * committed pages get locked. Thread stacks MUST be locked to
++			 * prevent swap-related deadlocks.
++			 */
++			if (errno == ENOMEM && strstr(line + pos, " 00:00 0")) {
++				log_debug_mem("mlock failed for anonymous region (uncommitted pages): %s", line);
++				return 1;
++			}
+ 			log_sys_error("mlock", line);
+ 			return 0;
+ 		}
+-- 
+2.54.0
+

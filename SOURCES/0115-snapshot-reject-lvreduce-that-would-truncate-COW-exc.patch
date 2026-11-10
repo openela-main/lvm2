@@ -1,0 +1,295 @@
+From abaf179f7ecb2945b6a5f5c795e60c80445c4f97 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Thu, 26 Feb 2026 20:24:46 +0100
+Subject: [PATCH 115/211] snapshot: reject lvreduce that would truncate COW
+ exception data
+
+Add a safety check in _lv_resize_check_type() that blocks lvreduce on
+an active CoW snapshot LV when the requested new size would truncate
+already-allocated exception blocks.
+
+The check reads the exact used_sectors / total_sectors counts from the
+DM snapshot target (via new lv_snapshot_status() / dev_manager_snapshot_status())
+with a DM flush so that in-flight writes are accounted for before the
+comparison.
+
+Fixes: https://github.com/lvmteam/lvm2/issues/164
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+(cherry picked from commit 21d5277eee3822c64b26f1a98b1d84764d612bd8)
+---
+ lib/activate/activate.c          | 34 ++++++++++++++
+ lib/activate/activate.h          |  3 ++
+ lib/activate/dev_manager.c       | 77 ++++++++++++++++++++++++++++++++
+ lib/activate/dev_manager.h       |  6 +++
+ lib/metadata/lv_manip.c          | 52 +++++++++++++++++++++
+ lib/metadata/metadata-exported.h |  5 +++
+ 6 files changed, 177 insertions(+)
+
+diff --git a/lib/activate/activate.c b/lib/activate/activate.c
+index 50b8523ed..efeeaf26e 100644
+--- a/lib/activate/activate.c
++++ b/lib/activate/activate.c
+@@ -258,6 +258,12 @@ int lv_snapshot_percent(const struct logical_volume *lv, dm_percent_t *percent)
+ {
+ 	return 0;
+ }
++int lv_snapshot_status(const struct logical_volume *lv,
++		       int flush,
++		       struct lv_status_snapshot **status)
++{
++	return 0;
++}
+ int lv_mirror_percent(struct cmd_context *cmd, const struct logical_volume *lv,
+ 		      int wait, dm_percent_t *percent, uint32_t *event_nr)
+ {
+@@ -999,6 +1005,34 @@ int lv_snapshot_percent(const struct logical_volume *lv, dm_percent_t *percent)
+ 	return r;
+ }
+ 
++/*
++ * Get COW snapshot status for an active COW snapshot LV.
++ * If flush is non-zero a DM flush is issued so in-flight writes are
++ * reflected in the counts before the status is read.
++ * On success returns 1 with *status populated.
++ * Caller must call dm_pool_destroy((*status)->mem) when done.
++ * Returns 0 if the LV is inactive or the query fails.
++ */
++int lv_snapshot_status(const struct logical_volume *lv,
++		       int flush,
++		       struct lv_status_snapshot **status)
++{
++	struct dev_manager *dm;
++	int exists;
++
++	if (!(dm = dev_manager_create(lv->vg->cmd, lv->vg->name, 1)))
++		return_0;
++
++	if (!dev_manager_snapshot_status(dm, lv, flush, status, &exists)) {
++		dev_manager_destroy(dm);
++		if (exists)
++			stack;
++		return 0;
++	}
++
++	return 1;
++}
++
+ /* FIXME Merge with snapshot_percent */
+ int lv_mirror_percent(struct cmd_context *cmd, const struct logical_volume *lv,
+ 		      int wait, dm_percent_t *percent, uint32_t *event_nr)
+diff --git a/lib/activate/activate.h b/lib/activate/activate.h
+index 155936135..34ca7adb8 100644
+--- a/lib/activate/activate.h
++++ b/lib/activate/activate.h
+@@ -187,6 +187,9 @@ int lv_check_transient(struct logical_volume *lv);
+  * Returns 1 if percent has been set, else 0.
+  */
+ int lv_snapshot_percent(const struct logical_volume *lv, dm_percent_t *percent);
++int lv_snapshot_status(const struct logical_volume *lv,
++		       int flush,
++		       struct lv_status_snapshot **status);
+ int lv_mirror_percent(struct cmd_context *cmd, const struct logical_volume *lv,
+ 		      int wait, dm_percent_t *percent, uint32_t *event_nr);
+ int lv_raid_percent(const struct logical_volume *lv, dm_percent_t *percent);
+diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
+index 46c626de5..7a7c6a475 100644
+--- a/lib/activate/dev_manager.c
++++ b/lib/activate/dev_manager.c
+@@ -1620,6 +1620,83 @@ int dev_manager_snapshot_percent(struct dev_manager *dm,
+ 	return 1;
+ }
+ 
++/*
++ * Get COW snapshot status for an active COW snapshot LV.
++ * If flush is non-zero a DM flush is issued so that in-flight writes are
++ * accounted for before the status is read.
++ * On success *status is populated and (*status)->mem must be destroyed by
++ * the caller.  Returns 1 on success, 0 on failure.  *exists is set to 0 if
++ * the DM device does not exist (inactive LV), 1 if it does.
++ */
++int dev_manager_snapshot_status(struct dev_manager *dm,
++				const struct logical_volume *lv,
++				int flush,
++				struct lv_status_snapshot **status,
++				int *exists)
++{
++	int r = 0;
++	const struct logical_volume *snap_lv;
++	const char *dlid;
++	struct dm_task *dmt;
++	struct dm_info info;
++	uint64_t start, length;
++	char *type = NULL;
++	char *params = NULL;
++
++	*exists = -1;
++	if (!(*status = dm_pool_zalloc(dm->mem, sizeof(struct lv_status_snapshot))))
++		return_0;
++
++	if (lv_is_merging_cow(lv))
++		/* must check status of origin for a merging snapshot */
++		snap_lv = origin_from_cow(lv);
++	else
++		snap_lv = lv;
++
++	if (!(dlid = build_dm_uuid(dm->mem, snap_lv, NULL)))
++		return_0;
++
++	if (!(dmt = _setup_task_run(DM_DEVICE_STATUS, &info, NULL, dlid, 0, 0, 0, 0, flush, 0)))
++		return_0;
++
++	if (!(*exists = info.exists))
++		goto out;
++
++	log_debug_activation("Checking snapshot status for LV %s.",
++			     display_lvname(snap_lv));
++
++	dm_get_next_target(dmt, NULL, &start, &length, &type, &params);
++
++	if (!type || strcmp(type, TARGET_NAME_SNAPSHOT) || !params) {
++		log_error("Expected snapshot segment type for %s but got %s.",
++			  display_lvname(snap_lv), type ? type : "NULL");
++		goto out;
++	}
++
++	if (!dm_get_status_snapshot(dm->mem, params, &(*status)->snap))
++		goto_out;
++
++	(*status)->mem = dm->mem;
++
++	if ((*status)->snap->invalid)
++		(*status)->usage = DM_PERCENT_INVALID;
++	else if ((*status)->snap->merge_failed)
++		(*status)->usage = LVM_PERCENT_MERGE_FAILED;
++	else if ((*status)->snap->has_metadata_sectors &&
++		 (*status)->snap->used_sectors == (*status)->snap->metadata_sectors)
++		(*status)->usage = DM_PERCENT_0;
++	else if ((*status)->snap->used_sectors == (*status)->snap->total_sectors)
++		(*status)->usage = DM_PERCENT_100;
++	else
++		(*status)->usage = dm_make_percent((*status)->snap->used_sectors,
++						   (*status)->snap->total_sectors);
++	r = 1;
++out:
++	dm_task_destroy(dmt);
++
++	return r;
++}
++
+ /* FIXME Merge with snapshot_percent, auto-detecting target type */
+ /* FIXME Cope with more than one target */
+ int dev_manager_mirror_percent(struct dev_manager *dm,
+diff --git a/lib/activate/dev_manager.h b/lib/activate/dev_manager.h
+index 353c3c7d2..92c374a28 100644
+--- a/lib/activate/dev_manager.h
++++ b/lib/activate/dev_manager.h
+@@ -20,6 +20,7 @@
+ 
+ struct logical_volume;
+ struct lv_activate_opts;
++struct lv_status_snapshot;
+ struct volume_group;
+ struct cmd_context;
+ struct dev_manager;
+@@ -56,6 +57,11 @@ int dev_manager_info(struct cmd_context *cmd, const struct logical_volume *lv,
+ int dev_manager_snapshot_percent(struct dev_manager *dm,
+ 				 const struct logical_volume *lv,
+ 				 dm_percent_t *percent);
++int dev_manager_snapshot_status(struct dev_manager *dm,
++				const struct logical_volume *lv,
++				int flush,
++				struct lv_status_snapshot **status,
++				int *exists);
+ int dev_manager_mirror_percent(struct dev_manager *dm,
+ 			       const struct logical_volume *lv, int wait,
+ 			       dm_percent_t *percent, uint32_t *event_nr);
+diff --git a/lib/metadata/lv_manip.c b/lib/metadata/lv_manip.c
+index 42e3f2489..4397f0bc2 100644
+--- a/lib/metadata/lv_manip.c
++++ b/lib/metadata/lv_manip.c
+@@ -5816,6 +5816,55 @@ static int _lv_reduce_vdo_discard(struct cmd_context *cmd,
+ 	return 1;
+ }
+ 
++static int _lv_resize_check_cow_reduce(struct logical_volume *lv,
++				       uint64_t new_size)
++{
++	struct cmd_context *cmd = lv->vg->cmd;
++	struct lv_status_snapshot *snap_status;
++	int r;
++
++	/*
++	 * COW snapshot must be active to check how many exception blocks are
++	 * in use.  Reject when inactive to avoid silently truncating data.
++	 * If the snapshot content is not needed, remove it with lvremove.
++	 */
++	if (!lv_is_active(lv_lock_holder(lv))) {
++		log_error("Inactive snapshot %s cannot be reduced "
++			  "(activate or remove it).",
++			  display_lvname(lv));
++		return 0;
++	}
++
++	/*
++	 * Reject reduce if it would truncate exception data already written
++	 * to the COW store.  Flush so that in-flight writes are reflected
++	 * in the exception counts before we compare.
++	 */
++	if ((r = lv_snapshot_status(lv, 1, &snap_status))) {
++		/* merge_failed cannot occur here: merging snapshots are
++		 *   rejected earlier in _lv_resize_check_type(); kept as
++		 *   a defensive check.
++		 * overflow mode is currently not supported by lvm2
++		 *   kept as a defensive check. */
++		if (snap_status->snap->invalid ||
++		    snap_status->snap->merge_failed ||
++		    snap_status->snap->overflow) {
++			log_error("Invalid snapshot %s cannot be reduced, only removed.",
++				  display_lvname(lv));
++			r = 0;
++		} else if (new_size < snap_status->snap->used_sectors) {
++			log_error("Cannot reduce snapshot %s to below %s (%.2f%% full, would lose exception data).",
++				  display_lvname(lv),
++				  display_size(cmd, snap_status->snap->used_sectors),
++				  dm_percent_to_round_float(snap_status->usage, 2));
++			r = 0;
++		}
++		dm_pool_destroy(snap_status->mem);
++	}
++
++	return r;
++}
++
+ static int _lv_resize_check_type(struct logical_volume *lv,
+ 				 struct lvresize_params *lp)
+ {
+@@ -5888,6 +5937,9 @@ static int _lv_resize_check_type(struct logical_volume *lv,
+ 			log_error("Cannot reduce LV with integrity.");
+ 			return 0;
+ 		}
++		if (lv_is_cow(lv) &&
++		    !_lv_resize_check_cow_reduce(lv, (uint64_t)lp->extents * lv->vg->extent_size))
++			return_0;
+ 	} else if (lp->resize == LV_EXTEND)  {
+ 		if (lv_is_thin_pool_metadata(lv) &&
+ 		    (!(seg = find_pool_seg(first_seg(lv))) ||
+diff --git a/lib/metadata/metadata-exported.h b/lib/metadata/metadata-exported.h
+index 7ec81f27d..a89d77284 100644
+--- a/lib/metadata/metadata-exported.h
++++ b/lib/metadata/metadata-exported.h
+@@ -1201,6 +1201,11 @@ int vg_remove_snapshot(struct logical_volume *cow);
+ 
+ int validate_snapshot_origin(const struct logical_volume *origin_lv);
+ 
++struct lv_status_snapshot {
++	struct dm_pool *mem;
++	struct dm_status_snapshot *snap;
++	dm_percent_t usage;
++};
+ 
+ int vg_check_status(const struct volume_group *vg, uint64_t status);
+ 
+-- 
+2.54.0
+

@@ -1,0 +1,62 @@
+From 9eb047aa1742031f5999a8a1d22720dcd16dd432 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Wed, 1 Apr 2026 20:33:32 +0200
+Subject: [PATCH 081/211] cov: format_text: validate rlocn bounds before
+ uint32_t cast
+
+Validate rlocn offset and size fields against mda bounds before
+casting to uint32_t. The on-disk rlocn fields are uint64_t but
+wrap and size parameters are uint32_t, so crafted metadata with
+values exceeding UINT32_MAX would silently truncate, leading to
+incorrect buffer sizes.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit c42c285e1b7c062e9db736e8b8ad3646b477661a)
+---
+ lib/format_text/format-text.c | 23 +++++++++++++++++++++++
+ 1 file changed, 23 insertions(+)
+
+diff --git a/lib/format_text/format-text.c b/lib/format_text/format-text.c
+index 615b92df9..3165312d7 100644
+--- a/lib/format_text/format-text.c
++++ b/lib/format_text/format-text.c
+@@ -416,6 +416,17 @@ static struct volume_group *_vg_read_raw_area(struct cmd_context *cmd,
+ 		goto out;
+ 	}
+ 
++	/* Validate rlocn fields fit within mda bounds before uint32_t cast */
++	if (rlocn->offset >= mdah->size ||
++	    rlocn->size > mdah->size - MDA_HEADER_SIZE) {
++		log_error("Metadata location out of bounds (offset %llu size %llu mda %llu) on %s.",
++			  (unsigned long long)rlocn->offset,
++			  (unsigned long long)rlocn->size,
++			  (unsigned long long)mdah->size,
++			  dev_name(area->dev));
++		goto out;
++	}
++
+ 	if (rlocn->offset + rlocn->size > mdah->size)
+ 		wrap = (uint32_t) ((rlocn->offset + rlocn->size) - mdah->size);
+ 
+@@ -1501,6 +1512,18 @@ int read_metadata_location_summary(const struct format_type *fmt,
+ 	 * at the beginning.  The end of this wrapped metadata is located at an
+ 	 * offset of wrap+MDA_HEADER_SIZE from area.start.
+ 	 */
++
++	/* Validate rlocn fields fit within mda bounds before uint32_t cast */
++	if (rlocn->offset >= mdah->size ||
++	    rlocn->size > mdah->size - MDA_HEADER_SIZE) {
++		log_warn("WARNING: Metadata location out of bounds (offset %llu size %llu mda %llu) on %s.",
++			 (unsigned long long)rlocn->offset,
++			 (unsigned long long)rlocn->size,
++			 (unsigned long long)mdah->size,
++			 dev_name(dev_area->dev));
++		return 0;
++	}
++
+ 	if (rlocn->offset + rlocn->size > mdah->size)
+ 		wrap = (uint32_t) ((rlocn->offset + rlocn->size) - mdah->size);
+ 
+-- 
+2.54.0
+

@@ -1,0 +1,31 @@
+From ec768d527e2f33f919d7482ae722cf837433cfd6 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Fri, 3 Apr 2026 12:47:30 +0200
+Subject: [PATCH 074/211] dmeventd: snapshot: fix NULL target_type passed to
+ log_error %s
+
+When target_type is NULL, passing it to %s format is undefined behavior.
+Use ??? as fallback to still report actual target_type when available.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit 057434a6dc5def17379725b8b9c25453b286f250)
+---
+ daemons/dmeventd/plugins/snapshot/dmeventd_snapshot.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/daemons/dmeventd/plugins/snapshot/dmeventd_snapshot.c b/daemons/dmeventd/plugins/snapshot/dmeventd_snapshot.c
+index e47747c1a..40d197297 100644
+--- a/daemons/dmeventd/plugins/snapshot/dmeventd_snapshot.c
++++ b/daemons/dmeventd/plugins/snapshot/dmeventd_snapshot.c
+@@ -183,7 +183,7 @@ void process_event(struct dm_task *dmt,
+ 
+ 	dm_get_next_target(dmt, next, &start, &length, &target_type, &params);
+ 	if (!target_type || strcmp(target_type, "snapshot")) {
+-		log_error("Target %s is not snapshot.", target_type);
++		log_error("Target %s is not snapshot.", target_type ?: "???");
+ 		return;
+ 	}
+ 
+-- 
+2.54.0
+

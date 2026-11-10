@@ -1,0 +1,31 @@
+From 7b4579ac06e2debcd889666723f39bd0de800766 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Fri, 3 Apr 2026 10:24:46 +0200
+Subject: [PATCH 086/211] dev_manager: fix wrong sizeof in raid status
+ allocation
+
+Copy-paste error: sizeof(struct lv_status_cache) was used instead
+of sizeof(struct lv_status_raid) in dev_manager_raid_status.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit 591d822bf496133a68bdd2ee98fdb4093199144a)
+---
+ lib/activate/dev_manager.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/lib/activate/dev_manager.c b/lib/activate/dev_manager.c
+index db3b24595..46c626de5 100644
+--- a/lib/activate/dev_manager.c
++++ b/lib/activate/dev_manager.c
+@@ -1664,7 +1664,7 @@ int dev_manager_raid_status(struct dev_manager *dm,
+ 	struct dm_status_raid *sr;
+ 
+ 	*exists = -1;
+-	if (!(*status = dm_pool_zalloc(dm->mem, sizeof(struct lv_status_cache))))
++	if (!(*status = dm_pool_zalloc(dm->mem, sizeof(struct lv_status_raid))))
+ 		return_0;
+ 
+ 	if (!(dlid = build_dm_uuid(dm->mem, lv, layer)))
+-- 
+2.54.0
+

@@ -1,0 +1,57 @@
+From 83676b371fd99ca2c4ab9bc8932661539eec90b9 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Thu, 23 Oct 2025 19:18:16 +0200
+Subject: [PATCH 151/211] pool: initialize chunk_size_calc_method in update
+ functions
+
+Fix uninitialized variable bug causing valgrind warnings when
+converting LVs to pools with user-specified --chunksize.
+
+The update_thin_pool_params() and update_cache_pool_params()
+functions only initialized chunk_size_calc_method in the code
+path that calculates default chunk size from profile settings.
+When users specified --chunksize, this output parameter remained
+uninitialized and was later used in a conditional check in
+recalculate_pool_chunk_size_with_dev_hints(), triggering valgrind:
+"Conditional jump or move depends on uninitialised value(s)"
+
+Fix by initializing chunk_size_calc_method to 0 at the start of
+both functions. A value of 0 indicates chunk size was user-specified
+or should not be recalculated from device hints.
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+(cherry picked from commit 620cc808d1a47e007f40d0666f10048577eaa4d7)
+---
+ lib/metadata/cache_manip.c | 2 ++
+ lib/metadata/thin_manip.c  | 2 ++
+ 2 files changed, 4 insertions(+)
+
+diff --git a/lib/metadata/cache_manip.c b/lib/metadata/cache_manip.c
+index 3e7b34a66..fecf56919 100644
+--- a/lib/metadata/cache_manip.c
++++ b/lib/metadata/cache_manip.c
+@@ -212,6 +212,8 @@ int update_cache_pool_params(struct cmd_context *cmd,
+ 				    DM_CACHE_MIN_DATA_BLOCK_SIZE - 1) /
+ 				   DM_CACHE_MIN_DATA_BLOCK_SIZE) * DM_CACHE_MIN_DATA_BLOCK_SIZE;
+ 
++	*chunk_size_calc_method = 0;
++
+ 	if (!*chunk_size) {
+ 		if (!(*chunk_size = find_config_tree_int(cmd, allocation_cache_pool_chunk_size_CFG,
+ 							 profile) * 2)) {
+diff --git a/lib/metadata/thin_manip.c b/lib/metadata/thin_manip.c
+index b741ba0f5..b9db5d4b0 100644
+--- a/lib/metadata/thin_manip.c
++++ b/lib/metadata/thin_manip.c
+@@ -832,6 +832,8 @@ int update_thin_pool_params(struct cmd_context *cmd,
+ 	uint64_t max_pool_data_size;
+ 	const char *str;
+ 
++	*chunk_size_calc_method = 0;
++
+ 	if (!*chunk_size &&
+ 	    find_config_tree_node(cmd, allocation_thin_pool_chunk_size_CFG, profile))
+ 		*chunk_size = find_config_tree_int(cmd, allocation_thin_pool_chunk_size_CFG, profile) * 2;
+-- 
+2.54.0
+

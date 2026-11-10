@@ -1,0 +1,38 @@
+From e5cf4b66c6a319fd516224a8be6b8bdf174f60ce Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Sun, 19 Apr 2026 14:52:40 +0200
+Subject: [PATCH 192/211] lvconvert: fix dm_strncpy off-by-one in
+ _raid_split_image_conversion
+
+dm_strncpy(dest, src, n) treats n as the buffer size and copies
+at most n-1 characters plus a NUL terminator.  Passing
+(s - lv->name) truncates the RAID LV name by one character,
+causing find_lv() to always fail for the parent LV lookup.
+
+For example, with name "foo_rimage_0", s - lv->name = 3, so
+dm_strncpy copies only 2 chars giving "fo" instead of "foo".
+
+Pass s - lv->name + 1 to include room for NUL terminator.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit 0b4a4d265e67fcd7f953da403b141bbacf556499)
+---
+ tools/lvconvert.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/tools/lvconvert.c b/tools/lvconvert.c
+index 7dc8a3736..5c5597b50 100644
+--- a/tools/lvconvert.c
++++ b/tools/lvconvert.c
+@@ -1182,7 +1182,7 @@ static int _raid_split_image_conversion(struct logical_volume *lv)
+ 
+ 	if (lv_is_raid_image(lv) &&
+ 	    (s = strstr(lv->name, "_rimage_"))) {
+-		dm_strncpy(raidlv_name, lv->name, s - lv->name);
++		dm_strncpy(raidlv_name, lv->name, s - lv->name + 1);
+ 
+ 		if (!(tmp_lv = find_lv(lv->vg, raidlv_name))) {
+ 			log_error("Failed to find RaidLV of RAID subvolume %s.",
+-- 
+2.54.0
+

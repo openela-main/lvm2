@@ -1,0 +1,36 @@
+From f4cbf26376cea75db8d1ed8cfeebc11a94693c9f Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Mon, 8 Dec 2025 14:44:49 +0100
+Subject: [PATCH 143/211] debug: add tracing for context destroy
+
+Add trace note where the time is being lost.
+Context destroy may take ~40ms in kernel.
+
+(cherry picked from commit f1374c5876783301b26812b144d2d016bb5f519f)
+---
+ lib/device/bcache.c | 9 ++++++---
+ 1 file changed, 6 insertions(+), 3 deletions(-)
+
+diff --git a/lib/device/bcache.c b/lib/device/bcache.c
+index b66c5fa7c..915db250c 100644
+--- a/lib/device/bcache.c
++++ b/lib/device/bcache.c
+@@ -152,9 +152,12 @@ static void _async_destroy(struct io_engine *ioe)
+ 	 */
+ 	if (e->aio_context) {
+ 		if (e->aio_context_pid != getpid())
+-			log_debug("Skipping io_destroy() for different pid.");
+-		else if (io_destroy(e->aio_context)) // really slow
+-			log_sys_warn("io_destroy");
++			log_debug_devs("Skipping AIO context destroy for different pid.");
++		else {
++			log_debug_devs("Destroy AIO context.");
++			if (io_destroy(e->aio_context)) // really slow (~40ms)
++				log_sys_warn("io_destroy");
++		}
+ 	}
+ 
+ 	free(e);
+-- 
+2.54.0
+

@@ -1,0 +1,56 @@
+From 424b80266e954f6d612c23121325a891a2a8eec3 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Sat, 21 Feb 2026 10:31:45 +0100
+Subject: [PATCH 146/211] bcache: retry io_getevents() only if sigint not
+ caught
+
+Stray signals (SIGALRM, SIGCHLD, SIGWINCH, etc.) cause EINTR
+but should not abort I/O - the loop retries transparently.
+SIGINT/SIGTERM delivered inside a sigint_allow()/sigint_restore()
+window set sigint_caught(), which stops the loop and lets the
+caller detect and handle the cancellation.
+
+LVM supports io_getevents() interruptible in commit b3c7a2b3f0bc.
+However when read-only command do not use signal handlers,
+this sigint_caught() check is effectively ignored. But in this case
+command will be interrupted with the default signal handler anyway.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+
+diff --git a/lib/device/bcache.c b/lib/device/bcache.c
+
+(cherry picked from commit 0a55dd6dcdcad64a103f1d5ce29a0f1909548b7a)
+---
+ lib/device/bcache.c | 7 ++++++-
+ 1 file changed, 6 insertions(+), 1 deletion(-)
+
+diff --git a/lib/device/bcache.c b/lib/device/bcache.c
+index 4c91402c4..38da044b1 100644
+--- a/lib/device/bcache.c
++++ b/lib/device/bcache.c
+@@ -17,6 +17,7 @@
+ #include "base/data-struct/radix-tree.h"
+ #include "lib/log/lvm-logging.h"
+ #include "lib/log/log.h"
++#include "lib/misc/lvm-signal.h"
+ 
+ #include <errno.h>
+ #include <fcntl.h>
+@@ -331,9 +332,13 @@ static bool _async_wait(struct io_engine *ioe, io_complete_fn fn)
+ 
+ 	memset(&event, 0, sizeof(event));
+ 
++	/*
++	 * Retry on EINTR from stray signals, but stop if an LVM interrupt
++	 * signal (SIGINT/SIGTERM via sigint_allow()) has been caught.
++	 */
+ 	do {
+ 		r = io_getevents(e->aio_context, 1, MAX_EVENT, event, NULL);
+-	} while (r == -EINTR);
++	} while (r == -EINTR && !sigint_caught());
+ 
+ 	if (r < 0) {
+ 		log_sys_warn("io_getevents", -r);
+-- 
+2.54.0
+

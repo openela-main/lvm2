@@ -1,0 +1,30 @@
+From 22fd8e58f06adfdd212ec3c0d40ade2c274588a5 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Fri, 3 Apr 2026 12:55:45 +0200
+Subject: [PATCH 091/211] lvmlockd-sanlock: fix wrong variable in error log
+
+Error message printed rv (error code) twice instead of the offset value.
+The success path two lines above correctly uses offset.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit 975b7886a17004fb5dcf0baf1c35848d1a57cbc8)
+---
+ daemons/lvmlockd/lvmlockd-sanlock.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/daemons/lvmlockd/lvmlockd-sanlock.c b/daemons/lvmlockd/lvmlockd-sanlock.c
+index f06af6c60..2a5720b07 100644
+--- a/daemons/lvmlockd/lvmlockd-sanlock.c
++++ b/daemons/lvmlockd/lvmlockd-sanlock.c
+@@ -1004,7 +1004,7 @@ int lm_init_lv_sanlock(struct lockspace *ls, char *ls_name, char *vg_name, char
+ 				         lock_args_version, (unsigned long long)offset);
+ 			} else {
+ 				log_error("S %s init_lv_san write error %d offset %llu",
+-					  ls_name, rv, (unsigned long long)rv);
++					  ls_name, rv, (unsigned long long)offset);
+ 			}
+ 			break;
+ 		}
+-- 
+2.54.0
+

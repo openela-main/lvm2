@@ -1,0 +1,33 @@
+From 7391ede7b3c39466a12c1bf21ea933cd08788ad7 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Sat, 18 Apr 2026 21:45:40 +0200
+Subject: [PATCH 198/211] toolcontext: fix init_run_by_dmeventd to return
+ success
+
+The function unconditionally returned 0 (failure) despite always
+succeeding. All current callers ignore the return value, but any
+future caller checking it would incorrectly treat the call as failed.
+Return 1 to match the convention used by other init_* functions.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit fff49c48094d8565ef7face41297cdd1442bc33e)
+---
+ lib/commands/toolcontext.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/lib/commands/toolcontext.c b/lib/commands/toolcontext.c
+index 2c8d6896d..c6e28c2ac 100644
+--- a/lib/commands/toolcontext.c
++++ b/lib/commands/toolcontext.c
+@@ -1609,7 +1609,7 @@ int init_run_by_dmeventd(struct cmd_context *cmd)
+ 	init_disable_dmeventd_monitoring(1); /* Lock settings */
+ 	cmd->run_by_dmeventd = 1;
+ 
+-	return 0;
++	return 1;
+ }
+ 
+ void destroy_config_context(struct cmd_context *cmd)
+-- 
+2.54.0
+

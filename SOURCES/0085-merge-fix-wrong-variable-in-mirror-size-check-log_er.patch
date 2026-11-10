@@ -1,0 +1,36 @@
+From 50740fb435f1cab88363bf3dc38a331a68dc8934 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Fri, 3 Apr 2026 08:39:38 +0200
+Subject: [PATCH 085/211] merge: fix wrong variable in mirror size check
+ log_error
+
+The error message was printing area index 's' as the segment number.
+Use seg_count for the segment number and add 's' for the image index,
+matching the format used by the adjacent mirror pointer check message.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit fcae4db4074d6d9c7d059759a2a04596ba06801a)
+---
+ lib/metadata/merge.c | 5 +++--
+ 1 file changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/lib/metadata/merge.c b/lib/metadata/merge.c
+index b2829f9d0..2cb9b4c08 100644
+--- a/lib/metadata/merge.c
++++ b/lib/metadata/merge.c
+@@ -639,9 +639,10 @@ int check_lv_segments_complete_vg(struct logical_volume *lv)
+ 			if (seg_is_mirrored(seg) && !seg_is_raid(seg) &&
+ 			    seg_type(seg, s) == AREA_LV && seg_lv(seg, s) &&
+ 			    seg_lv(seg, s)->le_count != seg->area_len) {
+-				log_error("LV %s: mirrored LV segment %u has "
++				log_error("LV %s: segment %u mirrored image %u has "
+ 					  "wrong size %u (should be %u).",
+-					  lv->name, s, seg_lv(seg, s)->le_count,
++					  lv->name, seg_count, s,
++					  seg_lv(seg, s)->le_count,
+ 					  seg->area_len);
+ 				inc_error_count;
+ 			}
+-- 
+2.54.0
+

@@ -1,0 +1,30 @@
+From 1b21775c5b6d64ecc7e2acde34eac00abe4a5bb7 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Fri, 3 Apr 2026 10:07:28 +0200
+Subject: [PATCH 139/211] import_vsn1: fix resource leak on historical LV id
+ read failure
+
+Use goto bad instead of return 0 to properly free allocations.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit dd4fd687ca3042d0c35b7a134cdb3eaaefaeec79)
+---
+ lib/format_text/import_vsn1.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/lib/format_text/import_vsn1.c b/lib/format_text/import_vsn1.c
+index 4f76625a5..20b1739e9 100644
+--- a/lib/format_text/import_vsn1.c
++++ b/lib/format_text/import_vsn1.c
+@@ -792,7 +792,7 @@ static int _read_historical_lvnames(struct cmd_context *cmd,
+ 	if (!_read_id(&glv->historical->lvid.id[1], hlvn, "id")) {
+ 		log_error("Couldn't read uuid for removed logical volume %s in vg %s.",
+ 			  glv->historical->name, vg->name);
+-		return 0;
++		goto bad;
+ 	}
+ 	memcpy(&glv->historical->lvid.id[0], &glv->historical->vg->id, sizeof(glv->historical->lvid.id[0]));
+ 
+-- 
+2.54.0
+

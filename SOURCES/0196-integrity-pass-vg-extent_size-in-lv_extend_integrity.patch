@@ -1,0 +1,34 @@
+From 4c32491b0cdd8d1d87ba6f675a4cb873c087854b Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Fri, 17 Apr 2026 22:17:44 +0200
+Subject: [PATCH 196/211] integrity: pass vg extent_size in
+ lv_extend_integrity_in_raid
+
+_lv_size_bytes_to_integrity_meta_bytes() uses extent_size with
+dm_round_up() when journal_sectors is non-zero.  Passing 0 as
+extent_size would cause a divide-by-zero if journal_sectors were
+ever changed from the hardcoded 0.  Pass vg->extent_size to match
+the call in _lv_create_integrity_metadata().
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit baa72bbfd9ae03b5d4f1028aa4c1a25e7618714c)
+---
+ lib/metadata/integrity_manip.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/lib/metadata/integrity_manip.c b/lib/metadata/integrity_manip.c
+index 5610f8236..c741b54b3 100644
+--- a/lib/metadata/integrity_manip.c
++++ b/lib/metadata/integrity_manip.c
+@@ -195,7 +195,7 @@ int lv_extend_integrity_in_raid(struct logical_volume *lv, struct dm_list *pvh)
+ 		}
+ 
+ 		lv_size_bytes = lv_iorig->size * 512;
+-		meta_bytes = _lv_size_bytes_to_integrity_meta_bytes(lv_size_bytes, 0, 0);
++		meta_bytes = _lv_size_bytes_to_integrity_meta_bytes(lv_size_bytes, 0, vg->extent_size);
+ 		meta_sectors = meta_bytes / 512;
+ 		meta_extents = meta_sectors / vg->extent_size;
+ 		if (!meta_extents)
+-- 
+2.54.0
+

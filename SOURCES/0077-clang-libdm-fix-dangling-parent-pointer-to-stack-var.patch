@@ -1,0 +1,49 @@
+From f066ceec5967f7ac1000b707cee68adc4c7abb44 Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Tue, 24 Mar 2026 21:32:21 +0100
+Subject: [PATCH 077/211] clang: libdm: fix dangling parent pointer to stack
+ variable in config flatten
+
+_override_path() uses a stack-local dummy node as the root anchor
+for _find_or_make_node(). When _make_node() creates a new top-level
+node, it sets node->parent = &dummy. After _override_path() returns,
+the dummy goes out of scope leaving a dangling parent pointer in
+the config tree returned by dm_config_flatten().
+
+Clear the parent pointer for any top-level nodes that still
+reference the stack variable.
+
+Found by clang scan-build.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit 07572f306384bbc5604c0035f6297e7cd99e7b31)
+---
+ libdm/libdm-config.c | 6 +++++-
+ 1 file changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/libdm/libdm-config.c b/libdm/libdm-config.c
+index 0e8baea73..25cfa268c 100644
+--- a/libdm/libdm-config.c
++++ b/libdm/libdm-config.c
+@@ -1510,13 +1510,17 @@ struct dm_pool *dm_config_memory(struct dm_config_tree *cft)
+ static int _override_path(const char *path, struct dm_config_node *node, void *baton)
+ {
+ 	struct dm_config_tree *cft = baton;
+-	struct dm_config_node dummy, *target;
++	struct dm_config_node dummy, *target, *cn;
+ 	dummy.child = cft->root;
+ 	if (!(target = _find_or_make_node(cft->mem, &dummy, path, 0)))
+ 		return_0;
+ 	if (!(target->v = _clone_config_value(cft->mem, node->v)))
+ 		return_0;
+ 	cft->root = dummy.child;
++	/* Clear dangling parent pointers to stack variable */
++	for (cn = cft->root; cn; cn = cn->sib)
++		if (cn->parent == &dummy)
++			cn->parent = NULL;
+ 	return 1;
+ }
+ 
+-- 
+2.54.0
+

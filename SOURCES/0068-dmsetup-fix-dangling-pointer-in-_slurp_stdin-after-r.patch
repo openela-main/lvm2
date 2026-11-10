@@ -1,0 +1,31 @@
+From b897d04990f31f299aab883d5055f9ca351dfe6a Mon Sep 17 00:00:00 2001
+From: Zdenek Kabelac <zkabelac@redhat.com>
+Date: Fri, 13 Mar 2026 16:00:40 +0100
+Subject: [PATCH 068/211] dmsetup: fix dangling pointer in _slurp_stdin after
+ realloc
+
+After realloc() the buffer may move to a new address, but pos
+was not updated, causing read() to write into freed memory.
+Triggers EFAULT when stdin input exceeds ~128KB.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+(cherry picked from commit 130ddc48ea2a084852e78c232990ed8d58aaeca9)
+---
+ libdm/dm-tools/dmsetup.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/libdm/dm-tools/dmsetup.c b/libdm/dm-tools/dmsetup.c
+index 2d6ed0a71..eb77ebce4 100644
+--- a/libdm/dm-tools/dmsetup.c
++++ b/libdm/dm-tools/dmsetup.c
+@@ -1263,6 +1263,7 @@ static char *_slurp_stdin(void)
+ 				return NULL;
+ 			}
+ 			buf = newbuf;
++			pos = buf + total;
+ 		}
+ 	} while (1);
+ 
+-- 
+2.54.0
+
